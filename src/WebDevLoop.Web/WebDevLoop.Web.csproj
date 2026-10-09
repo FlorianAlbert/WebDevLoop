@@ -5,6 +5,10 @@
     <ProjectReference Include="..\WebDevLoop.Infrastructure\WebDevLoop.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Prompts\*.md" LogicalName="WebDevLoop.Web.Resources.Prompts.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>

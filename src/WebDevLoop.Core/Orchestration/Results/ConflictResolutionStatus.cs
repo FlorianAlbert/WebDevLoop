@@ -1,7 +1,7 @@
 namespace WebDevLoop.Core.Orchestration.Results;
 
-public enum ConflictResolutionOutcome
+public enum ConflictResolutionStatus
 {
     Resolved,
-    Unresolvable,
+    Blocked,
 }

@@ -2,9 +2,11 @@ namespace WebDevLoop.Core.Orchestration.Results;
 
 public enum TestVerdict
 {
-    Passed,
-    Failed,
+    /// <summary>Every requirement verified, no issues.</summary>
+    Pass,
 
-    /// <summary>The tester could not start or reach the app; not a product finding.</summary>
-    CouldNotRun,
+    IssuesFound,
+
+    /// <summary>The app could not be started or tested because of the environment or run instructions, not a product defect.</summary>
+    Blocked,
 }

@@ -1,13 +1,21 @@
 namespace WebDevLoop.Core.Orchestration.Results;
 
-/// <param name="notesPath">File the explorer wrote inside its app-allocated notes directory.</param>
 public sealed record ExplorationReport : AgentReport
 {
-    public ExplorationReport(string summary, string notesPath)
+    /// <param name="notesFiles">Notes files written or updated inside the app-allocated notes directory.</param>
+    public ExplorationReport(ReportStatus status, string summary, IReadOnlyList<string> notesFiles)
         : base(summary)
     {
-        NotesPath = ReportGuard.RequireText(notesPath, nameof(notesPath));
+        if (status == ReportStatus.Blocked)
+        {
+            ReportGuard.RequireText(summary, nameof(summary));
+        }
+
+        Status = status;
+        NotesFiles = ReportGuard.RequireTextList(notesFiles, nameof(notesFiles), requireAny: status == ReportStatus.Completed);
     }
 
-    public string NotesPath { get; }
+    public ReportStatus Status { get; }
+
+    public IReadOnlyList<string> NotesFiles { get; }
 }

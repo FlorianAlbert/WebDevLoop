@@ -62,7 +62,11 @@ public sealed class FakeOrchestratorContractTests
     {
         ScriptCleanImplementation();
         _agents.Script(AgentRole.ReviewerCodingStandards, _ =>
-            new ReviewReport(FindingAxis.CodingStandards, ReviewVerdict.Clean, [new Finding("Typo", "Misspelled name")], "clean?"));
+            new ReviewReport(
+                FindingAxis.CodingStandards,
+                ReviewVerdict.Clean,
+                "clean?",
+                [new CodingStandardsFinding(CodingStandardsSeverity.Judgement, "src/Feature.cs", 3, "var nmae", "Clear names", "Misspelled name", "Rename to name")]));
 
         (_, TicketRun ticket) = await _orchestrator.RunAsync(Repository(), SpecIssue, TestContext.Current.CancellationToken);
 
@@ -73,7 +77,7 @@ public sealed class FakeOrchestratorContractTests
 
     private void ScriptCleanImplementation() =>
         _agents.Script(AgentRole.Implementer, request =>
-            ImplementationReport.Implemented(_git.CommitInWorktree(request.Policy.Paths.WorkingDirectory, "src/Feature.cs"), "implemented"));
+            ImplementationReport.Completed(_git.CommitInWorktree(request.Policy.Paths.WorkingDirectory, "src/Feature.cs"), "implemented"));
 
     private static RepositoryRecord Repository() =>
         RepositoryRecord.Register(Repo, Trunk, "https://github.com/octo/app.git", "/work/octo/app", T0);
@@ -124,7 +128,7 @@ public sealed class FakeOrchestratorContractTests
             ticket.WorktreePath = worktree.Path;
 
             AgentRunResult implementation = await RunStepAsync(spec, ticket, StepKind.Implement, AgentRole.Implementer, worktree.Path, repository.Ref, ct);
-            if (implementation.Report is not ImplementationReport { Commit: { } implemented }
+            if (implementation.Report is not ImplementationReport { Status: ReportStatus.Completed, HeadCommitSha: { } implemented }
                 || !await git.IsAncestorAsync(location, trunkTip, implemented, ct))
             {
                 return Fail(spec, ticket, implementation);

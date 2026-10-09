@@ -2,6 +2,7 @@ using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Core.Queries;
 
+/// <param name="NeedsAttentionFrom">The phase that failed while <paramref name="Status"/> is <c>NeedsAttention</c>.</param>
 public sealed record SpecRunView(
     string Id,
     int RepositoryId,
@@ -20,4 +21,5 @@ public sealed record SpecRunView(
     DateTimeOffset? StartedAt,
     DateTimeOffset? ReadyAt,
     DateTimeOffset? CompletedAt,
-    string? FailureReason);
+    string? FailureReason,
+    SpecRunStatus? NeedsAttentionFrom = null);

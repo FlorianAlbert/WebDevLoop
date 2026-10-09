@@ -68,6 +68,18 @@ public sealed class ParentReviewTriggerTests
     }
 
     [Fact]
+    public async Task Aborted_tickets_count_as_complete()
+    {
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []), (3, []));
+        await _fixture.WorkTicketAsync(spec, spec[2]);
+        await _fixture.Execution.MoveAsync(spec[3], TicketRunStatus.Aborted);
+
+        await DeliverCommittedAsync();
+
+        Assert.Equal(SpecRunStatus.ParentReviewing, _fixture.Spec(spec.Id).Status);
+    }
+
+    [Fact]
     public async Task Spec_returning_to_running_with_all_tickets_done_starts_the_next_parent_review_cycle()
     {
         SeededSpec spec = await _fixture.SeedParentReviewingAsync();

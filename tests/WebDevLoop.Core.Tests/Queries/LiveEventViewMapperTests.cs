@@ -1,3 +1,4 @@
+using WebDevLoop.Core.Orchestration.Control;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
@@ -119,6 +120,14 @@ public sealed class LiveEventViewMapperTests
         var envelope = new EventEnvelope(16, new SpecStackAwaitingTrunk(Run, 3, new PullRequestNumber(4), At));
 
         Assert.Equal(new LiveEventView(16, nameof(SpecStackAwaitingTrunk), "run-1", null, null, "AwaitingTrunk", At), envelope.ToView());
+    }
+
+    [Fact]
+    public void run_control_applied_exposes_the_run_ticket_and_action()
+    {
+        var envelope = new EventEnvelope(12, new RunControlApplied(Run, new TicketRunId("t-1"), ControlAction.Skip, At));
+
+        Assert.Equal(new LiveEventView(12, nameof(RunControlApplied), "run-1", "t-1", null, nameof(ControlAction.Skip), At), envelope.ToView());
     }
 
     [Fact]

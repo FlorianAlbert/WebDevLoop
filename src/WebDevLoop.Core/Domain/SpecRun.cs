@@ -48,6 +48,9 @@ public sealed class SpecRun : VersionedEntity
 
     public string? FailureReason { get; private set; }
 
+    /// <summary>The phase the run was in when it last moved to <see cref="SpecRunStatus.NeedsAttention"/>, so a retry can resume it.</summary>
+    public SpecRunStatus? NeedsAttentionFrom { get; private set; }
+
     public bool IsActive => Status.IsActive();
 
     public bool IsTerminal => Status.IsTerminal();
@@ -80,6 +83,11 @@ public sealed class SpecRun : VersionedEntity
 
         Status = next;
         FailureReason = null;
+        NeedsAttentionFrom = null;
+        if (!next.IsActive())
+        {
+            MaxActiveSpecsSlot = null;
+        }
 
         switch (next)
         {
@@ -94,7 +102,6 @@ public sealed class SpecRun : VersionedEntity
                 break;
             case SpecRunStatus.ReadyForReview:
                 ReadyAt = at;
-                MaxActiveSpecsSlot = null;
                 break;
         }
 
@@ -106,7 +113,9 @@ public sealed class SpecRun : VersionedEntity
 
     public void MarkNeedsAttention(string reason, DateTimeOffset at)
     {
+        SpecRunStatus failedIn = Status;
         TransitionTo(SpecRunStatus.NeedsAttention, at);
         FailureReason = reason;
+        NeedsAttentionFrom = failedIn;
     }
 }

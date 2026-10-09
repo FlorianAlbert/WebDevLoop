@@ -11,8 +11,15 @@ public static class TicketRunStatusRules
             [TicketRunStatus.Reviewing] = [TicketRunStatus.FixingReviewFindings, TicketRunStatus.Integrating],
             [TicketRunStatus.FixingReviewFindings] = [TicketRunStatus.Reviewing],
             [TicketRunStatus.Integrating] = [TicketRunStatus.Integrated],
-            // Integrating resumes a parked integration saga whose commit already moved the integration branch.
-            [TicketRunStatus.NeedsAttention] = [TicketRunStatus.Ready, TicketRunStatus.Skipped, TicketRunStatus.Integrating],
+            // Retrying resumes the failed phase (see TicketRun.Retry); reconciliation also resumes a parked integration saga whose
+            // commit already moved the integration branch (Integrating); skipping gives the ticket up.
+            [TicketRunStatus.NeedsAttention] =
+            [
+                TicketRunStatus.Ready,
+                TicketRunStatus.Reviewing,
+                TicketRunStatus.Integrating,
+                TicketRunStatus.Skipped,
+            ],
             [TicketRunStatus.Integrated] = [],
             [TicketRunStatus.Skipped] = [],
             [TicketRunStatus.Aborted] = [],
@@ -20,6 +27,14 @@ public static class TicketRunStatusRules
 
     public static bool IsTerminal(this TicketRunStatus status) =>
         status is TicketRunStatus.Integrated or TicketRunStatus.Skipped or TicketRunStatus.Aborted;
+
+    /// <summary>
+    /// Skip policy: a blocker the user skipped counts as done, so its dependents may start (on an integration branch without
+    /// the skipped change). To hold dependents back instead, skip them too (cascade) or abort. An aborted blocker never
+    /// satisfies its dependents.
+    /// </summary>
+    public static bool SatisfiesDependents(this TicketRunStatus status) =>
+        status is TicketRunStatus.Integrated or TicketRunStatus.Skipped;
 
     /// <summary>An implementer works on the ticket: its initial implementation or a review fix turn.</summary>
     public static bool OccupiesImplementerSlot(this TicketRunStatus status) =>

@@ -1,0 +1,111 @@
+@using WebDevLoop.Core.Orchestration.Control
+@using WebDevLoop.Infrastructure.Prerequisites
+@using WebDevLoop.Web.Components.Layout
+@inherits WebDevLoop.Web.Components.Dashboard.ScopedComponentBase
+@inject DiagnosticReadiness Readiness
+
+@* Buttons for Retry/Skip/Abort; destructive commands ask for confirmation first. All are disabled in diagnostic-only mode. *@
+<div class="d-flex flex-wrap gap-2" data-testid="run-control-buttons">
+    @foreach (RunControlCommand command in Commands)
+    {
+        <button type="button" class="btn btn-sm @(command.IsDestructive ? "btn-outline-danger" : "btn-outline-primary")"
+                data-testid="control-@command.Key" disabled="@(!CanRun(command))" @onclick="() => RequestAsync(command)">
+            @command.Label
+        </button>
+    }
+</div>
+
+@if (IsDiagnosticOnly)
+{
+    <p class="small text-warning-emphasis mt-2 mb-0" data-testid="controls-disabled">
+        Workflow actions are disabled while the app is in diagnostic-only mode. <a href="@UiRoutes.Health">See health</a>.
+    </p>
+}
+
+@if (_pending is { } pending)
+{
+    <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 py-2 px-2 small mt-2 mb-0" role="alertdialog" data-testid="control-confirm">
+        <span>@pending.Confirmation</span>
+        <button type="button" class="btn btn-sm btn-danger" data-testid="control-confirm-yes" disabled="@_running" @onclick="ConfirmAsync">@pending.Label</button>
+        <button type="button" class="btn btn-sm btn-secondary" data-testid="control-confirm-no" @onclick="Cancel">Cancel</button>
+    </div>
+}
+
+@if (_feedback is { } feedback)
+{
+    <div class="alert alert-@feedback.Severity py-1 px-2 small mt-2 mb-0" role="status" data-testid="control-result">
+        @feedback.Message
+        @if (feedback.Warnings.Count > 0)
+        {
+            <ul class="mb-0" data-testid="control-warnings">
+                @foreach (string warning in feedback.Warnings)
+                {
+                    <li>@warning</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@code {
+    private sealed record Feedback(string Severity, string Message, IReadOnlyList<string> Warnings);
+
+    private RunControlCommand? _pending;
+    private Feedback? _feedback;
+    private bool _running;
+
+    [Parameter, EditorRequired] public IReadOnlyList<RunControlCommand> Commands { get; set; } = [];
+
+    /// <summary>Invoked after a command was applied, so the page can reload the run.</summary>
+    [Parameter] public EventCallback OnApplied { get; set; }
+
+    private bool IsDiagnosticOnly => Readiness.Current.Mode != ReadinessMode.Operational;
+
+    private bool CanRun(RunControlCommand command) => command.IsAvailable && !IsDiagnosticOnly && !_running;
+
+    private Task RequestAsync(RunControlCommand command)
+    {
+        _feedback = null;
+        if (command.IsDestructive)
+        {
+            _pending = command;
+            return Task.CompletedTask;
+        }
+
+        return RunAsync(command);
+    }
+
+    private Task ConfirmAsync() => _pending is { } command ? RunAsync(command) : Task.CompletedTask;
+
+    private void Cancel() => _pending = null;
+
+    private async Task RunAsync(RunControlCommand command)
+    {
+        if (!CanRun(command))
+        {
+            return;
+        }
+
+        _running = true;
+        try
+        {
+            ControlResult result = await InScopeAsync(services => command.Execute(services.GetRequiredService<IRunControl>(), CancellationToken.None));
+            _feedback = result.IsApplied
+                ? new Feedback("success", $"{command.Label}: done.", result.Warnings ?? [])
+                : new Feedback("warning", $"{command.Label} was not applied: {result.Reason}", []);
+            if (result.IsApplied)
+            {
+                await OnApplied.InvokeAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            _feedback = new Feedback("danger", $"{command.Label} failed: {exception.Message}", []);
+        }
+        finally
+        {
+            _pending = null;
+            _running = false;
+        }
+    }
+}

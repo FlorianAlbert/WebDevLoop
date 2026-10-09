@@ -196,13 +196,26 @@ public sealed class SpecRunDetailTests
     }
 
     [Fact]
-    public void Control_actions_are_a_marked_placeholder_without_buttons()
+    public void Controls_area_offers_retry_and_abort_for_the_run()
     {
-        using var harness = HarnessWithSpec();
+        using var harness = HarnessWithSpec(SpecRunStatus.NeedsAttention);
 
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
 
-        Assert.NotNull(cut.Find("[data-testid=controls-placeholder]"));
-        Assert.Empty(cut.FindAll("[data-testid=controls-placeholder] button"));
+        Assert.Empty(cut.FindAll("[data-testid=controls-placeholder]"));
+        Assert.False(cut.Find("[data-testid=run-controls] [data-testid=control-retry]").HasAttribute("disabled"));
+        Assert.NotNull(cut.Find("[data-testid=run-controls] [data-testid=control-abort]"));
+    }
+
+    [Fact]
+    public void Retrying_from_the_detail_page_reloads_the_run()
+    {
+        using var harness = HarnessWithSpec(SpecRunStatus.NeedsAttention);
+        harness.Control.OnApplied = (_, _) => harness.Queries.Specs[0] = Views.Spec(status: SpecRunStatus.Running);
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        cut.Find("[data-testid=control-retry]").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal("Running", cut.Find("[data-testid=spec-status]").TextContent.Trim()));
     }
 }

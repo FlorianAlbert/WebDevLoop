@@ -15,7 +15,7 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261009142947_IntegrationSagaConsecutiveFaults";
+    public override string LastMigrationId => "20261009153925_RunNeedsAttentionPhase";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -490,6 +490,9 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                 b.Property<int?>("MaxActiveSpecsSlot")
                     .HasColumnType("INTEGER");
 
+                b.Property<string>("NeedsAttentionFrom")
+                    .HasColumnType("TEXT");
+
                 b.Property<int>("QueuePosition")
                     .HasColumnType("INTEGER");
 
@@ -753,6 +756,9 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("TEXT");
 
                 b.Property<string>("LastImplementedSha")
+                    .HasColumnType("TEXT");
+
+                b.Property<string>("NeedsAttentionFrom")
                     .HasColumnType("TEXT");
 
                 b.Property<int?>("PullRequestNumber")

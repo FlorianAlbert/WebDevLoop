@@ -36,6 +36,21 @@ public sealed class TicketDagLayoutTests
     }
 
     [Fact]
+    public void A_skipped_blocker_is_satisfied_like_an_integrated_one_but_an_aborted_one_is_not()
+    {
+        var rows = TicketDagLayout.Build(
+        [
+            Views.Ticket("a", 1, TicketRunStatus.Skipped),
+            Views.Ticket("b", 2, TicketRunStatus.Aborted),
+            Views.Ticket("c", 3, TicketRunStatus.Blocked, blockedBy: ["a"]),
+            Views.Ticket("d", 4, TicketRunStatus.Blocked, blockedBy: ["b"]),
+        ]);
+
+        Assert.Equal(["c"], rows.Where(row => row.IsFrontier).Select(row => row.Ticket.Id));
+        Assert.True(rows.Single(row => row.Ticket.Id == "c").Blockers.Single().IsSatisfied);
+    }
+
+    [Fact]
     public void Blockers_carry_issue_and_status_of_the_blocking_ticket()
     {
         var rows = TicketDagLayout.Build(

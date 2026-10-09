@@ -88,6 +88,21 @@ public sealed class TicketFrontierTests
     }
 
     [Fact]
+    public void a_skipped_blocker_unblocks_its_dependent_but_an_aborted_one_does_not()
+    {
+        TicketRun skipped = Advance(Ticket(1), TicketRunStatus.Skipped);
+        TicketRun aborted = Advance(Ticket(2), TicketRunStatus.Aborted);
+        TicketRun afterSkipped = Ticket(3);
+        TicketRun afterAborted = Ticket(4);
+
+        FrontierSnapshot snapshot = TicketFrontier.Compute(
+            [skipped, aborted, afterSkipped, afterAborted], [Edge(afterSkipped, skipped), Edge(afterAborted, aborted)]);
+
+        Assert.Equal([afterSkipped.Id], snapshot.Unblocked);
+        Assert.Equal([afterSkipped.Id], snapshot.Dispatchable);
+    }
+
+    [Fact]
     public void a_blocker_missing_from_the_snapshot_is_never_satisfied()
     {
         TicketRun ticket = Ticket(1);

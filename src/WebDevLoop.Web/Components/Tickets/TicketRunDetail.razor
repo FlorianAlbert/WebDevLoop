@@ -56,7 +56,9 @@ else if (_ticket is not null)
         </dd>
     </dl>
 
-    <RunControlsArea Scope="ticket run" />
+    <RunControlsArea Scope="ticket run">
+        <TicketRunControls Ticket="_ticket" OnChanged="RefreshAsync" />
+    </RunControlsArea>
 
     <StepsTable Steps="_steps" />
     <TicketFindingsPanel Steps="_steps" />

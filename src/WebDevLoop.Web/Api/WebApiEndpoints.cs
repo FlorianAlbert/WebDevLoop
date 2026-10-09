@@ -14,6 +14,7 @@ public static class WebApiEndpoints
         SpecRunEndpoints.Map(api);
         TicketRunEndpoints.Map(api);
         StepEndpoints.Map(api);
+        RunControlEndpoints.Map(api);
         EventStreamEndpoints.Map(api);
 
         endpoints.MapOpenApi();

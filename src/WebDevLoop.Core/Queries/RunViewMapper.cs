@@ -22,7 +22,8 @@ public static class RunViewMapper
         run.StartedAt,
         run.ReadyAt,
         run.CompletedAt,
-        run.FailureReason);
+        run.FailureReason,
+        run.NeedsAttentionFrom);
 
     public static TicketRunView ToView(this TicketRun ticket, IEnumerable<TicketRunId> blockedBy) => new(
         ticket.Id.Value,
@@ -41,7 +42,8 @@ public static class RunViewMapper
         blockedBy.Select(id => id.Value).Order(StringComparer.Ordinal).ToArray(),
         ticket.CreatedAt,
         ticket.UpdatedAt,
-        ticket.FailureReason);
+        ticket.FailureReason,
+        ticket.NeedsAttentionFrom);
 
     public static StepRunView ToView(this StepRun step) => new(
         step.Id.Value,

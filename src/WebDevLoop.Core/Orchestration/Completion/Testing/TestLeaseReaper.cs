@@ -30,7 +30,7 @@ public sealed class TestLeaseReaper(ITestLeaseRepository leases, ITestTargetRunn
     }
 
     /// <summary>The supervisor identifies a target's processes by spec run and port; URL and environment are not needed to stop it.</summary>
-    private static TestTarget TargetOf(TestLease lease) => new(
+    internal static TestTarget TargetOf(TestLease lease) => new(
         lease.SpecRunId,
         lease.Port,
         new Uri(string.Create(CultureInfo.InvariantCulture, $"http://localhost:{lease.Port}/")),

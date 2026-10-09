@@ -31,4 +31,17 @@ public sealed class ReviewLoopEventHandlerTests
 
         Assert.Empty(_fixture.Launcher.Launched);
     }
+
+    [Fact]
+    public async Task a_ticket_retried_into_review_launches_its_review_loop()
+    {
+        SeededSpec spec = await _fixture.SeedReviewingAsync(1);
+        await _fixture.Execution.MoveAsync(spec[1], TicketRunStatus.NeedsAttention);
+        _fixture.Db.TakeUndispatchedEvents();
+        await _fixture.Execution.MoveAsync(spec[1], TicketRunStatus.Reviewing);
+
+        await _fixture.DeliverEventsAsync();
+
+        Assert.Equal([new ReviewAssignment(spec.Id, spec[1])], _fixture.Launcher.Launched);
+    }
 }

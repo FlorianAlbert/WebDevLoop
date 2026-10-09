@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
+using WebDevLoop.Core.Orchestration.Control;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 
 namespace WebDevLoop.Core.Queries;
@@ -27,6 +28,7 @@ public static class LiveEventViewMapper
             SpecTestingPassed e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, PassedStatus, at),
             SpecCompletionReported e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, e.IntegrationBranch.Value, at),
             SpecWorktreesCleanedUp e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, e.Warnings is { Count: > 0 } ? RetainedStatus : RemovedStatus, at),
+            RunControlApplied e => new(envelope.MessageId, type, e.SpecRunId.Value, e.TicketRunId?.Value, null, e.Action.ToString(), at),
             SpecStackAwaitingTrunk e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, AwaitingTrunkStatus, at),
             _ => new(envelope.MessageId, type, null, null, null, null, at),
         };

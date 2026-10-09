@@ -70,6 +70,18 @@ public sealed class SpecQueueScheduler(
         return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: false);
     }
 
+    /// <summary>
+    /// The lowest free active-spec slot of the repository, or null while <c>MaxActiveSpecsPerRepo</c> specs are active. Used
+    /// when a spec becomes active again outside the queue (a retried spec); the unique (repository, slot) index still decides
+    /// a race with a concurrent claim.
+    /// </summary>
+    public async Task<int?> FindFreeSlotAsync(int repositoryId, CancellationToken cancellationToken)
+    {
+        EffectiveSettings effective = await settings.GetAsync(repositoryId, cancellationToken);
+        IReadOnlyList<SpecRun> queue = await specRuns.ListByRepositoryAsync(repositoryId, cancellationToken);
+        return FreeSlots(queue, effective.MaxActiveSpecsPerRepo).Select(slot => (int?)slot).FirstOrDefault();
+    }
+
     private static bool IsWaitingToStart(SpecRun run) =>
         run.Status is SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency;
 

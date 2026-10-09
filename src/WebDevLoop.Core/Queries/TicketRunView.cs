@@ -2,6 +2,7 @@ using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Core.Queries;
 
+/// <param name="NeedsAttentionFrom">The phase that failed while <paramref name="Status"/> is <c>NeedsAttention</c>.</param>
 public sealed record TicketRunView(
     string Id,
     string SpecRunId,
@@ -19,4 +20,5 @@ public sealed record TicketRunView(
     IReadOnlyList<string> BlockedByTicketRunIds,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string? FailureReason);
+    string? FailureReason,
+    TicketRunStatus? NeedsAttentionFrom = null);

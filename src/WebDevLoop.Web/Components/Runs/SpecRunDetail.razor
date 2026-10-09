@@ -38,7 +38,9 @@ else if (_spec is not null)
 
     <SpecBlockersPanel Blockers="_blockers" />
 
-    <RunControlsArea Scope="spec run" />
+    <RunControlsArea Scope="spec run">
+        <SpecRunControls Spec="_spec" OnChanged="RefreshAsync" />
+    </RunControlsArea>
 
     <TicketDagView Tickets="_tickets" Sagas="_sagas" />
     <StackLayersPanel Layers="_stack" />

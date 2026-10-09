@@ -38,6 +38,9 @@ public sealed class TicketRun : VersionedEntity
 
     public string? FailureReason { get; private set; }
 
+    /// <summary>The phase the ticket was in when it last moved to <see cref="TicketRunStatus.NeedsAttention"/>, so a retry can resume it.</summary>
+    public TicketRunStatus? NeedsAttentionFrom { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -71,6 +74,7 @@ public sealed class TicketRun : VersionedEntity
 
         Status = next;
         FailureReason = null;
+        NeedsAttentionFrom = null;
         UpdatedAt = at;
 
         switch (next)
@@ -85,9 +89,42 @@ public sealed class TicketRun : VersionedEntity
         }
     }
 
+    /// <summary>
+    /// The user's Retry of a ticket in <see cref="TicketRunStatus.NeedsAttention"/>: it resumes the phase that failed. A
+    /// failed review (including exhausted review iterations) starts a fresh review round with a full iteration budget on
+    /// the implemented commit; a failed integration resumes its saga; anything else, or a ticket without an implemented
+    /// commit, is implemented again.
+    /// </summary>
+    /// <returns>The status the ticket moved to.</returns>
+    public TicketRunStatus Retry(DateTimeOffset at)
+    {
+        if (Status != TicketRunStatus.NeedsAttention)
+        {
+            throw new InvalidStatusTransitionException(nameof(TicketRun), Status, TicketRunStatus.Ready);
+        }
+
+        TicketRunStatus target = (NeedsAttentionFrom, LastImplementedSha) switch
+        {
+            (TicketRunStatus.Reviewing or TicketRunStatus.FixingReviewFindings, not null) => TicketRunStatus.Reviewing,
+            (TicketRunStatus.Integrating, not null) => TicketRunStatus.Integrating,
+            _ => TicketRunStatus.Ready,
+        };
+        TransitionTo(target, at);
+        if (target == TicketRunStatus.Reviewing)
+        {
+            // A new round identity (attempt, iteration) so earlier round results are not read back as the current round.
+            Attempt++;
+            ReviewIteration = 0;
+        }
+
+        return target;
+    }
+
     public void MarkNeedsAttention(string reason, DateTimeOffset at)
     {
+        TicketRunStatus failedIn = Status;
         TransitionTo(TicketRunStatus.NeedsAttention, at);
         FailureReason = reason;
+        NeedsAttentionFrom = failedIn;
     }
 }

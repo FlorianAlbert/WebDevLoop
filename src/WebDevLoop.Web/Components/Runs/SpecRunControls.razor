@@ -1,0 +1,19 @@
+@using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Queries
+
+<RunControlPanel Commands="Commands" OnApplied="OnChanged" />
+
+@code {
+    private const string AbortConfirmation =
+        "Abort this spec run? Its agent sessions and tester app are stopped, its open tickets are aborted, and its worktrees are cleaned up. This cannot be undone.";
+
+    [Parameter, EditorRequired] public SpecRunView Spec { get; set; } = default!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private IReadOnlyList<RunControlCommand> Commands =>
+    [
+        new("retry", "Retry", Spec.Status == SpecRunStatus.NeedsAttention, null, (control, token) => control.RetrySpecAsync(new RunId(Spec.Id), token)),
+        new("abort", "Abort run", !Spec.Status.IsTerminal(), AbortConfirmation, (control, token) => control.AbortSpecAsync(new RunId(Spec.Id), token)),
+    ];
+}

@@ -5,6 +5,9 @@ using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Queries;
+using WebDevLoop.Core.Orchestration.Control;
+using WebDevLoop.Infrastructure.Prerequisites;
+using WebDevLoop.Web.Tests.Api;
 
 namespace WebDevLoop.Web.Tests.Components.Support;
 
@@ -202,9 +205,26 @@ internal sealed class RunDetailHarness : BunitContext
         Services.AddSingleton<IAgentLogNotifications>(Logs);
         Services.AddSingleton<ISettingsManager>(Settings);
         Services.AddSingleton<WebDevLoop.Core.Events.IRunEventBus>(Bus);
+        Services.AddSingleton<IRunControl>(Control);
+        Readiness = new DiagnosticReadiness(Validator, new FakeClock());
+        Readiness.RefreshAsync(CancellationToken.None).GetAwaiter().GetResult();
+        Services.AddSingleton(Readiness);
     }
 
     public FakeRunQueries Queries { get; }
+
+    public FakeRunControl Control { get; } = new();
+
+    public FakePrerequisiteValidator Validator { get; } = new();
+
+    /// <summary>Operational unless <see cref="EnterDiagnosticModeAsync"/> is called.</summary>
+    public DiagnosticReadiness Readiness { get; }
+
+    public async Task EnterDiagnosticModeAsync()
+    {
+        Validator.Checks = [new PrerequisiteCheck("GitHub auth", PrerequisiteStatus.Failed, "No GitHub App configured", "Configure a GitHub App or PAT")];
+        await Readiness.RefreshAsync(CancellationToken.None);
+    }
 
     public FakeAgentLogReader Logs { get; }
 

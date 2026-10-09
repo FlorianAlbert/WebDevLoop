@@ -3,7 +3,7 @@ using WebDevLoop.Core.Queries;
 
 namespace WebDevLoop.Web.Components.Tickets;
 
-/// <summary>Layers a spec's ticket DAG and flags the frontier, mirroring the orchestrator's rule that only integrated blockers count.</summary>
+/// <summary>Layers a spec's ticket DAG and flags the frontier, mirroring the orchestrator's rule that only integrated or skipped blockers count.</summary>
 public static class TicketDagLayout
 {
     public static IReadOnlyList<TicketDagRow> Build(IReadOnlyList<TicketRunView> tickets)

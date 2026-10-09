@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Control;
 using WebDevLoop.Core.Settings;
 using WebDevLoop.Infrastructure.Prerequisites;
 
@@ -28,6 +29,16 @@ internal static class ApiProblems
             ["mode"] = snapshot.Mode.ToString(),
             ["failedChecks"] = snapshot.FailedChecks.Select(check => check.ToResponse()).ToArray(),
         });
+
+    /// <summary>Maps a refused control command to its problem response; <paramref name="result"/> must not be applied.</summary>
+    public static ProblemHttpResult ForControl(ControlResult result) => result.Outcome switch
+    {
+        ControlOutcome.NotFound => NotFound(result.Reason ?? "Not found."),
+        ControlOutcome.NotAllowed => TypedResults.Problem(result.Reason, statusCode: StatusCodes.Status409Conflict, title: "Not allowed in the run's current state"),
+        ControlOutcome.NoActiveSlot => TypedResults.Problem(result.Reason, statusCode: StatusCodes.Status409Conflict, title: "No free active-spec slot"),
+        ControlOutcome.ConcurrencyConflict => Conflict(result.Reason ?? "Conflict."),
+        _ => throw new ArgumentException("An applied command is not a problem.", nameof(result)),
+    };
 
     /// <summary>Maps a failed command to its problem response; <paramref name="result"/> must not be a success.</summary>
     public static IResult ForFailure<T>(CommandResult<T> result) => result.Status switch

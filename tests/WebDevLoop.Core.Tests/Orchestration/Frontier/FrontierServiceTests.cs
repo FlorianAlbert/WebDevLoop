@@ -110,4 +110,19 @@ public sealed class FrontierServiceTests
         Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(spec[1]).Status);
         Assert.Equal(2, _fixture.Ticket(spec[1]).Attempt);
     }
+
+    [Fact]
+    public async Task skipping_a_blocker_starts_its_dependent_right_away()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, [1]));
+        await _fixture.ReconcileAsync(spec.Id);
+        await _fixture.MoveAsync(spec[1], TicketRunStatus.NeedsAttention);
+        _fixture.Db.TakeUndispatchedEvents();
+
+        await _fixture.MoveAsync(spec[1], TicketRunStatus.Skipped);
+        await _fixture.PumpEventsAsync();
+
+        Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(spec[2]).Status);
+        Assert.Equal([spec[1], spec[2]], _fixture.Launcher.Launched.Select(assignment => assignment.TicketRunId));
+    }
 }

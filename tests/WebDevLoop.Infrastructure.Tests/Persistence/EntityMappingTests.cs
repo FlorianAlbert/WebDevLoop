@@ -148,6 +148,28 @@ public sealed class EntityMappingTests : IDisposable
     }
 
     [Fact]
+    public async Task the_phase_a_spec_and_a_ticket_needed_attention_in_round_trips()
+    {
+        (RunId specRunId, TicketRunId ticketRunId) = await TestData.SeedTicketRunAsync(_harness);
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            SpecRun spec = (await write.SpecRuns.GetAsync(specRunId, CancellationToken.None))!;
+            spec.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
+            spec.MarkNeedsAttention("clone failed", TestData.Now);
+            TicketRun ticket = (await write.Tickets.GetAsync(ticketRunId, CancellationToken.None))!;
+            ticket.TransitionTo(TicketRunStatus.Ready, TestData.Now);
+            ticket.TransitionTo(TicketRunStatus.Implementing, TestData.Now);
+            ticket.MarkNeedsAttention("retries exhausted", TestData.Now);
+            await write.SaveAsync();
+        }
+
+        using PersistenceScope read = _harness.OpenScope();
+
+        Assert.Equal(SpecRunStatus.Preparing, (await read.SpecRuns.GetAsync(specRunId, CancellationToken.None))!.NeedsAttentionFrom);
+        Assert.Equal(TicketRunStatus.Implementing, (await read.Tickets.GetAsync(ticketRunId, CancellationToken.None))!.NeedsAttentionFrom);
+    }
+
+    [Fact]
     public async Task step_run_round_trips_all_state()
     {
         (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);

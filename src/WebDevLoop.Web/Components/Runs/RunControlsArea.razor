@@ -1,4 +1,4 @@
-@* Retry/Skip/Abort belong to a later work package: it supplies ChildContent; until then only the marked placeholder renders. *@
+@* Hosts the run's control buttons (SpecRunControls / TicketRunControls) as ChildContent. *@
 <section class="card my-3" data-testid="run-controls">
     <div class="card-body">
         <h2 class="h6 card-title">Controls</h2>
@@ -8,7 +8,7 @@
         }
         else
         {
-            <p class="text-muted mb-0" data-testid="controls-placeholder">Run controls (retry, skip, abort) for this @Scope are not available yet.</p>
+            <p class="text-muted mb-0" data-testid="controls-placeholder">No run controls are available for this @Scope.</p>
         }
     </div>
 </section>

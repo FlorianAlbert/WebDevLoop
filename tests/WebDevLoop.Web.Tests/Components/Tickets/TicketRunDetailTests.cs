@@ -120,13 +120,15 @@ public sealed class TicketRunDetailTests
     }
 
     [Fact]
-    public void Control_actions_are_a_marked_placeholder()
+    public void Controls_area_offers_retry_skip_and_abort_for_the_ticket()
     {
-        using var harness = HarnessWithTicket();
+        using var harness = HarnessWithTicket(TicketRunStatus.NeedsAttention);
 
         var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
 
-        Assert.NotNull(cut.Find("[data-testid=controls-placeholder]"));
-        Assert.Empty(cut.FindAll("[data-testid=controls-placeholder] button"));
+        Assert.Empty(cut.FindAll("[data-testid=controls-placeholder]"));
+        Assert.Equal(
+            ["control-retry", "control-skip", "control-skip-dependents", "control-abort"],
+            cut.FindAll("[data-testid=run-controls] button[data-testid^=control-]").Select(button => button.GetAttribute("data-testid")));
     }
 }

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Control;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Queries;
 using WebDevLoop.Infrastructure.Events;
@@ -25,6 +26,8 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
     public FakeSpecEnqueuer Enqueuer { get; } = new();
 
     public FakeRunQueries Runs { get; } = new();
+
+    public FakeRunControl Control { get; } = new();
 
     public FakeAgentLogReader Logs { get; } = new();
 
@@ -59,6 +62,7 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
             services.AddSingleton<ISettingsManager>(Settings);
             services.AddSingleton<ISpecEnqueuer>(Enqueuer);
             services.AddSingleton<IRunQueries>(Runs);
+            services.AddSingleton<IRunControl>(Control);
             services.AddSingleton<IAgentLogReader>(Logs);
             services.AddSingleton<ICurrentRepositorySelection>(Selection);
             services.AddSingleton<IRunEventBus>(EventBus);

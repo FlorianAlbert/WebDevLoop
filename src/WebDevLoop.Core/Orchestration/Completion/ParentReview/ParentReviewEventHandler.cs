@@ -4,7 +4,7 @@ using WebDevLoop.Core.Events;
 namespace WebDevLoop.Core.Orchestration.Completion.ParentReview;
 
 /// <summary>
-/// Event-bus subscriber for workflow steps 9–10: a ticket becoming integrated or skipped, or a spec (re)entering
+/// Event-bus subscriber for workflow steps 9–10: a ticket becoming integrated, skipped, or aborted, or a spec (re)entering
 /// <c>Running</c> with every ticket already done, starts the parent-spec review (<see cref="ParentReviewStarter"/>); a spec
 /// entering <c>ParentReviewing</c> has its review launched in the background (<see cref="IParentReviewLauncher"/>).
 /// </summary>
@@ -15,7 +15,7 @@ public sealed class ParentReviewEventHandler(ParentReviewStarter starter, IParen
         ArgumentNullException.ThrowIfNull(envelope);
         switch (envelope.Event)
         {
-            case TicketRunStatusChanged { To: TicketRunStatus.Integrated or TicketRunStatus.Skipped } changed:
+            case TicketRunStatusChanged { To: TicketRunStatus.Integrated or TicketRunStatus.Skipped or TicketRunStatus.Aborted } changed:
                 await starter.StartIfTicketsCompleteAsync(changed.SpecRunId, cancellationToken);
                 break;
             case SpecRunStatusChanged { To: SpecRunStatus.Running } running:

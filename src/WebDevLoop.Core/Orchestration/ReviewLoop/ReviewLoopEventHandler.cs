@@ -7,7 +7,8 @@ using WebDevLoop.Core.Ports;
 namespace WebDevLoop.Core.Orchestration.ReviewLoop;
 
 /// <summary>
-/// Event-bus subscriber that starts review loops: a freshly implemented ticket entering <c>Reviewing</c> is reviewed, and
+/// Event-bus subscriber that starts review loops: a freshly implemented ticket entering <c>Reviewing</c>, or a ticket the
+/// user retried into <c>Reviewing</c> from <c>NeedsAttention</c>, is reviewed, and
 /// when an implementer slot frees, tickets whose findings wait for a fix turn are launched again. A ticket coming back
 /// from a fix is not launched here; the loop that ran the fix continues with the next review round itself. A (periodic or
 /// startup) <see cref="FrontierReconciliationRequested"/> relaunches every <c>Reviewing</c> ticket of the run without an
@@ -29,7 +30,7 @@ public sealed class ReviewLoopEventHandler(
                 await LaunchIdleReviewLoopsAsync(requested.SpecRunId, cancellationToken);
                 break;
             case TicketRunStatusChanged changed:
-                if (changed is { From: TicketRunStatus.Implementing, To: TicketRunStatus.Reviewing })
+                if (changed is { From: TicketRunStatus.Implementing or TicketRunStatus.NeedsAttention, To: TicketRunStatus.Reviewing })
                 {
                     launcher.Launch(new ReviewAssignment(changed.SpecRunId, changed.TicketRunId));
                 }

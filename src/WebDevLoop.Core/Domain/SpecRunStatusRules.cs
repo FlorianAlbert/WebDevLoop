@@ -14,13 +14,14 @@ public static class SpecRunStatusRules
             [SpecRunStatus.Testing] = [SpecRunStatus.Running, SpecRunStatus.ReadyForReview, SpecRunStatus.Completed],
             [SpecRunStatus.ReadyForReview] = [SpecRunStatus.AwaitingMerge],
             [SpecRunStatus.AwaitingMerge] = [SpecRunStatus.Completed],
-            // Retrying a spec resumes it at the phase that exhausted its cycle limit.
+            // Retrying a spec resumes it at the phase that failed (or exhausted its cycle limit), including merge tracking.
             [SpecRunStatus.NeedsAttention] =
             [
                 SpecRunStatus.Preparing,
                 SpecRunStatus.Running,
                 SpecRunStatus.ParentReviewing,
                 SpecRunStatus.Testing,
+                SpecRunStatus.ReadyForReview,
             ],
             [SpecRunStatus.Completed] = [],
             [SpecRunStatus.Aborted] = [],

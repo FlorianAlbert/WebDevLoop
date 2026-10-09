@@ -55,6 +55,15 @@ internal static class SpecRunEndpoints
             .WithName("ListSpecRunStack")
             .Produces<IReadOnlyList<StackLayerView>>()
             .ProducesProblem(StatusCodes.Status404NotFound);
+
+        group.MapGet("spec-runs/{id}/merge-status", async (string id, [FromServices] IRunQueries queries, CancellationToken cancellationToken) =>
+            ApiIds.SpecRun(id) is { } runId && await queries.GetSpecRunAsync(runId, cancellationToken) is { } run
+                ? (IResult)TypedResults.Ok(MergeStatusProjection.From(run, await queries.ListStackAsync(runId, cancellationToken)))
+                : SpecRunNotFound(id))
+            .WithName("GetSpecRunMergeStatus")
+            .WithSummary("Whether the run's PR stack is awaiting the human merge, merged into trunk, or closed unmerged, as last tracked.")
+            .Produces<MergeStatusView>()
+            .ProducesProblem(StatusCodes.Status404NotFound);
     }
 
     private static async Task<IResult> QueueSpecAsync(

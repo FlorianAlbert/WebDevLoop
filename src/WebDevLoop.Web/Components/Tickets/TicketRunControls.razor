@@ -1,0 +1,33 @@
+@using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Orchestration.Control
+@using WebDevLoop.Core.Queries
+@using WebDevLoop.Web.Components.Runs
+
+<RunControlPanel Commands="Commands" OnApplied="OnChanged" />
+
+@code {
+    private const string SkipConfirmation =
+        "Skip this ticket? It counts as done: tickets that depend on it may start on an integration branch without its change.";
+
+    private const string SkipDependentsConfirmation =
+        "Skip this ticket and every not-yet-started ticket that depends on it?";
+
+    private const string AbortConfirmation =
+        "Abort this ticket? Its agent session is stopped. Tickets that depend on it stay blocked until they are skipped.";
+
+    [Parameter, EditorRequired] public TicketRunView Ticket { get; set; } = default!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private TicketRunId Id => new(Ticket.Id);
+
+    private bool IsSkippable => Ticket.Status is TicketRunStatus.Blocked or TicketRunStatus.Ready or TicketRunStatus.NeedsAttention;
+
+    private IReadOnlyList<RunControlCommand> Commands =>
+    [
+        new("retry", "Retry", Ticket.Status == TicketRunStatus.NeedsAttention, null, (control, token) => control.RetryTicketAsync(Id, token)),
+        new("skip", "Skip", IsSkippable, SkipConfirmation, (control, token) => control.SkipTicketAsync(Id, SkipDependents.Unblock, token)),
+        new("skip-dependents", "Skip with dependents", IsSkippable, SkipDependentsConfirmation, (control, token) => control.SkipTicketAsync(Id, SkipDependents.Skip, token)),
+        new("abort", "Abort ticket", !Ticket.Status.IsTerminal(), AbortConfirmation, (control, token) => control.AbortTicketAsync(Id, token)),
+    ];
+}

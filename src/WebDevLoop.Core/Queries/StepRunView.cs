@@ -18,4 +18,6 @@ public sealed record StepRunView(
     DateTimeOffset? TimeoutAt,
     string InputPromptHash,
     string? StructuredResultJson,
-    string? FailureReason);
+    string? FailureReason,
+    string? Model,
+    string? ReasoningEffort);

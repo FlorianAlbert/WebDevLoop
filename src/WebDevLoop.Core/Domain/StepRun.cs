@@ -23,6 +23,11 @@ public sealed class StepRun : VersionedEntity
 
     public string? CopilotSessionId { get; set; }
 
+    /// <summary>The model the agent session was launched with; null for steps recorded before it was captured.</summary>
+    public string? Model { get; private set; }
+
+    public string? ReasoningEffort { get; private set; }
+
     public string? WorktreePath { get; set; }
 
     public BranchName? BranchName { get; set; }
@@ -58,6 +63,12 @@ public sealed class StepRun : VersionedEntity
             Attempt = attempt,
             InputPromptHash = inputPromptHash,
         };
+
+    public void RecordLaunchSettings(string model, string reasoningEffort)
+    {
+        Model = model;
+        ReasoningEffort = reasoningEffort;
+    }
 
     public void Start(DateTimeOffset at, TimeSpan timeout)
     {

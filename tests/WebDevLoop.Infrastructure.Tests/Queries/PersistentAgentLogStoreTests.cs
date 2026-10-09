@@ -163,4 +163,83 @@ public sealed class PersistentAgentLogStoreTests : IDisposable
             await Task.Delay(20);
         }
     }
+
+    [Fact]
+    public async Task subscribers_of_a_step_are_notified_when_a_full_batch_is_flushed()
+    {
+        await using PersistentAgentLogStore store = _database.CreateStore(new AgentLogStoreOptions { BatchSize = 2, FlushInterval = TimeSpan.FromMinutes(5) });
+        int notifications = 0;
+        using IDisposable subscription = store.Subscribe(StepA, () => Interlocked.Increment(ref notifications));
+
+        await store.AppendAsync(Entry(StepA, "1"), CancellationToken.None);
+        Assert.Equal(0, notifications);
+        await store.AppendAsync(Entry(StepA, "2"), CancellationToken.None);
+
+        Assert.Equal(1, notifications);
+        Assert.Equal(["1", "2"], (await store.ReadAsync(StepA, 0, CancellationToken.None)).Select(view => view.Text));
+    }
+
+    [Fact]
+    public async Task subscribers_are_notified_when_the_flush_interval_writes_buffered_entries()
+    {
+        await using PersistentAgentLogStore store = _database.CreateStore(new AgentLogStoreOptions { BatchSize = 100, FlushInterval = TimeSpan.FromMilliseconds(20) });
+        var notified = new TaskCompletionSource();
+        using IDisposable subscription = store.Subscribe(StepA, () => notified.TrySetResult());
+
+        await store.AppendAsync(Entry(StepA, "1"), CancellationToken.None);
+
+        await notified.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task only_subscribers_of_the_flushed_steps_are_notified()
+    {
+        await using PersistentAgentLogStore store = _database.CreateStore(new AgentLogStoreOptions { BatchSize = 1 });
+        List<string> notified = [];
+        using IDisposable a = store.Subscribe(StepA, () => notified.Add("a"));
+        using IDisposable b = store.Subscribe(StepB, () => notified.Add("b"));
+
+        await store.AppendAsync(Entry(StepB, "1"), CancellationToken.None);
+
+        Assert.Equal(["b"], notified);
+    }
+
+    [Fact]
+    public async Task a_disposed_subscription_is_no_longer_notified()
+    {
+        await using PersistentAgentLogStore store = _database.CreateStore(new AgentLogStoreOptions { BatchSize = 1 });
+        int notifications = 0;
+        IDisposable subscription = store.Subscribe(StepA, () => notifications++);
+        subscription.Dispose();
+
+        await store.AppendAsync(Entry(StepA, "1"), CancellationToken.None);
+
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public async Task a_failing_subscriber_neither_loses_entries_nor_blocks_the_others()
+    {
+        await using PersistentAgentLogStore store = _database.CreateStore(new AgentLogStoreOptions { BatchSize = 1 });
+        int healthy = 0;
+        using IDisposable failing = store.Subscribe(StepA, () => throw new InvalidOperationException("subscriber failed"));
+        using IDisposable other = store.Subscribe(StepA, () => healthy++);
+
+        await store.AppendAsync(Entry(StepA, "1"), CancellationToken.None);
+
+        Assert.Equal(1, healthy);
+        Assert.Equal(["1"], (await store.ReadAsync(StepA, 0, CancellationToken.None)).Select(view => view.Text));
+    }
+
+    [Fact]
+    public async Task reading_without_buffered_entries_notifies_nobody()
+    {
+        await using PersistentAgentLogStore store = _database.CreateStore();
+        int notifications = 0;
+        using IDisposable subscription = store.Subscribe(StepA, () => notifications++);
+
+        await store.ReadAsync(StepA, 0, CancellationToken.None);
+
+        Assert.Equal(0, notifications);
+    }
 }

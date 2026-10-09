@@ -20,6 +20,14 @@ internal sealed class FakeRunQueries : IRunQueries
 
     public List<StackLayerView> Stack { get; } = [];
 
+    public Dictionary<string, List<SpecDependencyView>> Dependencies { get; } = [];
+
+    /// <summary>Latest saga per ticket run id.</summary>
+    public Dictionary<string, IntegrationSagaView> Sagas { get; } = [];
+
+    public IntegrationSagaView Saga(string ticketId, IntegrationSagaCheckpoint checkpoint) =>
+        Sagas[ticketId] = new IntegrationSagaView(ticketId, checkpoint, $"stack/run-1/{ticketId}", null, null, Views.Now);
+
     public Task<IReadOnlyList<SpecRunView>> ListSpecRunsAsync(int repositoryId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SpecRunView>>(Specs.Where(spec => spec.RepositoryId == repositoryId).ToList());
 
@@ -44,14 +52,34 @@ internal sealed class FakeRunQueries : IRunQueries
     public Task<IReadOnlyList<StackLayerView>> ListStackAsync(RunId specRunId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<StackLayerView>>(Stack.ToList());
 
+    public Task<IReadOnlyList<SpecDependencyView>> ListSpecDependenciesAsync(RunId specRunId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SpecDependencyView>>(Dependencies.GetValueOrDefault(specRunId.Value) ?? []);
+
+    public Task<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>> ListSpecDependenciesForRepositoryAsync(int repositoryId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>>(
+            Dependencies.Where(entry => Specs.Any(spec => spec.Id == entry.Key && spec.RepositoryId == repositoryId))
+                .ToDictionary(entry => entry.Key, entry => (IReadOnlyList<SpecDependencyView>)entry.Value));
+
+    public Task<IntegrationSagaView?> GetLatestSagaAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) =>
+        Task.FromResult(Sagas.GetValueOrDefault(ticketRunId.Value));
+
+    public Task<IReadOnlyDictionary<string, IntegrationSagaView>> ListLatestSagasAsync(RunId specRunId, CancellationToken cancellationToken)
+    {
+        HashSet<string> tickets = Tickets.Where(ticket => ticket.SpecRunId == specRunId.Value).Select(ticket => ticket.Id).ToHashSet();
+        return Task.FromResult<IReadOnlyDictionary<string, IntegrationSagaView>>(
+            Sagas.Where(entry => tickets.Contains(entry.Key)).ToDictionary(entry => entry.Key, entry => entry.Value));
+    }
+
     public void Replace(TicketRunView updated)
     {
         Tickets[Tickets.FindIndex(ticket => ticket.Id == updated.Id)] = updated;
     }
 }
 
-internal sealed class FakeAgentLogReader : IAgentLogReader
+internal sealed class FakeAgentLogReader : IAgentLogReader, IAgentLogNotifications
 {
+    private readonly List<(StepRunId Step, Action Handler)> _subscribers = [];
+
     private readonly object _gate = new();
     private readonly List<AgentLogView> _entries = [];
     private readonly List<int> _afterSequences = [];
@@ -78,6 +106,48 @@ internal sealed class FakeAgentLogReader : IAgentLogReader
         }
     }
 
+    public int SubscriberCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _subscribers.Count;
+            }
+        }
+    }
+
+    /// <summary>Signals subscribers of the step the way the persistent store does after a flush; entries are added with <see cref="Append"/>.</summary>
+    public void NotifyFlushed(string stepRunId)
+    {
+        Action[] handlers;
+        lock (_gate)
+        {
+            handlers = _subscribers.Where(subscriber => subscriber.Step.Value == stepRunId).Select(subscriber => subscriber.Handler).ToArray();
+        }
+
+        foreach (Action handler in handlers)
+        {
+            handler();
+        }
+    }
+
+    public IDisposable Subscribe(StepRunId stepRunId, Action onEntriesAvailable)
+    {
+        lock (_gate)
+        {
+            _subscribers.Add((stepRunId, onEntriesAvailable));
+        }
+
+        return new Unsubscriber(() =>
+        {
+            lock (_gate)
+            {
+                _subscribers.RemoveAll(subscriber => subscriber.Handler == onEntriesAvailable);
+            }
+        });
+    }
+
     public void Append(string text, AgentLogKind kind = AgentLogKind.Assistant)
     {
         lock (_gate)
@@ -96,23 +166,9 @@ internal sealed class FakeAgentLogReader : IAgentLogReader
     }
 }
 
-internal sealed class FakeSagaRepository : IIntegrationSagaRepository
+internal sealed class Unsubscriber(Action unsubscribe) : IDisposable
 {
-    public Dictionary<string, IntegrationSaga> Sagas { get; } = [];
-
-    public IntegrationSaga Start(string runId, string ticketId)
-    {
-        IntegrationSaga saga = IntegrationSaga.Start(new RunId(runId), new TicketRunId(ticketId), null, Views.Now);
-        Sagas[ticketId] = saga;
-        return saga;
-    }
-
-    public Task<IntegrationSaga?> FindLatestForTicketAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) =>
-        Task.FromResult(Sagas.GetValueOrDefault(ticketRunId.Value));
-
-    public Task<IReadOnlyList<IntegrationSaga>> ListIncompleteAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-
-    public void Add(IntegrationSaga saga) => throw new NotSupportedException();
+    public void Dispose() => unsubscribe();
 }
 
 internal sealed class FakeSettingsManager : ISettingsManager
@@ -139,12 +195,11 @@ internal sealed class RunDetailHarness : BunitContext
     {
         Queries = new FakeRunQueries();
         Logs = new FakeAgentLogReader();
-        Sagas = new FakeSagaRepository();
         Settings = new FakeSettingsManager();
         Bus = Events.NewBus();
         Services.AddSingleton<IRunQueries>(Queries);
         Services.AddSingleton<IAgentLogReader>(Logs);
-        Services.AddSingleton<IIntegrationSagaRepository>(Sagas);
+        Services.AddSingleton<IAgentLogNotifications>(Logs);
         Services.AddSingleton<ISettingsManager>(Settings);
         Services.AddSingleton<WebDevLoop.Core.Events.IRunEventBus>(Bus);
     }
@@ -152,8 +207,6 @@ internal sealed class RunDetailHarness : BunitContext
     public FakeRunQueries Queries { get; }
 
     public FakeAgentLogReader Logs { get; }
-
-    public FakeSagaRepository Sagas { get; }
 
     public FakeSettingsManager Settings { get; }
 

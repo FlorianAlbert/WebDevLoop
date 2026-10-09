@@ -76,7 +76,9 @@ public sealed class IntegrationSagaSteps(
             && context.Spec.IntegrationTipSha is { } tip
             && saga.ExpectedPriorIntegrationSha != tip)
         {
-            saga.RetargetTo(tip, clock.UtcNow);
+            DateTimeOffset now = clock.UtcNow;
+            saga.RetargetTo(tip, now);
+            outbox.Append(new SagaCheckpointAdvanced(saga.SpecRunId, saga.TicketRunId, saga.Checkpoint, now));
         }
     }
 
@@ -390,7 +392,9 @@ public sealed class IntegrationSagaSteps(
 
     private async Task<IntegrationResult?> CheckpointAsync(IntegrationContext context, IntegrationSagaCheckpoint next, CancellationToken cancellationToken)
     {
-        context.Saga.AdvanceTo(next, clock.UtcNow);
+        DateTimeOffset now = clock.UtcNow;
+        context.Saga.AdvanceTo(next, now);
+        outbox.Append(new SagaCheckpointAdvanced(context.Saga.SpecRunId, context.Saga.TicketRunId, next, now));
         return await SaveAsync(cancellationToken) ? null : IntegrationResult.ConcurrencyConflict;
     }
 

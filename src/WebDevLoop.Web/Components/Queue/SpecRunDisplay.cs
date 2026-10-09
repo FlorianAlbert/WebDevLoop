@@ -23,18 +23,29 @@ public static partial class SpecRunDisplay
     };
 
     /// <summary>A short explanation of what a non-running spec is waiting for; <c>null</c> when there is nothing to add.</summary>
-    public static string? Note(SpecRunView run, SpecDependencyMode effectiveMode) => run.Status switch
+    public static string? Note(SpecRunView run, SpecDependencyMode effectiveMode, IReadOnlyList<SpecDependencyView>? blockers = null) => run.Status switch
     {
         SpecRunStatus.Queued => "Waiting for a free active-spec slot",
-        SpecRunStatus.WaitingForDependency => (run.DependencyModeUsed ?? effectiveMode) == SpecDependencyMode.WaitForMerge
-            ? "Waiting for the dependency to be merged"
-            : "Waiting until the dependency's stack is ready to build on",
+        SpecRunStatus.WaitingForDependency => WithBlockers(
+            (run.DependencyModeUsed ?? effectiveMode) == SpecDependencyMode.WaitForMerge
+                ? "Waiting for the dependency to be merged"
+                : "Waiting until the dependency's stack is ready to build on",
+            blockers),
         SpecRunStatus.ReadyForReview => "Ready for human review",
         SpecRunStatus.AwaitingMerge => "Stack is open; waiting for a human to merge it",
         SpecRunStatus.NeedsAttention => run.FailureReason ?? "Needs a human decision",
         SpecRunStatus.Aborted => run.FailureReason,
         _ => null,
     };
+
+    private static string WithBlockers(string note, IReadOnlyList<SpecDependencyView>? blockers)
+    {
+        string[] unmerged = (blockers ?? []).Where(blocker => !blocker.IsSatisfied).Select(Describe).ToArray();
+        return unmerged.Length == 0 ? note : $"{note}: {string.Join(", ", unmerged)}";
+    }
+
+    private static string Describe(SpecDependencyView blocker) =>
+        $"#{blocker.IssueNumber} ({(blocker.Status is { } status ? Label(status) : "not tracked")})";
 
     [GeneratedRegex("(?<=[a-z])(?=[A-Z])")]
     private static partial Regex WordBoundary();

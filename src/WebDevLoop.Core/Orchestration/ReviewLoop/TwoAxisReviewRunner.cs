@@ -175,6 +175,7 @@ public sealed class TwoAxisReviewRunner(
         step.WorktreePath = target.WorkingDirectory;
         step.BranchName = target.Branch;
         RoleSettings roleSettings = context.Settings.For(role);
+        step.RecordLaunchSettings(roleSettings.Model, roleSettings.ReasoningEffort);
         _journal.Start(step, roleSettings.Timeout);
         var request = new AgentRunRequest(
             step.Id,

@@ -59,7 +59,9 @@ public static class RunViewMapper
         step.TimeoutAt,
         step.InputPromptHash,
         step.StructuredResultJson,
-        step.FailureReason);
+        step.FailureReason,
+        step.Model,
+        step.ReasoningEffort);
 
     public static RunEventView ToView(this RunEvent runEvent) => new(
         runEvent.Id,
@@ -79,4 +81,12 @@ public static class RunViewMapper
         layer.StackNumber,
         layer.IsDraft,
         layer.VerifiedDiffSha?.Value);
+
+    public static IntegrationSagaView ToView(this IntegrationSaga saga) => new(
+        saga.TicketRunId.Value,
+        saga.Checkpoint,
+        saga.StackBranchName.Value,
+        saga.PullRequestNumber?.Value,
+        saga.LastError,
+        saga.UpdatedAt);
 }

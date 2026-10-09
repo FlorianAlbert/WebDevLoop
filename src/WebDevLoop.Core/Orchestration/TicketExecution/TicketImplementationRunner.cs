@@ -161,6 +161,8 @@ public sealed class TicketImplementationRunner(
     {
         StepRun step = StepRun.Create(ids.NewStepRunId(), context.Spec.Id, context.Ticket.Id, StepKind.Implement, Role, attempt, Hash(prompt));
         step.CopilotSessionId = ids.NewAgentSessionId(step.Id).Value;
+        RoleSettings role = context.Settings.For(Role);
+        step.RecordLaunchSettings(role.Model, role.ReasoningEffort);
         step.WorktreePath = context.WorktreePath;
         step.BranchName = context.Ticket.BranchName;
         step.Start(clock.UtcNow, context.Settings.For(Role).Timeout);

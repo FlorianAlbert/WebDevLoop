@@ -27,6 +27,48 @@ public sealed class LiveEventViewMapperTests
     }
 
     [Fact]
+    public void saga_checkpoint_advance_exposes_run_ticket_and_checkpoint()
+    {
+        var envelope = new EventEnvelope(8, new SagaCheckpointAdvanced(Run, new TicketRunId("t-1"), IntegrationSagaCheckpoint.PrCreated, At));
+
+        Assert.Equal(new LiveEventView(8, nameof(SagaCheckpointAdvanced), "run-1", "t-1", null, nameof(IntegrationSagaCheckpoint.PrCreated), At), envelope.ToView());
+    }
+
+    [Fact]
+    public void every_workflow_event_naming_a_spec_run_is_mapped_so_pages_can_filter_by_run()
+    {
+        Type[] eventTypes = typeof(WorkflowEvent).Assembly.GetTypes()
+            .Where(type => type.IsSubclassOf(typeof(WorkflowEvent)) && !type.IsAbstract && type.GetProperty("SpecRunId") is not null)
+            .ToArray();
+        Assert.NotEmpty(eventTypes);
+
+        foreach (Type type in eventTypes)
+        {
+            var workflowEvent = (WorkflowEvent)Sample(type);
+
+            Assert.True(new EventEnvelope(1, workflowEvent).ToView().SpecRunId == Run.Value, $"{type.Name} is not mapped by LiveEventViewMapper.");
+        }
+    }
+
+    private static object Sample(Type type)
+    {
+        System.Reflection.ConstructorInfo constructor = type.GetConstructors().Single();
+        object?[] arguments = constructor.GetParameters().Select(parameter => SampleValue(parameter.ParameterType)).ToArray();
+        return constructor.Invoke(arguments);
+    }
+
+    private static object? SampleValue(Type type) => type switch
+    {
+        _ when type == typeof(RunId) => Run,
+        _ when type == typeof(TicketRunId) => new TicketRunId("t-1"),
+        _ when type == typeof(StepRunId) => new StepRunId("s-1"),
+        _ when type == typeof(DateTimeOffset) => At,
+        _ when type.IsEnum => Enum.GetValues(type).GetValue(0),
+        _ when Nullable.GetUnderlyingType(type) is not null => null,
+        _ => type.IsValueType ? Activator.CreateInstance(type) : null,
+    };
+
+    [Fact]
     public void step_status_change_exposes_step_and_optional_ticket()
     {
         var withTicket = new EventEnvelope(7, new StepRunStatusChanged(Run, new TicketRunId("t-1"), new StepRunId("s-1"), StepStatus.Running, At));

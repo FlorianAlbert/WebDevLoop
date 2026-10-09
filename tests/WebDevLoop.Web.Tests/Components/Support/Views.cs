@@ -33,8 +33,11 @@ internal static class Views
         string runId = "run-1",
         string? ticketId = "t1",
         int attempt = 1,
-        string? resultJson = null) => new(
-        id, runId, ticketId, kind, role, status, attempt, "copilot-session-1", "/work/t1", "ticket/branch", Now, null, null, "hash", resultJson, null);
+        string? resultJson = null,
+        string? model = null,
+        string? reasoningEffort = null) => new(
+        id, runId, ticketId, kind, role, status, attempt, "copilot-session-1", "/work/t1", "ticket/branch", Now, null, null, "hash", resultJson, null,
+        model, reasoningEffort);
 
     public static StackLayerView Layer(int position, string ticketId, int pullRequest) => new(
         position, ticketId, $"stack/run-1/{ticketId}", position == 1 ? "integration/run-1" : $"stack/run-1/prev", "abc1234", pullRequest, 100 + position, true, null);

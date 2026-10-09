@@ -34,6 +34,8 @@ public sealed class ConflictResolutionTests
         StepRun step = Assert.Single(await _f.Store.ListByTicketRunAsync(ticket.Id, IntegrationFixture.Token));
         Assert.Equal((StepKind.ResolveConflict, StepStatus.Succeeded, AgentRole.ConflictResolver), (step.Kind, step.Status, step.AgentRole!.Value));
         Assert.Equal(resolver.SessionId.Value, step.CopilotSessionId);
+        Assert.False(string.IsNullOrWhiteSpace(step.Model));
+        Assert.Equal((resolver.Settings.Model, resolver.Settings.ReasoningEffort), (step.Model, step.ReasoningEffort));
     }
 
     [Fact]

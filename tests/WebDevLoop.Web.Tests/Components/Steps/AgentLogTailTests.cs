@@ -89,4 +89,67 @@ public sealed class AgentLogTailTests
 
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=log-entry]").Count));
     }
+
+    [Fact]
+    public void A_flush_notification_refreshes_the_tail_without_polling()
+    {
+        using var harness = new RunDetailHarness();
+        harness.Logs.Append("first");
+        var cut = harness.Render<AgentLogTail>(p => p.Add(c => c.StepRunId, "s1").Add(c => c.Follow, true).Add(c => c.PollInterval, TimeSpan.Zero));
+
+        harness.Logs.Append("second");
+        harness.Logs.NotifyFlushed("s1");
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=log-entry]").Count));
+        Assert.Contains(1, harness.Logs.AfterSequences);
+    }
+
+    [Fact]
+    public async Task Notifications_of_other_steps_or_of_a_finished_step_do_not_read_the_log()
+    {
+        using var harness = new RunDetailHarness();
+        harness.Logs.Append("first");
+        var cut = harness.Render<AgentLogTail>(p => p.Add(c => c.StepRunId, "s1").Add(c => c.Follow, true).Add(c => c.PollInterval, TimeSpan.Zero));
+        cut.Render(p => p.Add(c => c.StepRunId, "s1").Add(c => c.Follow, false).Add(c => c.PollInterval, TimeSpan.Zero));
+        int readsWhenFinished = harness.Logs.ReadCalls;
+
+        harness.Logs.NotifyFlushed("other-step");
+        harness.Logs.NotifyFlushed("s1");
+        await Task.Delay(100, Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(readsWhenFinished, harness.Logs.ReadCalls);
+    }
+
+    [Fact]
+    public void A_burst_of_notifications_ends_with_every_entry_shown()
+    {
+        using var harness = new RunDetailHarness();
+        var cut = harness.Render<AgentLogTail>(p => p.Add(c => c.StepRunId, "s1").Add(c => c.Follow, true).Add(c => c.PollInterval, TimeSpan.Zero));
+
+        for (int i = 1; i <= 25; i++)
+        {
+            harness.Logs.Append($"line {i}");
+            harness.Logs.NotifyFlushed("s1");
+        }
+
+        cut.WaitForAssertion(() => Assert.Equal(25, cut.FindAll("[data-testid=log-entry]").Count));
+    }
+
+    [Fact]
+    public async Task Disposing_the_tail_unsubscribes_from_flush_notifications()
+    {
+        using var harness = new RunDetailHarness();
+        var cut = harness.Render<AgentLogTail>(p => p.Add(c => c.StepRunId, "s1").Add(c => c.Follow, true).Add(c => c.PollInterval, TimeSpan.Zero));
+        Assert.Equal(1, harness.Logs.SubscriberCount);
+
+        await harness.DisposeAsync();
+
+        Assert.Equal(0, harness.Logs.SubscriberCount);
+    }
+
+    [Fact]
+    public void The_fallback_poll_is_much_slower_than_the_push_path_needs()
+    {
+        Assert.True(AgentLogTail.DefaultPollInterval >= TimeSpan.FromSeconds(5));
+    }
 }

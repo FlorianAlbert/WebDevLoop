@@ -19,7 +19,7 @@
                     <tr data-testid="step-row-@step.Id">
                         <td><a href="/steps/@step.Id" data-testid="step-link-@step.Id">@step.Kind</a></td>
                         <td data-testid="step-role-@step.Id">@(step.AgentRole?.ToString() ?? "–")</td>
-                        <td data-testid="step-model-@step.Id">@ModelOf(step)</td>
+                        <td data-testid="step-model-@step.Id">@StepModelText.For(step)</td>
                         <td><StatusBadge Status="@step.Status.ToString()" data-testid="@($"step-status-{step.Id}")" /></td>
                         <td data-testid="step-attempt-@step.Id">@step.Attempt</td>
                         <td data-testid="step-iteration-@step.Id">@(report?.Iteration?.ToString() ?? "–")</td>
@@ -33,9 +33,4 @@
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<StepRunView> Steps { get; set; } = [];
-
-    [Parameter] public IReadOnlyDictionary<AgentRole, string> Models { get; set; } = new Dictionary<AgentRole, string>();
-
-    private string ModelOf(StepRunView step) =>
-        step.AgentRole is { } role && Models.TryGetValue(role, out string? model) ? model : "–";
 }

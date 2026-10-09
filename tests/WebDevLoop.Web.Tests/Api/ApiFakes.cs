@@ -20,7 +20,7 @@ internal static class ApiData
         new(id, specRunId, 11, "Ticket title", TicketRunStatus.Ready, 0, 0, $"webdevloop/{specRunId}/{id}", null, null, null, null, null, blockedBy, Now, Now, null);
 
     public static StepRunView Step(string id = "s-1", string? ticketRunId = "t-1", string specRunId = "run-1") =>
-        new(id, specRunId, ticketRunId, StepKind.Implement, AgentRole.Implementer, StepStatus.Running, 1, "copilot-1", "/wt", "branch", Now, null, Now.AddHours(1), "hash", null, null);
+        new(id, specRunId, ticketRunId, StepKind.Implement, AgentRole.Implementer, StepStatus.Running, 1, "copilot-1", "/wt", "branch", Now, null, Now.AddHours(1), "hash", null, null, "gpt-api", "high");
 }
 
 internal sealed class FakeRepositoryRegistry : IRepositoryRegistry
@@ -123,6 +123,22 @@ internal sealed class FakeRunQueries : IRunQueries
     public List<RunEventView> Events { get; } = [];
 
     public List<StackLayerView> Stack { get; } = [];
+
+    public Dictionary<string, List<SpecDependencyView>> Dependencies { get; } = [];
+
+    public Task<IReadOnlyList<SpecDependencyView>> ListSpecDependenciesAsync(RunId specRunId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<SpecDependencyView>>(Dependencies.GetValueOrDefault(specRunId.Value) ?? []);
+
+    public Task<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>> ListSpecDependenciesForRepositoryAsync(int repositoryId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>>(
+            Dependencies.Where(entry => SpecRuns.Any(run => run.Id == entry.Key && run.RepositoryId == repositoryId))
+                .ToDictionary(entry => entry.Key, entry => (IReadOnlyList<SpecDependencyView>)entry.Value));
+
+    public Task<IntegrationSagaView?> GetLatestSagaAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) =>
+        Task.FromResult<IntegrationSagaView?>(null);
+
+    public Task<IReadOnlyDictionary<string, IntegrationSagaView>> ListLatestSagasAsync(RunId specRunId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, IntegrationSagaView>>(new Dictionary<string, IntegrationSagaView>());
 
     public Task<IReadOnlyList<SpecRunView>> ListSpecRunsAsync(int repositoryId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<SpecRunView>>(SpecRuns.Where(run => run.RepositoryId == repositoryId).ToArray());

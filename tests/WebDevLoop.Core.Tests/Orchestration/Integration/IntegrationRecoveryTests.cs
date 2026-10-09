@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Integration;
 using WebDevLoop.Core.Orchestration.Results;
 using WebDevLoop.Core.Ports;
@@ -152,6 +153,7 @@ public sealed class IntegrationRecoveryTests
         Assert.Equal(secondLayer, saga.ExpectedPriorIntegrationSha);
         Assert.Equal([secondLayer], f.Git.ParentsOf(saga.SquashCommitSha!.Value));
         Assert.Equal([second.Id, first.Id], f.Layers(spec).Select(layer => layer.TicketRunId));
+        Assert.Equal(2, f.Store.PendingEvents.OfType<SagaCheckpointAdvanced>().Count(announced => announced.TicketRunId == first.Id && announced.Checkpoint == IntegrationSagaCheckpoint.Started));
     }
 
     private static async Task<string[]> UpperLayerCallsAsync(IntegrationFixture f)

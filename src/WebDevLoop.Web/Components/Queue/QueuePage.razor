@@ -52,7 +52,7 @@ else
                 <strong>@SpecRunLanes.Title(lane)</strong>
                 <span class="badge text-bg-light border">@laneRuns.Count</span>
             </div>
-            <SpecRunTable Runs="laneRuns" EffectiveDependencyMode="EffectiveMode" />
+            <SpecRunTable Runs="laneRuns" Dependencies="_dependencies" EffectiveDependencyMode="EffectiveMode" />
         </section>
     }
 }
@@ -61,6 +61,7 @@ else
     private RepositoryView? _repository;
     private IReadOnlyList<SpecRunView> _runs = [];
     private EffectiveSettingsView? _settings;
+    private IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>> _dependencies = new Dictionary<string, IReadOnlyList<SpecDependencyView>>();
 
     private int ActiveCount => _runs.Count(run => run.Status.IsActive());
 
@@ -76,21 +77,23 @@ else
         int? repositoryId = RepositoryContext.CurrentRepositoryId;
         if (repositoryId is not { } id)
         {
-            (_repository, _runs, _settings) = (null, [], null);
+            (_repository, _runs, _settings, _dependencies) = (null, [], null, new Dictionary<string, IReadOnlyList<SpecDependencyView>>());
             return;
         }
 
-        (_repository, _runs, _settings) = await InScopeAsync<(RepositoryView?, IReadOnlyList<SpecRunView>, EffectiveSettingsView?)>(async services =>
+        (_repository, _runs, _settings, _dependencies) = await InScopeAsync<(RepositoryView?, IReadOnlyList<SpecRunView>, EffectiveSettingsView?, IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>)>(async services =>
         {
             RepositoryView? repository = await services.GetRequiredService<IRepositoryQueries>().GetAsync(id, cancellationToken);
             if (repository is null)
             {
-                return (null, [], null);
+                return (null, [], null, new Dictionary<string, IReadOnlyList<SpecDependencyView>>());
             }
 
-            IReadOnlyList<SpecRunView> runs = await services.GetRequiredService<IRunQueries>().ListSpecRunsAsync(id, cancellationToken);
+            var queries = services.GetRequiredService<IRunQueries>();
+            IReadOnlyList<SpecRunView> runs = await queries.ListSpecRunsAsync(id, cancellationToken);
+            IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>> dependencies = await queries.ListSpecDependenciesForRepositoryAsync(id, cancellationToken);
             CommandResult<EffectiveSettingsView> settings = await services.GetRequiredService<ISettingsManager>().GetEffectiveAsync(id, cancellationToken);
-            return (repository, runs, settings.Value);
+            return (repository, runs, settings.Value, dependencies);
         });
     }
 }

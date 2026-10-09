@@ -6,6 +6,11 @@ namespace WebDevLoop.Infrastructure.Tests.Prerequisites;
 
 public sealed class RealProbesTests : IDisposable
 {
+    // Muxer-only invocations: `dotnet --version` and unknown commands boot the whole SDK CLI, which is slow and can spawn
+    // helper processes when the solution's tests run side by side.
+    private static readonly TimeSpan GenerousTimeout = TimeSpan.FromMinutes(2);
+    private const string MissingApplication = "webdevloop-missing-app.dll";
+
     private readonly TestDirectory _directory = new("probes");
 
     public void Dispose() => _directory.Dispose();
@@ -13,7 +18,7 @@ public sealed class RealProbesTests : IDisposable
     [Fact]
     public async Task process_probe_reports_a_missing_executable_as_not_found()
     {
-        var probe = new ProcessProbe(TimeSpan.FromSeconds(5));
+        var probe = new ProcessProbe(GenerousTimeout);
 
         ProcessProbeResult result = await probe.RunAsync("webdevloop-no-such-tool", ["--version"], CancellationToken.None);
 
@@ -24,10 +29,10 @@ public sealed class RealProbesTests : IDisposable
     [Fact]
     public async Task process_probe_captures_exit_code_and_output()
     {
-        var probe = new ProcessProbe(TimeSpan.FromSeconds(30));
+        var probe = new ProcessProbe(GenerousTimeout);
 
-        ProcessProbeResult ok = await probe.RunAsync("dotnet", ["--version"], CancellationToken.None);
-        ProcessProbeResult failing = await probe.RunAsync("dotnet", ["webdevloop-no-such-command"], CancellationToken.None);
+        ProcessProbeResult ok = await probe.RunAsync("dotnet", ["--list-runtimes"], CancellationToken.None);
+        ProcessProbeResult failing = await probe.RunAsync("dotnet", [MissingApplication], CancellationToken.None);
 
         Assert.True(ok.Succeeded);
         Assert.False(string.IsNullOrWhiteSpace(ok.Output));
@@ -51,7 +56,7 @@ public sealed class RealProbesTests : IDisposable
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the POSIX sleep command.");
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-        var probe = new ProcessProbe(TimeSpan.FromSeconds(30));
+        var probe = new ProcessProbe(GenerousTimeout);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probe.RunAsync("sleep", ["30"], cts.Token));
     }

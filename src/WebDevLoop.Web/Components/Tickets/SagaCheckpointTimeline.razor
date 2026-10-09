@@ -1,4 +1,5 @@
 @using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Queries
 
 <section class="my-3" data-testid="saga">
     <h2 class="h5">Integration saga</h2>
@@ -27,7 +28,7 @@
 </section>
 
 @code {
-    [Parameter] public SagaCheckpointView? Saga { get; set; }
+    [Parameter] public IntegrationSagaView? Saga { get; set; }
 
     private static string StateClass(string state) => state switch
     {

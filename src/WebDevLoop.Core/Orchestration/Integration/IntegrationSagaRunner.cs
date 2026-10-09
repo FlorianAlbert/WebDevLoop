@@ -62,6 +62,7 @@ public sealed class IntegrationSagaRunner(
                 // Persisted before any side effect, so a crash during the squash resumes this saga instead of starting another.
                 saga = IntegrationSaga.Start(spec.Id, ticket.Id, tip, clock.UtcNow);
                 sagas.Add(saga);
+                outbox.Append(new SagaCheckpointAdvanced(spec.Id, ticket.Id, saga.Checkpoint, clock.UtcNow));
                 if (await unitOfWork.SaveChangesAsync(cancellationToken) != SaveOutcome.Saved)
                 {
                     return IntegrationResult.ConcurrencyConflict;

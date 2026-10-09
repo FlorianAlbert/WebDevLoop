@@ -2,7 +2,7 @@ using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Core.Orchestration.SpecQueue;
 
-internal static class SpecIssues
+public static class SpecIssues
 {
     /// <summary>Identity by repository and number; node/database ids are optional enrichments and may be missing on either side.</summary>
     public static bool AreSame(IssueRef left, IssueRef right) =>

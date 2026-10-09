@@ -99,6 +99,7 @@ public sealed class SpecExplorer(
         step.CopilotSessionId = sessionId.Value;
         step.WorktreePath = layout.ExplorerCheckoutDirectory;
         step.BranchName = layout.ExplorerBranch;
+        step.RecordLaunchSettings(role.Model, role.ReasoningEffort);
         step.Start(clock.UtcNow, role.Timeout);
         stepRuns.Add(step);
         if (!await SaveStepAsync(step, cancellationToken))

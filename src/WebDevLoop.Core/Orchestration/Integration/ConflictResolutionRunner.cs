@@ -130,7 +130,9 @@ public sealed class ConflictResolutionRunner(
         step.CopilotSessionId = ids.NewAgentSessionId(step.Id).Value;
         step.WorktreePath = context.WorktreePath;
         step.BranchName = context.Ticket.BranchName;
-        step.Start(clock.UtcNow, context.Settings.For(Role).Timeout);
+        RoleSettings role = context.Settings.For(Role);
+        step.RecordLaunchSettings(role.Model, role.ReasoningEffort);
+        step.Start(clock.UtcNow, role.Timeout);
         stepRuns.Add(step);
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, clock.UtcNow));
         return step;

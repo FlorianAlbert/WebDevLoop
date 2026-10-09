@@ -3,6 +3,7 @@
 @using WebDevLoop.Web.Api
 @using WebDevLoop.Core.Queries
 @inject IAgentLogReader Logs
+@inject IAgentLogNotifications LogNotifications
 
 <section class="my-3" data-testid="log-tail">
     <h2 class="h5">Agent log</h2>
@@ -33,21 +34,59 @@
     private readonly List<AgentLogView> _entries = [];
     private readonly SemaphoreSlim _readGate = new(1, 1);
     private readonly CancellationTokenSource _disposed = new();
+    private IDisposable? _subscription;
+    private int _refreshRequested;
     private int _lastSequence;
     private int _hidden;
     private bool _wasFollowing;
 
+    /// <summary>Only a safety net: new entries normally arrive by push (<see cref="IAgentLogNotifications"/>).</summary>
+    public static readonly TimeSpan DefaultPollInterval = TimeSpan.FromSeconds(15);
+
     [Parameter, EditorRequired] public string StepRunId { get; set; } = string.Empty;
 
-    /// <summary>True while the step runs: the log is polled for new entries. Turning false triggers one last read.</summary>
+    /// <summary>True while the step runs: new entries are tailed on push and by the fallback poll. Turning false triggers one last read.</summary>
     [Parameter] public bool Follow { get; set; }
 
-    /// <summary>Zero disables the background polling timer.</summary>
-    [Parameter] public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
+    /// <summary>Interval of the fallback poll that runs next to the push notifications; zero disables it.</summary>
+    [Parameter] public TimeSpan PollInterval { get; set; } = DefaultPollInterval;
 
     [Parameter] public int MaxEntries { get; set; } = 500;
 
-    protected override Task OnInitializedAsync() => ReadNewAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        if (ApiIds.Step(StepRunId) is { } stepId)
+        {
+            _subscription = LogNotifications.Subscribe(stepId, OnEntriesAvailable);
+        }
+
+        await ReadNewAsync();
+    }
+
+    // Requests are coalesced; the flag is cleared before reading so an entry flushed during the read triggers another one.
+    private void OnEntriesAvailable()
+    {
+        if (!Follow || Interlocked.Exchange(ref _refreshRequested, 1) == 1)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            Interlocked.Exchange(ref _refreshRequested, 0);
+            try
+            {
+                if (Follow && await ReadNewAsync())
+                {
+                    StateHasChanged();
+                }
+            }
+            catch (OperationCanceledException) when (_disposed.IsCancellationRequested)
+            {
+                // The tail was closed while reading.
+            }
+        });
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -127,5 +166,9 @@
         _ => string.Empty,
     };
 
-    public void Dispose() => _disposed.Cancel();
+    public void Dispose()
+    {
+        _subscription?.Dispose();
+        _disposed.Cancel();
+    }
 }

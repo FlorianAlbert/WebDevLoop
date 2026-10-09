@@ -1,7 +1,6 @@
 @page "/steps/{Id}"
 @inherits LiveDetailPageBase
 @using WebDevLoop.Core.Domain
-@using WebDevLoop.Core.Management
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Api
 @using WebDevLoop.Web.Components.Runs
@@ -32,7 +31,7 @@ else if (_step is not null)
         <dt class="col-sm-3">Role</dt>
         <dd class="col-sm-9" data-testid="step-role">@(_step.AgentRole?.ToString() ?? "none (app-run step)")</dd>
         <dt class="col-sm-3">Model</dt>
-        <dd class="col-sm-9" data-testid="step-model">@(_model ?? "–") <span class="text-muted small">(currently configured)</span></dd>
+        <dd class="col-sm-9" data-testid="step-model">@StepModelText.For(_step)</dd>
         <dt class="col-sm-3">Attempt</dt>
         <dd class="col-sm-9">@_step.Attempt</dd>
         <dt class="col-sm-3">Copilot session</dt>
@@ -59,12 +58,11 @@ else if (_step is not null)
 @code {
     private StepRunView? _step;
     private RolePolicySummary? _policy;
-    private string? _model;
 
     [Parameter] public string Id { get; set; } = string.Empty;
 
-    /// <summary>How often the log tail polls while the step is active; zero disables polling.</summary>
-    [Parameter] public TimeSpan LogPollInterval { get; set; } = TimeSpan.FromSeconds(1);
+    /// <summary>Interval of the log tail's fallback poll while the step is active; zero disables it. New entries arrive by push.</summary>
+    [Parameter] public TimeSpan LogPollInterval { get; set; } = AgentLogTail.DefaultPollInterval;
 
     protected override bool IsRelevant(LiveEventView view) => RunEventSubscription.Concerns(view, _step?.SpecRunId);
 
@@ -81,13 +79,6 @@ else if (_step is not null)
         IsNotFound = false;
         _step = step;
         _policy = step.AgentRole is { } role ? RolePolicySummary.For(role) : null;
-        _model = null;
-        if (step.AgentRole is { } modelRole
-            && await queries.GetSpecRunAsync(new RunId(step.SpecRunId), cancellationToken) is { } spec)
-        {
-            var models = await RoleModels.LoadAsync(ScopedServices.GetRequiredService<ISettingsManager>(), spec.RepositoryId, cancellationToken);
-            _model = models.GetValueOrDefault(modelRole);
-        }
     }
 
     private static string Format(DateTimeOffset? value) => value?.ToString("u") ?? "–";

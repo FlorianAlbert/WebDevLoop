@@ -53,6 +53,12 @@ public sealed class TwoAxisReviewRunnerTests
             steps.Select(step => (step.Kind, step.AgentRole!.Value)));
         Assert.All(steps, step => Assert.Null(step.TicketRunId));
         Assert.All(steps, step => Assert.Equal(StepStatus.Succeeded, step.Status));
+        Assert.All(steps, step =>
+        {
+            AgentRunRequest request = requests.Single(candidate => candidate.StepRunId == step.Id);
+            Assert.False(string.IsNullOrWhiteSpace(step.Model));
+            Assert.Equal((request.Settings.Model, request.Settings.ReasoningEffort), (step.Model, step.ReasoningEffort));
+        });
     }
 
     [Fact]

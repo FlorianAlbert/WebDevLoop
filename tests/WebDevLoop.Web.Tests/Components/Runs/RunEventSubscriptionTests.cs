@@ -32,7 +32,7 @@ public sealed class RunEventSubscriptionTests
     }
 
     [Fact]
-    public async Task Event_type_unknown_to_the_live_mapper_reloads_to_stay_correct()
+    public async Task Event_without_a_spec_run_id_is_ignored_because_every_run_event_is_mapped()
     {
         var bus = Events.NewBus();
         int reloads = 0;
@@ -40,7 +40,7 @@ public sealed class RunEventSubscriptionTests
 
         await bus.PublishAsync(new Events.UnmappedEvent());
 
-        Assert.Equal(1, reloads);
+        Assert.Equal(0, reloads);
     }
 
     [Fact]

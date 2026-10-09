@@ -1,5 +1,6 @@
 using Bunit;
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Queries;
 using WebDevLoop.Web.Components.Runs;
 using WebDevLoop.Web.Tests.Components.Support;
 
@@ -90,14 +91,64 @@ public sealed class SpecRunDetailTests
     {
         using var harness = HarnessWithSpec();
         harness.Queries.Tickets.Add(Views.Ticket("t1", 10, TicketRunStatus.Integrating));
-        var saga = harness.Sagas.Start("run-1", "t1");
+        harness.Queries.Saga("t1", IntegrationSagaCheckpoint.Started);
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
         Assert.Equal("Started", cut.Find("[data-testid=saga-checkpoint-t1]").TextContent.Trim());
 
-        saga.AdvanceTo(IntegrationSagaCheckpoint.PrCreated, Views.Now);
-        await harness.Bus.PublishAsync(new Events.UnmappedEvent());
+        harness.Queries.Saga("t1", IntegrationSagaCheckpoint.PrCreated);
+        await harness.Bus.PublishAsync(Events.SagaAdvanced("run-1", "t1", IntegrationSagaCheckpoint.PrCreated));
 
         cut.WaitForAssertion(() => Assert.Equal("PrCreated", cut.Find("[data-testid=saga-checkpoint-t1]").TextContent.Trim()));
+    }
+
+    [Fact]
+    public void Blocking_specs_are_listed_with_their_status_and_whether_they_are_merged()
+    {
+        using var harness = HarnessWithSpec();
+        harness.Queries.Dependencies["run-1"] =
+        [
+            new SpecDependencyView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.AwaitingMerge, false),
+            new SpecDependencyView(null, "acme/widgets#5", 5, null, null, false),
+            new SpecDependencyView("run-9", "acme/widgets#9", 9, "Done", SpecRunStatus.Completed, true),
+        ];
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.Equal("/runs/run-0", cut.Find("[data-testid=spec-blocker-link-run-0]").GetAttribute("href"));
+        string waiting = cut.Find("[data-testid=spec-blocker-run-0]").TextContent;
+        Assert.Contains("#7", waiting);
+        Assert.Contains("Foundations", waiting);
+        Assert.Contains("Awaiting merge", waiting);
+        Assert.Contains("waiting", waiting, StringComparison.OrdinalIgnoreCase);
+        string untracked = cut.Find("[data-testid=spec-blocker-issue-5]").TextContent;
+        Assert.Contains("#5", untracked);
+        Assert.Contains("not tracked", untracked);
+        Assert.Empty(cut.FindAll("[data-testid=spec-blocker-link-issue-5]"));
+        Assert.Contains("merged", cut.Find("[data-testid=spec-blocker-run-9]").TextContent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void A_spec_without_blocking_specs_says_so()
+    {
+        using var harness = HarnessWithSpec();
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.Contains("nothing", cut.Find("[data-testid=spec-blockers]").TextContent);
+    }
+
+    [Fact]
+    public async Task Status_event_of_a_blocking_spec_refreshes_the_blockers()
+    {
+        using var harness = HarnessWithSpec();
+        harness.Queries.Dependencies["run-1"] = [new SpecDependencyView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.AwaitingMerge, false)];
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+        Assert.Contains("Awaiting merge", cut.Find("[data-testid=spec-blocker-run-0]").TextContent);
+
+        harness.Queries.Dependencies["run-1"] = [new SpecDependencyView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.Completed, true)];
+        await harness.Bus.PublishAsync(Events.SpecStatus("run-0", SpecRunStatus.Completed));
+
+        cut.WaitForAssertion(() => Assert.Contains("Completed", cut.Find("[data-testid=spec-blocker-run-0]").TextContent));
     }
 
     [Fact]

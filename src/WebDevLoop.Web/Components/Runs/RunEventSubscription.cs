@@ -25,12 +25,9 @@ public sealed class RunEventSubscription : IDisposable
         _subscription = bus.Subscribe(OnEventAsync);
     }
 
-    /// <summary>
-    /// Events of other spec runs are ignored. Events without a spec run id (types the live mapper does not know yet) and
-    /// every event while the run is not yet known are treated as relevant: an extra reload is cheap, a stale page is not.
-    /// </summary>
+    /// <summary>Events of other spec runs are ignored; while the run is not yet known every event is relevant, since an extra reload is cheap.</summary>
     public static bool Concerns(LiveEventView view, string? specRunId) =>
-        specRunId is null || view.SpecRunId is null || view.SpecRunId == specRunId;
+        specRunId is null || view.SpecRunId == specRunId;
 
     public void Dispose()
     {

@@ -37,7 +37,7 @@
                         </td>
                         <td>@ticket.ReviewIteration</td>
                         <td>@(ticket.PullRequestNumber is { } pr ? $"#{pr}" : "–")</td>
-                        <td data-testid="saga-checkpoint-@ticket.Id">@(Sagas.TryGetValue(ticket.Id, out SagaCheckpointView? saga) ? saga.Checkpoint.ToString() : "")</td>
+                        <td data-testid="saga-checkpoint-@ticket.Id">@(Sagas.TryGetValue(ticket.Id, out IntegrationSagaView? saga) ? saga.Checkpoint.ToString() : "")</td>
                     </tr>
                 }
             </tbody>
@@ -50,7 +50,7 @@
 
     [Parameter, EditorRequired] public IReadOnlyList<TicketRunView> Tickets { get; set; } = [];
 
-    [Parameter] public IReadOnlyDictionary<string, SagaCheckpointView> Sagas { get; set; } = new Dictionary<string, SagaCheckpointView>();
+    [Parameter] public IReadOnlyDictionary<string, IntegrationSagaView> Sagas { get; set; } = new Dictionary<string, IntegrationSagaView>();
 
     protected override void OnParametersSet() => _rows = TicketDagLayout.Build(Tickets);
 }

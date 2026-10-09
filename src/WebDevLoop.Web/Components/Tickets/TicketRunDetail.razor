@@ -1,8 +1,6 @@
 @page "/tickets/{Id}"
 @inherits LiveDetailPageBase
 @using WebDevLoop.Core.Domain
-@using WebDevLoop.Core.Management
-@using WebDevLoop.Core.Ports
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Api
 @using WebDevLoop.Web.Components.Runs
@@ -60,7 +58,7 @@ else if (_ticket is not null)
 
     <RunControlsArea Scope="ticket run" />
 
-    <StepsTable Steps="_steps" Models="_models" />
+    <StepsTable Steps="_steps" />
     <TicketFindingsPanel Steps="_steps" />
     <SagaCheckpointTimeline Saga="_saga" />
 }
@@ -69,8 +67,7 @@ else if (_ticket is not null)
     private TicketRunView? _ticket;
     private IReadOnlyList<TicketBlocker> _blockers = [];
     private IReadOnlyList<StepRunView> _steps = [];
-    private IReadOnlyDictionary<AgentRole, string> _models = new Dictionary<AgentRole, string>();
-    private SagaCheckpointView? _saga;
+    private IntegrationSagaView? _saga;
 
     [Parameter] public string Id { get; set; } = string.Empty;
 
@@ -91,12 +88,6 @@ else if (_ticket is not null)
         var siblings = await queries.ListTicketRunsAsync(new RunId(ticket.SpecRunId), cancellationToken);
         _blockers = TicketDagLayout.Build(siblings).FirstOrDefault(row => row.Ticket.Id == ticket.Id)?.Blockers ?? [];
         _steps = await queries.ListStepsAsync(ticketId, cancellationToken);
-        _saga = (await SagaCheckpointView.LoadAsync(ScopedServices.GetRequiredService<IIntegrationSagaRepository>(), [ticket], cancellationToken))
-            .GetValueOrDefault(ticket.Id);
-
-        if (await queries.GetSpecRunAsync(new RunId(ticket.SpecRunId), cancellationToken) is { } spec)
-        {
-            _models = await RoleModels.LoadAsync(ScopedServices.GetRequiredService<ISettingsManager>(), spec.RepositoryId, cancellationToken);
-        }
+        _saga = await queries.GetLatestSagaAsync(ticketId, cancellationToken);
     }
 }

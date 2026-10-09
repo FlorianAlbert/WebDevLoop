@@ -63,6 +63,8 @@ public sealed class SpecExplorationTests
         Assert.Equal((StepKind.Explore, AgentRole.Explorer, StepStatus.Succeeded, 1), (step.Kind, step.AgentRole, step.Status, step.Attempt));
         Assert.Equal(request.SessionId.Value, step.CopilotSessionId);
         Assert.Equal(request.StepRunId, step.Id);
+        Assert.False(string.IsNullOrWhiteSpace(step.Model));
+        Assert.Equal((request.Settings.Model, request.Settings.ReasoningEffort), (step.Model, step.ReasoningEffort));
         Assert.Contains("README.md", step.StructuredResultJson);
         Assert.Equal(SpecRunStatus.Running, run.Status);
     }

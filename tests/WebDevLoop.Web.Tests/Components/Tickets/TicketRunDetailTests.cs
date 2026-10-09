@@ -62,13 +62,14 @@ public sealed class TicketRunDetailTests
     public void Steps_table_shows_role_model_status_attempt_and_finding_count()
     {
         using var harness = HarnessWithTicket();
-        harness.Queries.Steps.Add(Views.Step("s1"));
+        harness.Queries.Steps.Add(Views.Step("s1", model: "gpt-recorded", reasoningEffort: "medium"));
         harness.Queries.Steps.Add(Views.Step("s2", StepKind.Review, AgentRole.ReviewerCodingStandards, StepStatus.Succeeded, attempt: 2, resultJson: ReviewWithFindings));
 
         var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
 
         Assert.Contains("Implementer", cut.Find("[data-testid=step-role-s1]").TextContent);
-        Assert.Contains("model-Implementer", cut.Find("[data-testid=step-model-s1]").TextContent);
+        Assert.Equal("gpt-recorded (medium)", cut.Find("[data-testid=step-model-s1]").TextContent.Trim());
+        Assert.Equal("unknown", cut.Find("[data-testid=step-model-s2]").TextContent.Trim());
         Assert.Equal("Succeeded", cut.Find("[data-testid=step-status-s2]").TextContent.Trim());
         Assert.Equal("2", cut.Find("[data-testid=step-attempt-s2]").TextContent.Trim());
         Assert.Equal("1", cut.Find("[data-testid=step-findings-s2]").TextContent.Trim());
@@ -93,15 +94,14 @@ public sealed class TicketRunDetailTests
     public async Task Saga_checkpoint_progress_updates_live()
     {
         using var harness = HarnessWithTicket(TicketRunStatus.Integrating);
-        var saga = harness.Sagas.Start("run-1", "t1");
-        saga.AdvanceTo(IntegrationSagaCheckpoint.IntegrationPushed, Views.Now);
+        harness.Queries.Saga("t1", IntegrationSagaCheckpoint.IntegrationPushed);
         var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
         Assert.Equal("current", cut.Find("[data-testid=saga-step-IntegrationPushed]").GetAttribute("data-state"));
         Assert.Equal("done", cut.Find("[data-testid=saga-step-Started]").GetAttribute("data-state"));
         Assert.Equal("pending", cut.Find("[data-testid=saga-step-PrCreated]").GetAttribute("data-state"));
 
-        saga.AdvanceTo(IntegrationSagaCheckpoint.PrCreated, Views.Now);
-        await harness.Bus.PublishAsync(new Events.UnmappedEvent());
+        harness.Queries.Saga("t1", IntegrationSagaCheckpoint.PrCreated);
+        await harness.Bus.PublishAsync(Events.SagaAdvanced("run-1", "t1", IntegrationSagaCheckpoint.PrCreated));
 
         cut.WaitForAssertion(() => Assert.Equal("current", cut.Find("[data-testid=saga-step-PrCreated]").GetAttribute("data-state")));
     }

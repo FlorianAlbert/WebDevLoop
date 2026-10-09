@@ -14,15 +14,17 @@ namespace WebDevLoop.Infrastructure.Queries;
 /// before every read and on disposal); a read therefore always sees everything appended before it, which is what feeds the live view.
 /// Each flush also deletes entries beyond the per-step retention cap.
 /// </summary>
-public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServiceScopeFactory scopes) : IAgentLogSink, IAgentLogReader, IAsyncDisposable
+public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServiceScopeFactory scopes) : IAgentLogSink, IAgentLogReader, IAgentLogNotifications, IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly AgentLogSubscriptions _subscriptions = new();
     private readonly List<AgentLogRecord> _pending = [];
     private readonly Dictionary<StepRunId, int> _lastSequences = [];
     private bool _flushScheduled;
 
     public async ValueTask AppendAsync(AgentLogEntry entry, CancellationToken cancellationToken)
     {
+        IReadOnlyList<StepRunId> flushed = [];
         await _gate.WaitAsync(cancellationToken);
         try
         {
@@ -31,7 +33,7 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
 
             if (_pending.Count >= options.BatchSize)
             {
-                await FlushPendingAsync(cancellationToken);
+                flushed = await FlushPendingAsync(cancellationToken);
             }
             else if (!_flushScheduled)
             {
@@ -43,6 +45,8 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
         {
             _gate.Release();
         }
+
+        _subscriptions.Notify(flushed);
     }
 
     public async Task<IReadOnlyList<AgentLogView>> ReadAsync(StepRunId stepRunId, int afterSequence, CancellationToken cancellationToken)
@@ -62,16 +66,21 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
 
     public async Task FlushAsync(CancellationToken cancellationToken)
     {
+        IReadOnlyList<StepRunId> flushed;
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            await FlushPendingAsync(cancellationToken);
+            flushed = await FlushPendingAsync(cancellationToken);
         }
         finally
         {
             _gate.Release();
         }
+
+        _subscriptions.Notify(flushed);
     }
+
+    public IDisposable Subscribe(StepRunId stepRunId, Action onEntriesAvailable) => _subscriptions.Subscribe(stepRunId, onEntriesAvailable);
 
     public async ValueTask DisposeAsync() => await FlushAsync(CancellationToken.None);
 
@@ -90,11 +99,12 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
         return last;
     }
 
-    private async Task FlushPendingAsync(CancellationToken cancellationToken)
+    /// <returns>The steps that received entries; notified by the caller once the gate is released.</returns>
+    private async Task<IReadOnlyList<StepRunId>> FlushPendingAsync(CancellationToken cancellationToken)
     {
         if (_pending.Count == 0)
         {
-            return;
+            return [];
         }
 
         using IServiceScope scope = scopes.CreateScope();
@@ -113,6 +123,8 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
                 .Where(entry => entry.StepRunId == stepRunId && entry.Sequence <= oldestRetained)
                 .ExecuteDeleteAsync(cancellationToken);
         }
+
+        return touchedSteps;
     }
 
     private async Task FlushAfterIntervalAsync()
@@ -120,16 +132,19 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
         try
         {
             await Task.Delay(options.FlushInterval);
+            IReadOnlyList<StepRunId> flushed;
             await _gate.WaitAsync();
             try
             {
                 _flushScheduled = false;
-                await FlushPendingAsync(CancellationToken.None);
+                flushed = await FlushPendingAsync(CancellationToken.None);
             }
             finally
             {
                 _gate.Release();
             }
+
+            _subscriptions.Notify(flushed);
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {

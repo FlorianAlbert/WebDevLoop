@@ -21,5 +21,6 @@ public sealed class QueryRegistrationTests
         Assert.IsType<EfRepositoryQueries>(scope.ServiceProvider.GetRequiredService<IRepositoryQueries>());
         Assert.IsType<PersistentAgentLogStore>(provider.GetRequiredService<IAgentLogSink>());
         Assert.Same(provider.GetRequiredService<IAgentLogSink>(), provider.GetRequiredService<IAgentLogReader>());
+        Assert.Same(provider.GetRequiredService<IAgentLogSink>(), provider.GetRequiredService<IAgentLogNotifications>());
     }
 }

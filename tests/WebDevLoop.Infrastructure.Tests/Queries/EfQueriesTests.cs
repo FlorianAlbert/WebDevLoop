@@ -94,6 +94,90 @@ public sealed class EfQueriesTests : IDisposable
     }
 
     [Fact]
+    public async Task the_latest_integration_saga_of_a_ticket_is_exposed_as_a_view()
+    {
+        (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            IntegrationSaga completed = IntegrationSaga.Start(specRunId, ticketId, TestData.Sha1, TestData.Now);
+            completed.AdvanceTo(IntegrationSagaCheckpoint.Completed, TestData.Now);
+            write.Sagas.Add(completed);
+            await write.SaveAsync();
+        }
+
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            IntegrationSaga latest = IntegrationSaga.Start(specRunId, ticketId, TestData.Sha2, TestData.Now.AddHours(1));
+            latest.PullRequestNumber = new PullRequestNumber(9);
+            latest.AdvanceTo(IntegrationSagaCheckpoint.PrCreated, TestData.Now.AddHours(2));
+            latest.RecordError("stack link failed", TestData.Now.AddHours(3));
+            write.Sagas.Add(latest);
+            await write.SaveAsync();
+        }
+
+        using PersistenceScope read = _harness.OpenScope();
+        var queries = new EfRunQueries(read.Context);
+
+        IntegrationSagaView? one = await queries.GetLatestSagaAsync(ticketId, CancellationToken.None);
+        IReadOnlyDictionary<string, IntegrationSagaView> perTicket = await queries.ListLatestSagasAsync(specRunId, CancellationToken.None);
+
+        Assert.Equal(
+            (ticketId.Value, IntegrationSagaCheckpoint.PrCreated, RunScopedNaming.StackBranch(specRunId, ticketId).Value, 9, "stack link failed", TestData.Now.AddHours(3)),
+            (one!.TicketRunId, one.Checkpoint, one.StackBranch, one.PullRequestNumber, one.LastError, one.UpdatedAt));
+        Assert.Equal(one, perTicket[ticketId.Value]);
+        Assert.Single(perTicket);
+        Assert.Null(await queries.GetLatestSagaAsync(new TicketRunId("none"), CancellationToken.None));
+        Assert.Empty(await queries.ListLatestSagasAsync(new RunId("missing"), CancellationToken.None));
+        Assert.Empty(read.Context.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task spec_dependencies_show_each_blocking_spec_with_its_status_and_whether_it_is_merged()
+    {
+        (int repositoryId, _) = await TestData.SeedSpecRunAsync(_harness, "run-1");
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            SpecRun blocked = TestData.NewSpecRun(repositoryId, "run-2", issueNumber: 20, queuePosition: 2);
+            SpecRun merged = TestData.NewSpecRun(repositoryId, "run-3", issueNumber: 30, queuePosition: 3);
+            SpecRun running = (await write.SpecRuns.GetAsync(new RunId("run-1"), CancellationToken.None))!;
+            foreach (SpecRunStatus next in new[] { SpecRunStatus.Preparing, SpecRunStatus.Running })
+            {
+                running.TransitionTo(next, TestData.Now);
+            }
+
+            foreach (SpecRunStatus next in new[] { SpecRunStatus.Preparing, SpecRunStatus.Running, SpecRunStatus.ParentReviewing, SpecRunStatus.Testing, SpecRunStatus.Completed })
+            {
+                merged.TransitionTo(next, TestData.Now);
+            }
+
+            write.SpecRuns.Add(blocked);
+            write.SpecRuns.Add(merged);
+            write.SpecRuns.AddDependency(SpecDependency.OnSpecRun(blocked.Id, running.Id, SpecDependencyMode.WaitForMerge));
+            write.SpecRuns.AddDependency(SpecDependency.OnExternalIssue(blocked.Id, new IssueRef("acme", "widgets", 30), SpecDependencyMode.WaitForMerge));
+            write.SpecRuns.AddDependency(SpecDependency.OnExternalIssue(blocked.Id, new IssueRef("acme", "widgets", 5), SpecDependencyMode.WaitForMerge));
+            await write.SaveAsync();
+        }
+
+        using PersistenceScope read = _harness.OpenScope();
+        var queries = new EfRunQueries(read.Context);
+
+        IReadOnlyList<SpecDependencyView> dependencies = await queries.ListSpecDependenciesAsync(new RunId("run-2"), CancellationToken.None);
+        IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>> byRun = await queries.ListSpecDependenciesForRepositoryAsync(repositoryId, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new SpecDependencyView("run-1", "acme/widgets#10", 10, "Spec title", SpecRunStatus.Running, false),
+                new SpecDependencyView("run-3", "acme/widgets#30", 30, "Spec title", SpecRunStatus.Completed, true),
+                new SpecDependencyView(null, "acme/widgets#5", 5, null, null, false),
+            ],
+            dependencies);
+        Assert.Equal(dependencies, byRun["run-2"]);
+        Assert.Single(byRun);
+        Assert.Empty(await queries.ListSpecDependenciesAsync(new RunId("run-1"), CancellationToken.None));
+        Assert.Empty(read.Context.ChangeTracker.Entries());
+    }
+
+    [Fact]
     public async Task steps_of_a_ticket_expose_status_session_and_structured_result()
     {
         (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);
@@ -101,6 +185,7 @@ public sealed class EfQueriesTests : IDisposable
         {
             StepRun implement = TestData.NewStep(specRunId, ticketId, "s-1", StepKind.Implement, AgentRole.Implementer);
             implement.CopilotSessionId = "copilot-1";
+            implement.RecordLaunchSettings("gpt-test", "xhigh");
             implement.Start(TestData.Now, TimeSpan.FromMinutes(5));
             implement.Finish(StepStatus.Succeeded, TestData.Now.AddMinutes(1), "{\"ok\":true}");
             write.Steps.Add(implement);
@@ -117,6 +202,8 @@ public sealed class EfQueriesTests : IDisposable
 
         Assert.Equal(["s-1", "s-2"], steps.Select(view => view.Id));
         Assert.Equal((StepKind.Implement, AgentRole.Implementer, StepStatus.Succeeded, "copilot-1", "{\"ok\":true}"), (step!.Kind, step.AgentRole, step.Status, step.CopilotSessionId, step.StructuredResultJson));
+        Assert.Equal(("gpt-test", "xhigh"), (step.Model, step.ReasoningEffort));
+        Assert.Equal((null, null), (steps[1].Model, steps[1].ReasoningEffort));
         Assert.Equal(StepStatus.Pending, steps[1].Status);
         Assert.Null((await queries.GetStepAsync(new StepRunId("s-parent"), CancellationToken.None))!.TicketRunId);
         Assert.Null(await queries.GetStepAsync(new StepRunId("missing"), CancellationToken.None));

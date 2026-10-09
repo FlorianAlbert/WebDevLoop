@@ -162,7 +162,9 @@ public sealed class ReviewFixRunner(
         step.CopilotSessionId = (resumable ?? ids.NewAgentSessionId(step.Id)).Value;
         step.WorktreePath = context.WorktreePath;
         step.BranchName = context.Ticket.BranchName;
-        _journal.Start(step, context.Settings.For(Role).Timeout);
+        RoleSettings role = context.Settings.For(Role);
+        step.RecordLaunchSettings(role.Model, role.ReasoningEffort);
+        _journal.Start(step, role.Timeout);
         return step;
     }
 

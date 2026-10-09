@@ -132,6 +132,8 @@ public sealed class TicketReviewLoopTests
         Assert.Equal(_fixture.Ticket(spec[1]).WorktreePath, resumed.Policy.Paths.WorkingDirectory);
         StepRun fix = Assert.Single(_fixture.Steps(spec[1], StepKind.Fix));
         Assert.Equal((implement.CopilotSessionId, resumed.StepRunId), (fix.CopilotSessionId, fix.Id));
+        Assert.False(string.IsNullOrWhiteSpace(fix.Model));
+        Assert.Equal((resumed.Settings.Model, resumed.Settings.ReasoningEffort), (fix.Model, fix.ReasoningEffort));
         string[] lines = resumed.Prompt.Split('\n', 2);
         Assert.Equal("1/5", lines[0]);
         JsonElement[] findings = JsonDocument.Parse(lines[1]).RootElement.EnumerateArray().ToArray();

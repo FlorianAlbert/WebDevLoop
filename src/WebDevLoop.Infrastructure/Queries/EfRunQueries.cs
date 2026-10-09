@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Queries;
 using WebDevLoop.Infrastructure.Persistence;
 
@@ -69,6 +70,90 @@ public sealed class EfRunQueries(WebDevLoopDbContext context) : IRunQueries
             .OrderBy(runEvent => runEvent.Id)
             .ToListAsync(cancellationToken);
         return events.Select(runEvent => runEvent.ToView()).ToList();
+    }
+
+    public async Task<IReadOnlyList<SpecDependencyView>> ListSpecDependenciesAsync(RunId specRunId, CancellationToken cancellationToken)
+    {
+        int? repositoryId = await context.SpecRuns.AsNoTracking()
+            .Where(run => run.Id == specRunId)
+            .Select(run => (int?)run.RepositoryId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (repositoryId is null)
+        {
+            return [];
+        }
+
+        IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>> byRun = await ListSpecDependenciesForRepositoryAsync(repositoryId.Value, cancellationToken);
+        return byRun.GetValueOrDefault(specRunId.Value) ?? [];
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>> ListSpecDependenciesForRepositoryAsync(
+        int repositoryId,
+        CancellationToken cancellationToken)
+    {
+        List<SpecRun> runs = await context.SpecRuns.AsNoTracking()
+            .Where(run => run.RepositoryId == repositoryId)
+            .ToListAsync(cancellationToken);
+        HashSet<RunId> repositoryRuns = runs.Select(run => run.Id).ToHashSet();
+        List<SpecDependency> dependencies = await context.SpecDependencies.AsNoTracking()
+            .Where(dependency => context.SpecRuns.Any(run => run.Id == dependency.BlockedSpecRunId && run.RepositoryId == repositoryId))
+            .OrderBy(dependency => dependency.Id)
+            .ToListAsync(cancellationToken);
+
+        List<RunId> foreignBlockers = dependencies
+            .Where(dependency => dependency.BlockingSpecRunId is { } blocking && !repositoryRuns.Contains(blocking))
+            .Select(dependency => dependency.BlockingSpecRunId!.Value)
+            .Distinct()
+            .ToList();
+        if (foreignBlockers.Count > 0)
+        {
+            runs.AddRange(await context.SpecRuns.AsNoTracking().Where(run => foreignBlockers.Contains(run.Id)).ToListAsync(cancellationToken));
+        }
+
+        return dependencies
+            .GroupBy(dependency => dependency.BlockedSpecRunId.Value)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<SpecDependencyView>)group.Select(dependency => ToView(dependency, runs)).ToList());
+    }
+
+    public async Task<IntegrationSagaView?> GetLatestSagaAsync(TicketRunId ticketRunId, CancellationToken cancellationToken)
+    {
+        IntegrationSaga? saga = await context.IntegrationSagas.AsNoTracking()
+            .Where(candidate => candidate.TicketRunId == ticketRunId)
+            .OrderByDescending(candidate => candidate.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        return saga?.ToView();
+    }
+
+    public async Task<IReadOnlyDictionary<string, IntegrationSagaView>> ListLatestSagasAsync(RunId specRunId, CancellationToken cancellationToken)
+    {
+        List<IntegrationSaga> sagas = await context.IntegrationSagas.AsNoTracking()
+            .Where(saga => saga.SpecRunId == specRunId)
+            .OrderByDescending(saga => saga.Id)
+            .ToListAsync(cancellationToken);
+        return sagas
+            .GroupBy(saga => saga.TicketRunId.Value)
+            .ToDictionary(group => group.Key, group => group.First().ToView());
+    }
+
+    private static SpecDependencyView ToView(SpecDependency dependency, IReadOnlyList<SpecRun> runs)
+    {
+        SpecRun? blocker = dependency.BlockingSpecRunId is { } blockingId
+            ? runs.FirstOrDefault(run => run.Id == blockingId)
+            : runs
+                .Where(run => SpecIssues.AreSame(run.ParentIssue, dependency.ExternalBlockingIssue!.Value))
+                .OrderByDescending(run => run.Status != SpecRunStatus.Aborted)
+                .ThenByDescending(run => run.QueuePosition)
+                .FirstOrDefault();
+        IssueRef issue = dependency.ExternalBlockingIssue ?? blocker!.ParentIssue;
+        return new SpecDependencyView(
+            blocker?.Id.Value,
+            issue.ToString(),
+            issue.Number,
+            blocker?.Title,
+            blocker?.Status,
+            blocker?.Status == SpecRunStatus.Completed);
     }
 
     public async Task<IReadOnlyList<StackLayerView>> ListStackAsync(RunId specRunId, CancellationToken cancellationToken)

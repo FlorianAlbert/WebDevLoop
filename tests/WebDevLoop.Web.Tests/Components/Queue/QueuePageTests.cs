@@ -73,6 +73,25 @@ public sealed class QueuePageTests : UiTestContext
     }
 
     [Fact]
+    public void waiting_note_names_the_blocking_specs_that_are_not_merged_yet()
+    {
+        Runs.SpecRuns.Add(Run("r-dep", SpecRunStatus.WaitingForDependency, 3, mode: SpecDependencyMode.WaitForMerge));
+        Runs.Dependencies["r-dep"] =
+        [
+            new SpecDependencyView("r-a", "acme/widgets#12", 12, "Foundations", SpecRunStatus.Running, false),
+            new SpecDependencyView(null, "acme/widgets#5", 5, null, null, false),
+            new SpecDependencyView("r-b", "acme/widgets#9", 9, "Done", SpecRunStatus.Completed, true),
+        ];
+
+        IRenderedComponent<QueuePage> cut = Render<QueuePage>();
+
+        string note = cut.Find("[data-testid=run-note-r-dep]").TextContent;
+        Assert.Contains("#12 (Running)", note);
+        Assert.Contains("#5 (not tracked)", note);
+        Assert.DoesNotContain("#9", note);
+    }
+
+    [Fact]
     public void waiting_run_without_recorded_mode_falls_back_to_the_effective_dependency_mode()
     {
         Settings.EffectiveResult = CommandResult<EffectiveSettingsView>.Succeeded(Effective(mode: SpecDependencyMode.StackOnTop));

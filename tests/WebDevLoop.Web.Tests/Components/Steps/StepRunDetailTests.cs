@@ -28,17 +28,37 @@ public sealed class StepRunDetailTests
     [Fact]
     public void Header_shows_role_model_status_session_and_links()
     {
-        using var harness = HarnessWithStep(Views.Step("s1", StepKind.Review, AgentRole.ReviewerSpecification, StepStatus.Running));
+        using var harness = HarnessWithStep(Views.Step("s1", StepKind.Review, AgentRole.ReviewerSpecification, StepStatus.Running, model: "gpt-recorded", reasoningEffort: "xhigh"));
 
         var cut = Render(harness);
 
         Assert.Contains("Review", cut.Find("h1").TextContent);
         Assert.Equal("Running", cut.Find("[data-testid=step-status]").TextContent.Trim());
         Assert.Contains("ReviewerSpecification", cut.Find("[data-testid=step-role]").TextContent);
-        Assert.Contains("model-ReviewerSpecification", cut.Find("[data-testid=step-model]").TextContent);
+        Assert.Equal("gpt-recorded (xhigh)", cut.Find("[data-testid=step-model]").TextContent.Trim());
         Assert.Contains("copilot-session-1", cut.Find("[data-testid=copilot-session]").TextContent);
         Assert.Equal("/tickets/t1", cut.Find("[data-testid=ticket-link]").GetAttribute("href"));
         Assert.Equal("/runs/run-1", cut.Find("[data-testid=spec-link]").GetAttribute("href"));
+    }
+
+    [Fact]
+    public void Steps_recorded_before_the_model_was_captured_show_unknown_instead_of_the_current_setting()
+    {
+        using var harness = HarnessWithStep(Views.Step("s1", StepKind.Review, AgentRole.ReviewerSpecification, StepStatus.Succeeded));
+
+        var cut = Render(harness);
+
+        Assert.Equal("unknown", cut.Find("[data-testid=step-model]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void App_run_steps_have_no_model()
+    {
+        using var harness = HarnessWithStep(Views.Step("s1", StepKind.Explore, role: null, status: StepStatus.Succeeded));
+
+        var cut = Render(harness);
+
+        Assert.Equal("–", cut.Find("[data-testid=step-model]").TextContent.Trim());
     }
 
     [Fact]

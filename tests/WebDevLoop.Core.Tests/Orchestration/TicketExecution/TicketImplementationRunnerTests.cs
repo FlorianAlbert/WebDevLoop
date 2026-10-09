@@ -36,6 +36,8 @@ public sealed class TicketImplementationRunnerTests
         Assert.Equal(request.SessionId.Value, step.CopilotSessionId);
         Assert.Equal(request.StepRunId, step.Id);
         Assert.Equal(worktree, step.WorktreePath);
+        Assert.False(string.IsNullOrWhiteSpace(step.Model));
+        Assert.Equal((request.Settings.Model, request.Settings.ReasoningEffort), (step.Model, step.ReasoningEffort));
     }
 
     [Fact]

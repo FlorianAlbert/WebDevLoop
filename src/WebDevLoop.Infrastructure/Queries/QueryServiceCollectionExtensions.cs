@@ -16,6 +16,7 @@ public static class QueryServiceCollectionExtensions
         services.TryAddSingleton<PersistentAgentLogStore>();
         services.TryAddSingleton<IAgentLogSink>(provider => provider.GetRequiredService<PersistentAgentLogStore>());
         services.TryAddSingleton<IAgentLogReader>(provider => provider.GetRequiredService<PersistentAgentLogStore>());
+        services.TryAddSingleton<IAgentLogNotifications>(provider => provider.GetRequiredService<PersistentAgentLogStore>());
         return services;
     }
 }

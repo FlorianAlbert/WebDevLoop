@@ -16,6 +16,12 @@ public interface ITicketRunRepository
     /// </summary>
     Task<ImplementerSlotUsage> CountOccupiedImplementerSlotsAsync(int repositoryId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The committed status of a ticket, read without tracking, so a long-lived unit of work sees changes other scopes
+    /// committed (e.g. an abort); null when the ticket does not exist.
+    /// </summary>
+    Task<TicketRunStatus?> GetCommittedStatusAsync(TicketRunId id, CancellationToken cancellationToken);
+
     void Add(TicketRun ticketRun);
 
     void AddDependency(TicketDependency dependency);

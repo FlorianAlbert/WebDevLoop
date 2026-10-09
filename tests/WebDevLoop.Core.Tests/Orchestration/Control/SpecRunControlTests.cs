@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Control;
+using WebDevLoop.Core.Orchestration.Integration;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Control;
 
@@ -198,6 +199,38 @@ public sealed class SpecRunControlTests : IDisposable
 
         Assert.Equal(ControlOutcome.NotAllowed, result.Outcome);
         Assert.Empty(_fixture.Events);
+    }
+
+    [Fact]
+    public async Task Aborting_a_spec_with_an_integrating_ticket_while_a_merge_of_the_repository_runs_is_a_conflict()
+    {
+        SpecRun spec = _fixture.SeedSpec(1, ToRunning);
+        TicketRun integrating = _fixture.SeedTicket(spec, TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing, TicketRunStatus.Integrating);
+        _fixture.SeedSaga(integrating, IntegrationSagaCheckpoint.IntegrationPushed);
+        _fixture.Options = new RunControlOptions(TimeSpan.FromMilliseconds(20));
+        using IDisposable merge = await _fixture.Gate.EnterAsync(_fixture.Repository.Id, RunControlFixture.Token);
+
+        ControlResult result = await _fixture.Control().AbortSpecAsync(spec.Id, RunControlFixture.Token);
+
+        Assert.Equal(ControlOutcome.ConcurrencyConflict, result.Outcome);
+        Assert.Equal((SpecRunStatus.Running, TicketRunStatus.Integrating), (spec.Status, integrating.Status));
+        Assert.Empty(_fixture.Events);
+    }
+
+    [Fact]
+    public async Task Aborting_a_spec_with_an_integrating_ticket_once_the_merge_finished_aborts_it_and_frees_the_merge_lock()
+    {
+        SpecRun spec = _fixture.SeedSpec(1, ToRunning);
+        TicketRun integrating = _fixture.SeedTicket(spec, TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing, TicketRunStatus.Integrating);
+        _fixture.SeedSaga(integrating, IntegrationSagaCheckpoint.IntegrationPushed);
+
+        ControlResult result = await _fixture.Control().AbortSpecAsync(spec.Id, RunControlFixture.Token);
+
+        Assert.True(result.IsApplied);
+        Assert.Equal((SpecRunStatus.Aborted, TicketRunStatus.Aborted), (spec.Status, integrating.Status));
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(RunControlFixture.Token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        using IDisposable merge = await _fixture.Gate.EnterAsync(_fixture.Repository.Id, timeout.Token);
     }
 
     [Fact]

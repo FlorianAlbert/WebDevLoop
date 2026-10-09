@@ -6,6 +6,7 @@ using WebDevLoop.Core.Orchestration.Completion.Testing;
 using WebDevLoop.Core.Orchestration.Findings;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.Results;
+using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
 using WebDevLoop.Core.Tests.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Tests.Orchestration.Findings;
@@ -45,15 +46,17 @@ internal sealed class TestingFixture
 
     public TestingWorkflowScope OpenScope() => new(Parent.OpenScope(), Leases);
 
-    public SpecTestRunner Runner(TestingWorkflowScope? scope = null)
+    /// <param name="git">Defaults to the shared in-memory Git.</param>
+    public SpecTestRunner Runner(TestingWorkflowScope? scope = null, IGitWorkspace? git = null)
     {
         scope ??= OpenScope();
+        git ??= Execution.Git;
         CasWorkflowScope workflow = scope.Workflow;
         var issuer = new FindingTicketIssuer(workflow, scope.Findings, Issues, scope, Execution.Ids, Execution.Clock);
         var attempts = new TesterAttemptRunner(
-            workflow, scope, Tester, Target, new PromptRenderer(), workflow, scope, Execution.Ids, Execution.Clock, Options);
+            workflow, scope, Tester, Target, git, new PromptRenderer(), workflow, scope, Execution.Ids, Execution.Clock, Options);
         return new SpecTestRunner(
-            workflow, workflow, workflow, workflow, Execution.Settings, Execution.Git, attempts, issuer, workflow, scope, Execution.Clock);
+            workflow, workflow, workflow, workflow, Execution.Settings, git, attempts, issuer, workflow, scope, Execution.Clock);
     }
 
     public Task<TestingResult> RunAsync(RunId specRunId, CancellationToken? cancellationToken = null) =>

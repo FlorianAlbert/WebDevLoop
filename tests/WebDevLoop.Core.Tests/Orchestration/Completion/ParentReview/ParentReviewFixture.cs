@@ -38,13 +38,15 @@ internal sealed class ParentReviewFixture
 
     public FindingWorkflowScope OpenScope() => new(Db.OpenScope(), Issuances);
 
-    public ParentSpecReviewRunner Runner(FindingWorkflowScope? scope = null)
+    /// <param name="git">Defaults to the shared in-memory Git.</param>
+    public ParentSpecReviewRunner Runner(FindingWorkflowScope? scope = null, IGitWorkspace? git = null)
     {
         scope ??= OpenScope();
+        git ??= Review.Git;
         CasWorkflowScope workflow = scope.Workflow;
         var issuer = new FindingTicketIssuer(workflow, scope, Issues, scope, Execution.Ids, Execution.Clock);
         return new ParentSpecReviewRunner(
-            workflow, workflow, workflow, workflow, Review.Settings, Review.Git, Review.Reviews(workflow), issuer, workflow, scope, Execution.Clock);
+            workflow, workflow, workflow, workflow, Review.Settings, git, Review.Reviews(workflow, git), issuer, workflow, scope, Execution.Clock);
     }
 
     public ParentReviewStarter Starter()

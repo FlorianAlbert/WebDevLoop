@@ -73,6 +73,10 @@ internal sealed class CasWorkflowScope(CasWorkflowDatabase database) :
     Task<IReadOnlyList<SpecDependency>> ISpecRunRepository.ListDependenciesAsync(RunId blockedSpecRunId, CancellationToken cancellationToken) =>
         List(Array.Empty<SpecDependency>());
 
+    /// <summary>Reads the committed row directly, bypassing this scope's identity map (an untracked query).</summary>
+    public Task<SpecRunStatus?> GetCommittedStatusAsync(RunId id, CancellationToken cancellationToken) =>
+        Task.FromResult(database.Load<SpecRun>(id)?.Status);
+
     public void Add(SpecRun specRun) => _added.Add(specRun);
 
     public void AddDependency(SpecDependency dependency) => throw new NotSupportedException();
@@ -94,6 +98,10 @@ internal sealed class CasWorkflowScope(CasWorkflowDatabase database) :
             .ToArray();
         return Task.FromResult(new ImplementerSlotUsage(occupied.Length, occupied.Count(id => id == repositoryId)));
     }
+
+    /// <summary>Reads the committed row directly, bypassing this scope's identity map (an untracked query).</summary>
+    public Task<TicketRunStatus?> GetCommittedStatusAsync(TicketRunId id, CancellationToken cancellationToken) =>
+        Task.FromResult(database.Load<TicketRun>(id)?.Status);
 
     public void Add(TicketRun ticketRun) => _added.Add(ticketRun);
 

@@ -5,7 +5,10 @@ public enum IntegrationOutcome
     /// <summary>The ticket's stack layer is published and verified, its issue transitioned, and the ticket is <c>Integrated</c>.</summary>
     Integrated,
 
-    /// <summary>The ticket is not <c>Integrating</c>; nothing was done.</summary>
+    /// <summary>
+    /// The ticket is not <c>Integrating</c> or its spec is no longer active (e.g. aborted); the saga stopped before its next
+    /// step and is left at its last checkpoint.
+    /// </summary>
     NotIntegrating,
 
     /// <summary>A conflict-resolution step of the ticket is still active; nothing was done.</summary>

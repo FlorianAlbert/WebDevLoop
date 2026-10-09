@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Orchestration.Integration;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Ports;
 
@@ -11,9 +12,11 @@ public sealed class SpecRunControl(
     IStepRunRepository stepRuns,
     ITestLeaseRepository leases,
     SpecQueueScheduler scheduler,
+    RepositoryIntegrationGate gate,
     ActiveWorkStopper stopper,
     RunControlJournal journal,
-    IUnitOfWork unitOfWork)
+    IUnitOfWork unitOfWork,
+    RunControlOptions options)
 {
     public async Task<ControlResult> RetryAsync(RunId specRunId, CancellationToken cancellationToken)
     {
@@ -64,25 +67,42 @@ public sealed class SpecRunControl(
         }
 
         TicketRun[] openTickets = (await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken)).Where(ticket => !ticket.IsTerminal).ToArray();
-        StepRun[] activeSteps = (await stepRuns.ListBySpecRunAsync(specRunId, cancellationToken)).Where(step => step.IsActive).ToArray();
-        TestLease? lease = await leases.FindActiveAsync(specRunId, cancellationToken);
-
-        journal.MoveSpec(spec, SpecRunStatus.Aborted);
-        foreach (TicketRun ticket in openTickets)
+        IDisposable? merge = null;
+        if (openTickets.Any(ticket => ticket.Status == TicketRunStatus.Integrating))
         {
-            journal.MoveTicket(ticket, TicketRunStatus.Aborted);
+            // A running saga holds the merge lock; aborting under it means the saga cannot publish layers of an aborted spec.
+            merge = await gate.TryEnterAsync(spec.RepositoryId, options.IntegrationGateTimeout, cancellationToken);
+            if (merge is null)
+            {
+                return ControlResult.ConcurrencyConflict(
+                    $"A merge of repository {spec.RepositoryId} is in progress; try aborting spec run '{specRunId}' again when it finished.");
+            }
         }
 
-        foreach (StepRun step in activeSteps)
+        StepRun[] activeSteps;
+        TestLease? lease;
+        using (merge)
         {
-            journal.CancelStep(step);
-        }
+            activeSteps = (await stepRuns.ListBySpecRunAsync(specRunId, cancellationToken)).Where(step => step.IsActive).ToArray();
+            lease = await leases.FindActiveAsync(specRunId, cancellationToken);
 
-        lease?.Release(journal.Now);
-        journal.Record(ControlAction.Abort, spec.Id, null, nameof(SpecRunStatus.Aborted), openTickets.Select(ticket => ticket.Id));
-        if (!await SaveAsync(specRunId, cancellationToken))
-        {
-            return Conflict(specRunId);
+            journal.MoveSpec(spec, SpecRunStatus.Aborted);
+            foreach (TicketRun ticket in openTickets)
+            {
+                journal.MoveTicket(ticket, TicketRunStatus.Aborted);
+            }
+
+            foreach (StepRun step in activeSteps)
+            {
+                journal.CancelStep(step);
+            }
+
+            lease?.Release(journal.Now);
+            journal.Record(ControlAction.Abort, spec.Id, null, nameof(SpecRunStatus.Aborted), openTickets.Select(ticket => ticket.Id));
+            if (!await SaveAsync(specRunId, cancellationToken))
+            {
+                return Conflict(specRunId);
+            }
         }
 
         // Worktrees are cleaned up by the completion handler reacting to the Aborted status change.

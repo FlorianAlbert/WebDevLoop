@@ -60,7 +60,7 @@ internal sealed class RunControlFixture : IDisposable
         var journal = new RunControlJournal(Store, Store, Clock);
         var stopper = new ActiveWorkStopper(Agents, Targets);
         return new RunControlService(
-            new SpecRunControl(Store, Store, Store, Store, scheduler, stopper, journal, Store),
+            new SpecRunControl(Store, Store, Store, Store, scheduler, Gate, stopper, journal, Store, Options),
             new TicketRunControl(Store, Store, Store, Store, Gate, stopper, journal, Store, Options));
     }
 

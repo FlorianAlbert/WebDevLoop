@@ -11,10 +11,12 @@ namespace WebDevLoop.Core.Orchestration.Integration;
 /// issue transitions. Order: squash onto the expected prior tip (conflict resolver only on conflicts, then retry) → move
 /// the integration ref → push it → push the immutable <c>stack/&lt;run&gt;/&lt;ticket&gt;</c> ref → create the draft PR →
 /// link it into the GitHub stack → verify its diff → close the ticket issue → mark the ticket integrated, which recomputes
-/// the frontier (step 8). The caller holds the repository merge lock.
+/// the frontier (step 8). The caller holds the repository merge lock. Before every step the committed ticket and spec
+/// status are read again, so a run aborted in another scope gets no further pushes, PRs, stack links, or issue changes.
 /// </summary>
 public sealed class IntegrationSagaSteps(
     ISpecRunRepository specRuns,
+    ITicketRunRepository ticketRuns,
     IPullStackLayerRepository layers,
     IGitWorkspace git,
     IGitHubPullsAndStacks pulls,
@@ -32,6 +34,11 @@ public sealed class IntegrationSagaSteps(
             while (!context.Saga.IsCompleted)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (await StoppedAsync(context, cancellationToken) is { } stopped)
+                {
+                    return stopped;
+                }
+
                 if (await StepAsync(context, cancellationToken) is { } stop)
                 {
                     return stop;
@@ -65,6 +72,18 @@ public sealed class IntegrationSagaSteps(
         return await SaveAsync(cancellationToken)
             ? new IntegrationResult(IntegrationOutcome.Faulted, exception.Message)
             : IntegrationResult.ConcurrencyConflict;
+    }
+
+    /// <returns>Null while the ticket is still integrating in an active spec; otherwise why the saga stops.</returns>
+    private async Task<IntegrationResult?> StoppedAsync(IntegrationContext context, CancellationToken cancellationToken)
+    {
+        TicketRunStatus? ticket = await ticketRuns.GetCommittedStatusAsync(context.Ticket.Id, cancellationToken);
+        SpecRunStatus? spec = await specRuns.GetCommittedStatusAsync(context.Spec.Id, cancellationToken);
+        return ticket == TicketRunStatus.Integrating && spec?.IsActive() == true
+            ? null
+            : new IntegrationResult(
+                IntegrationOutcome.NotIntegrating,
+                $"Ticket '{context.Ticket.Id}' is {ticket?.ToString() ?? "missing"} and spec run '{context.Spec.Id}' is {spec?.ToString() ?? "missing"}; the saga stops at {context.Saga.Checkpoint}.");
     }
 
     /// <returns>Null to continue with the next checkpoint; otherwise why the saga stops.</returns>

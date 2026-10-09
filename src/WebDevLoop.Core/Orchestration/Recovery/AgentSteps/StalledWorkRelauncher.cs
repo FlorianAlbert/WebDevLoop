@@ -11,8 +11,9 @@ namespace WebDevLoop.Core.Orchestration.Recovery.AgentSteps;
 
 /// <summary>
 /// Hands agent work that nothing runs any more back to its launcher. Work is stalled when its owner is in a working status
-/// without an active step and either a step of it was just interrupted, or nothing happened to it since this process
-/// started or within the stall grace period (e.g. a runner died before starting its step, or shutdown cancelled it):
+/// without an active step and either a step of it was just interrupted, or nothing happened to it (no status change, no step
+/// started or finished) since this process started or within the stall grace period (e.g. a runner died before starting its
+/// step, or shutdown cancelled it):
 /// <list type="bullet">
 /// <item>Running specs: <c>Implementing</c> tickets relaunch the implementer (resuming an interrupted session);
 /// <c>Reviewing</c> tickets relaunch the review loop; <c>FixingReviewFindings</c> tickets relaunch the review loop, which
@@ -102,7 +103,7 @@ public sealed class StalledWorkRelauncher(
             return null;
         }
 
-        bool stalled = interruptions.Any(step => step.Kind == kind) || IsStalled(LastActivity(spec.StartedAt ?? spec.CreatedAt, steps));
+        bool stalled = interruptions.Any(step => step.Kind == kind) || IsStalled(LastActivity(spec.StatusChangedAt, steps));
         return stalled ? new RecoveredWork(work, spec.Id) : null;
     }
 

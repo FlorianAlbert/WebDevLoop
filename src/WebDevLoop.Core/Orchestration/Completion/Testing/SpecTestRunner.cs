@@ -102,36 +102,28 @@ public sealed class SpecTestRunner(
             await ticketRuns.ListDependenciesAsync(spec.Id, cancellationToken));
     }
 
-    /// <summary>Runs tester attempts in a fresh checkout of the integration tip until one reports or the retries are exhausted.</summary>
+    /// <summary>
+    /// Runs tester attempts until one reports or the retries are exhausted; each attempt checks out the integration tip only
+    /// after claiming its step (see <see cref="TesterAttemptRunner"/>).
+    /// </summary>
     private async Task<TesterAttempt> TestAsync(TesterContext context, CancellationToken cancellationToken)
     {
-        GitRepositoryLocation location = GitRepositoryLocation.From(context.Repository);
-        TestWorkspace workspace = context.Workspace;
-        await git.PrepareWorktreeAsync(location, new WorktreeSpec(workspace.Branch, context.Head, workspace.CheckoutDirectory), cancellationToken);
-        try
+        int allowed = context.Settings.MaxRetries + 1;
+        var failures = new List<string>();
+        for (int attempt = 1; attempt <= allowed; attempt++)
         {
-            int allowed = context.Settings.MaxRetries + 1;
-            var failures = new List<string>();
-            for (int attempt = 1; attempt <= allowed; attempt++)
+            TesterAttempt tested = await attempts.RunAsync(context, cancellationToken);
+            if (tested.Outcome != TesterAttemptOutcome.Failed)
             {
-                TesterAttempt tested = await attempts.RunAsync(context, cancellationToken);
-                if (tested.Outcome != TesterAttemptOutcome.Failed)
-                {
-                    return tested;
-                }
-
-                failures.Add(tested.Failure ?? "no reason given");
+                return tested;
             }
 
-            return new TesterAttempt(
-                TesterAttemptOutcome.Failed,
-                Failure: string.Create(CultureInfo.InvariantCulture, $"The tester failed after {allowed} attempt(s): {string.Join(" | ", failures)}"));
+            failures.Add(tested.Failure ?? "no reason given");
         }
-        finally
-        {
-            // The checkout is recreated from the integration tip for every test cycle, so it is removed even when the run is cancelled.
-            await git.CleanupWorktreeAsync(location, workspace.CheckoutDirectory, CancellationToken.None);
-        }
+
+        return new TesterAttempt(
+            TesterAttemptOutcome.Failed,
+            Failure: string.Create(CultureInfo.InvariantCulture, $"The tester failed after {allowed} attempt(s): {string.Join(" | ", failures)}"));
     }
 
     private async Task<TestingResult> ConcludeAsync(TesterContext context, StepRunId stepRunId, TestReport report, CancellationToken cancellationToken)

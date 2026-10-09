@@ -6,6 +6,7 @@ using WebDevLoop.Core.Orchestration.Findings;
 using WebDevLoop.Core.Orchestration.Results;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.Findings;
+using WebDevLoop.Core.Tests.Orchestration.Completion;
 using WebDevLoop.Core.Tests.Orchestration.ReviewLoop;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
@@ -169,6 +170,23 @@ public sealed class ParentSpecReviewRunnerTests
     }
 
     [Fact]
+    public async Task Checkout_failure_fails_the_claimed_reviewer_steps_instead_of_leaving_them_running()
+    {
+        _fixture.Review.Settings.Defaults = _fixture.Review.Settings.Defaults with { MaxRetries = 0 };
+        SeededSpec spec = await _fixture.SeedParentReviewingAsync();
+        var git = new ControlledGitWorkspace(_fixture.Review.Git) { FailNextPrepare = new IOException("disk full") };
+
+        ParentReviewResult result = await _fixture.Runner(git: git).RunAsync(new ParentReviewAssignment(spec.Id), ParentReviewFixture.Token);
+
+        Assert.Equal(ParentReviewOutcome.Failed, result.Outcome);
+        Assert.Empty(_fixture.ReviewerRequests);
+        Assert.All(_fixture.ParentReviewSteps(spec.Id), step => Assert.Equal(StepStatus.Failed, step.Status));
+        Assert.Equal(2, _fixture.ParentReviewSteps(spec.Id).Count);
+        Assert.Equal(SpecRunStatus.NeedsAttention, _fixture.Spec(spec.Id).Status);
+        Assert.Contains("disk full", _fixture.Spec(spec.Id).FailureReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Spec_that_is_not_parent_reviewing_is_left_alone()
     {
         SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
@@ -179,5 +197,33 @@ public sealed class ParentSpecReviewRunnerTests
         Assert.Equal(ParentReviewOutcome.NotParentReviewing, result.Outcome);
         Assert.Empty(_fixture.ReviewerRequests);
         Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+    }
+
+    [Fact]
+    public async Task Duplicate_runner_that_loses_the_claim_leaves_the_winners_checkout_alone()
+    {
+        SeededSpec spec = await _fixture.SeedParentReviewingAsync();
+        string checkout = ParentReviewWorkspace.For(TicketExecutionFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
+        var duplicateGit = new ControlledGitWorkspace(_fixture.Review.Git);
+        duplicateGit.PauseAtNextBranchTip();
+        Task<ParentReviewResult> duplicate = _fixture.Runner(git: duplicateGit).RunAsync(new ParentReviewAssignment(spec.Id), ParentReviewFixture.Token);
+        Assert.True(duplicateGit.IsPaused);
+        WorktreeInspection? checkoutAfterDuplicate = null;
+        _fixture.Review.Script(FindingAxis.CodingStandards, _ =>
+        {
+            duplicateGit.Resume();
+            checkoutAfterDuplicate = _fixture.Review.Git.InspectWorktreeAsync(spec.Location, checkout, ParentReviewFixture.Token).GetAwaiter().GetResult();
+            return ReviewReport.Clean(FindingAxis.CodingStandards, "Clean.");
+        });
+        _fixture.Review.Clean(FindingAxis.Specification);
+
+        ParentReviewResult result = await _fixture.RunAsync(spec.Id);
+
+        Assert.True(duplicate.IsCompleted);
+        Assert.Equal(WorktreeStatus.Clean, checkoutAfterDuplicate!.Status);
+        Assert.Equal(ParentReviewOutcome.ConcurrencyConflict, (await duplicate).Outcome);
+        Assert.Equal(ParentReviewOutcome.ReadyForTesting, result.Outcome);
+        Assert.Equal(2, _fixture.ReviewerRequests.Count());
+        Assert.Equal(WorktreeStatus.Missing, (await _fixture.Review.Git.InspectWorktreeAsync(spec.Location, checkout, ParentReviewFixture.Token)).Status);
     }
 }

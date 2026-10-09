@@ -14,6 +14,12 @@ public interface ISpecRunRepository
 
     Task<IReadOnlyList<SpecDependency>> ListDependenciesAsync(RunId blockedSpecRunId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The committed status of a run, read without tracking, so a long-lived unit of work sees changes other scopes
+    /// committed (e.g. an abort); null when the run does not exist.
+    /// </summary>
+    Task<SpecRunStatus?> GetCommittedStatusAsync(RunId id, CancellationToken cancellationToken);
+
     void Add(SpecRun specRun);
 
     void AddDependency(SpecDependency dependency);

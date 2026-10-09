@@ -12,21 +12,23 @@ namespace WebDevLoop.Core.Orchestration.Completion.Testing;
 
 /// <summary>
 /// One tester attempt (workflow step 11): reserves an isolated port, claims the tester step together with a
-/// <see cref="TestLease"/>, and runs a fresh tester session that starts the application from the configured run
-/// instructions on that port. While the tester runs, the app watches the port: an application that does not accept
+/// <see cref="TestLease"/>, checks out the integration tip into the run's test workspace, and runs a fresh tester session
+/// that starts the application from the configured run instructions on that port. While the tester runs, the app watches the port: an application that does not accept
 /// connections within <see cref="TestingOptions.AppStartupTimeout"/>, or whose start fails, aborts the tester and fails the
 /// step. Whatever ends the turn — report, failure, timeout, exception, or abort — leftover processes are killed and the
 /// lease is released before the step finishes, so a step is never left running.
 /// </summary>
 /// <remarks>
 /// Step ids are derived from the spec and the attempt number, and a spec has at most one active lease, so two runners
-/// testing the same spec cannot both claim an attempt.
+/// testing the same spec cannot both claim an attempt. The checkout is only prepared after the claim and removed before the
+/// step finishes, so a runner that lost the claim never resets or deletes the checkout the winner's tester is using.
 /// </remarks>
 public sealed class TesterAttemptRunner(
     IStepRunRepository stepRuns,
     ITestLeaseRepository leases,
     IAgentRunner agents,
     ITestTargetRunner targets,
+    IGitWorkspace git,
     PromptRenderer prompts,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
@@ -69,7 +71,7 @@ public sealed class TesterAttemptRunner(
             new AgentModelSettings(role.Model, role.ReasoningEffort, role.Timeout),
             prompt,
             TesterPolicy.For(context.Workspace, target));
-        Verdict verdict = await RunStartedStepAsync(request, target, cancellationToken);
+        Verdict verdict = await RunInCheckoutAsync(context, request, target, cancellationToken);
 
         lease.Release(clock.UtcNow);
         Finish(step, verdict, context);
@@ -108,6 +110,64 @@ public sealed class TesterAttemptRunner(
         return await SaveAsync(cancellationToken)
             ? new Claim(role, step, lease, prompt)
             : new Claim(role, Failure: new TesterAttempt(TesterAttemptOutcome.ConcurrencyConflict));
+    }
+
+    /// <summary>
+    /// Runs the started step in a fresh checkout of the integration tip, which is removed again before the step finishes
+    /// (even when the run is cancelled); never throws.
+    /// </summary>
+    private async Task<Verdict> RunInCheckoutAsync(TesterContext context, AgentRunRequest request, TestTarget target, CancellationToken cancellationToken)
+    {
+        GitRepositoryLocation location = GitRepositoryLocation.From(context.Repository);
+        TestWorkspace workspace = context.Workspace;
+        Verdict verdict;
+        if (await PrepareCheckoutAsync(location, context, cancellationToken) is { } notPrepared)
+        {
+            await StopAsync(target);
+            verdict = notPrepared;
+        }
+        else
+        {
+            verdict = await RunStartedStepAsync(request, target, cancellationToken);
+        }
+
+        string? cleanupFailure = await RemoveCheckoutAsync(location, workspace);
+        return cleanupFailure is null || verdict.Status == StepStatus.Succeeded
+            ? verdict
+            : verdict with { Failure = $"{verdict.Failure} {cleanupFailure}".Trim() };
+    }
+
+    /// <returns>Null when the checkout is ready; otherwise the verdict of the step that cannot run.</returns>
+    private async Task<Verdict?> PrepareCheckoutAsync(GitRepositoryLocation location, TesterContext context, CancellationToken cancellationToken)
+    {
+        TestWorkspace workspace = context.Workspace;
+        try
+        {
+            await git.PrepareWorktreeAsync(location, new WorktreeSpec(workspace.Branch, context.Head, workspace.CheckoutDirectory), cancellationToken);
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return new Verdict(StepStatus.Cancelled, null, "The tester step was cancelled.");
+        }
+        catch (Exception exception)
+        {
+            return new Verdict(StepStatus.Failed, null, $"Preparing the test checkout {workspace.CheckoutDirectory} failed: {exception.Message}");
+        }
+    }
+
+    /// <returns>Why removing the checkout failed; null when it is gone.</returns>
+    private async Task<string?> RemoveCheckoutAsync(GitRepositoryLocation location, TestWorkspace workspace)
+    {
+        try
+        {
+            await git.CleanupWorktreeAsync(location, workspace.CheckoutDirectory, CancellationToken.None);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return $"Removing the test checkout {workspace.CheckoutDirectory} failed: {exception.Message}";
+        }
     }
 
     /// <summary>Runs the started step to a verdict; never throws, and always kills leftover processes afterwards.</summary>

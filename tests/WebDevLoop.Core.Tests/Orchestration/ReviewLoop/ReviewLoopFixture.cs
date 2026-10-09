@@ -41,11 +41,12 @@ internal sealed class ReviewLoopFixture
     public static SpecificationFinding SpecFinding { get; } = new(
         SpecificationFindingKind.Missing, "Errors must be logged.", "src/Feature.cs", null, "Errors are not logged.", "Log errors through ILogger.");
 
-    public TwoAxisReviewRunner Reviews(CasWorkflowScope? scope = null)
+    /// <param name="git">Defaults to the shared in-memory Git.</param>
+    public TwoAxisReviewRunner Reviews(CasWorkflowScope? scope = null, IGitWorkspace? git = null)
     {
         scope ??= Db.OpenScope();
         return new TwoAxisReviewRunner(
-            scope, scope, scope, scope, Settings, Git, Agents, new PromptRenderer(), scope, scope, Execution.Ids, Execution.Clock, new ReviewOptions(SkillsRoot));
+            scope, scope, scope, scope, Settings, git ?? Git, Agents, new PromptRenderer(), scope, scope, Execution.Ids, Execution.Clock, new ReviewOptions(SkillsRoot));
     }
 
     public TicketReviewLoop Loop(CasWorkflowScope? scope = null)

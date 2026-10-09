@@ -42,6 +42,9 @@ public sealed class SpecRun : VersionedEntity
 
     public DateTimeOffset? StartedAt { get; private set; }
 
+    /// <summary>When the run last moved to its current status (its creation while still queued).</summary>
+    public DateTimeOffset StatusChangedAt { get; private set; }
+
     public DateTimeOffset? ReadyAt { get; private set; }
 
     public DateTimeOffset? CompletedAt { get; private set; }
@@ -72,6 +75,7 @@ public sealed class SpecRun : VersionedEntity
             BodySnapshot = bodySnapshot,
             QueuePosition = queuePosition,
             CreatedAt = createdAt,
+            StatusChangedAt = createdAt,
         };
 
     public void TransitionTo(SpecRunStatus next, DateTimeOffset at)
@@ -82,6 +86,7 @@ public sealed class SpecRun : VersionedEntity
         }
 
         Status = next;
+        StatusChangedAt = at;
         FailureReason = null;
         NeedsAttentionFrom = null;
         if (!next.IsActive())

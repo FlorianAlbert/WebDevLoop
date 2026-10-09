@@ -91,7 +91,7 @@ public sealed class TicketRunControl(
         if (ticket.Status == TicketRunStatus.Integrating)
         {
             // A running saga holds the merge lock; aborting under it means the saga cannot move the branch for an aborted ticket.
-            merge = await TryEnterMergeLockAsync(spec!.RepositoryId, cancellationToken);
+            merge = await gate.TryEnterAsync(spec!.RepositoryId, options.IntegrationGateTimeout, cancellationToken);
             if (merge is null)
             {
                 return ControlResult.ConcurrencyConflict(
@@ -177,20 +177,6 @@ public sealed class TicketRunControl(
         await sagas.FindLatestForTicketAsync(ticket.Id, cancellationToken) is { IsCompleted: false, Checkpoint: >= IntegrationSagaCheckpoint.IntegrationRefUpdated } saga
             ? $"Ticket run '{ticket.Id}' already has its squash commit on the integration branch (saga at {saga.Checkpoint}); retry it so its stack layer gets published."
             : null;
-
-    private async Task<IDisposable?> TryEnterMergeLockAsync(int repositoryId, CancellationToken cancellationToken)
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(options.IntegrationGateTimeout);
-        try
-        {
-            return await gate.EnterAsync(repositoryId, timeout.Token);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return null;
-        }
-    }
 
     private async Task<ControlResult> SaveAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) =>
         await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved

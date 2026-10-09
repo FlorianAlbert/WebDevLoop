@@ -86,6 +86,9 @@ public sealed class InMemoryWorkflowStore :
     Task<IReadOnlyList<SpecDependency>> ISpecRunRepository.ListDependenciesAsync(RunId blockedSpecRunId, CancellationToken cancellationToken) =>
         List(_specDependencies.Where(dependency => dependency.BlockedSpecRunId == blockedSpecRunId));
 
+    public Task<SpecRunStatus?> GetCommittedStatusAsync(RunId id, CancellationToken cancellationToken) =>
+        Task.FromResult(_specRuns.FirstOrDefault(run => run.Id == id)?.Status);
+
     public void Add(SpecRun specRun) => _specRuns.Add(specRun);
 
     public void AddDependency(SpecDependency dependency) => _specDependencies.Add(dependency);
@@ -109,6 +112,9 @@ public sealed class InMemoryWorkflowStore :
             .ToArray();
         return Task.FromResult(new ImplementerSlotUsage(occupied.Length, occupied.Count(id => id == repositoryId)));
     }
+
+    public Task<TicketRunStatus?> GetCommittedStatusAsync(TicketRunId id, CancellationToken cancellationToken) =>
+        Task.FromResult(_ticketRuns.FirstOrDefault(ticket => ticket.Id == id)?.Status);
 
     public void Add(TicketRun ticketRun) => _ticketRuns.Add(ticketRun);
 

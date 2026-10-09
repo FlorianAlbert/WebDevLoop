@@ -170,6 +170,26 @@ public sealed class EntityMappingTests : IDisposable
     }
 
     [Fact]
+    public async Task the_time_a_spec_last_changed_its_status_round_trips()
+    {
+        (int _, RunId specRunId) = await TestData.SeedSpecRunAsync(_harness);
+        DateTimeOffset retried = TestData.Now.AddHours(3);
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            SpecRun spec = (await write.SpecRuns.GetAsync(specRunId, CancellationToken.None))!;
+            spec.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
+            spec.MarkNeedsAttention("clone failed", TestData.Now.AddHours(1));
+            spec.TransitionTo(SpecRunStatus.Preparing, retried);
+            await write.SaveAsync();
+        }
+
+        using PersistenceScope read = _harness.OpenScope();
+        SpecRun loaded = (await read.SpecRuns.GetAsync(specRunId, CancellationToken.None))!;
+
+        Assert.Equal((TestData.Now, retried), (loaded.StartedAt!.Value, loaded.StatusChangedAt));
+    }
+
+    [Fact]
     public async Task step_run_round_trips_all_state()
     {
         (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);

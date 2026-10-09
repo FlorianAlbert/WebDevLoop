@@ -18,6 +18,13 @@ public sealed class RepositoryIntegrationGate : IDisposable
         return new Lease(semaphore);
     }
 
+    /// <returns>Null when the merge lock was not free within <paramref name="timeout"/>.</returns>
+    public async Task<IDisposable?> TryEnterAsync(int repositoryId, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        SemaphoreSlim semaphore = _semaphores.GetOrAdd(repositoryId, _ => new SemaphoreSlim(1, 1));
+        return await semaphore.WaitAsync(timeout, cancellationToken) ? new Lease(semaphore) : null;
+    }
+
     public void Dispose()
     {
         foreach (SemaphoreSlim semaphore in _semaphores.Values)

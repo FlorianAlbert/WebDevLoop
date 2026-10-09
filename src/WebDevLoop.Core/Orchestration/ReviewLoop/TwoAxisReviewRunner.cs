@@ -19,7 +19,9 @@ namespace WebDevLoop.Core.Orchestration.ReviewLoop;
 /// </summary>
 /// <remarks>
 /// Review step ids are derived from the reviewed owner, kind, axis, and per-axis attempt, so two runners reviewing the same
-/// round add the same ids and only one of them can save its claim.
+/// round add the same ids and only one of them can save its claim; a runner that finds a reviewer step of the owner still
+/// active does not claim at all. A checkout the runner creates (<see cref="ReviewRequest.CreatesCheckout"/>) only exists
+/// while its claimed steps are active, so a runner that lost the claim never touches the winner's checkout.
 /// </remarks>
 public sealed class TwoAxisReviewRunner(
     IRepositoryRecordRepository repositories,
@@ -69,7 +71,7 @@ public sealed class TwoAxisReviewRunner(
                 return ReviewRoundResult.Failed(renderFailure);
             }
 
-            AgentRunResult[] results = await Task.WhenAll(turns.Started.Select(turn => RunTurnAsync(turn, cancellationToken)));
+            AgentRunResult[] results = await RunTurnsAsync(context, turns.Started, cancellationToken);
             bool cancelled = false;
             foreach ((ReviewerTurn turn, AgentRunResult result) in turns.Started.Zip(results))
             {
@@ -135,6 +137,11 @@ public sealed class TwoAxisReviewRunner(
     private async Task<StartedTurns?> StartTurnsAsync(ReviewContext context, FindingAxis[] axes, CancellationToken cancellationToken)
     {
         IReadOnlyList<StepRun> existing = await ExistingStepsAsync(context, cancellationToken);
+        if (existing.Any(step => step.IsActive))
+        {
+            return null;
+        }
+
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(context.Spec.Id, cancellationToken);
         IReadOnlyList<TicketDependency> dependencies = await ticketRuns.ListDependenciesAsync(context.Spec.Id, cancellationToken);
         var turns = new List<(FindingAxis Axis, AgentRole Role, int Attempt, string Prompt)>();
@@ -197,6 +204,57 @@ public sealed class TwoAxisReviewRunner(
     }
 
     private static StepKind KindOf(ReviewScope scope) => scope == ReviewScope.ParentSpec ? StepKind.ParentReview : StepKind.Review;
+
+    /// <summary>Runs the claimed turns concurrently, inside a fresh checkout when the request creates one.</summary>
+    private async Task<AgentRunResult[]> RunTurnsAsync(ReviewContext context, IReadOnlyList<ReviewerTurn> turns, CancellationToken cancellationToken)
+    {
+        if (!context.Request.CreatesCheckout)
+        {
+            return await Task.WhenAll(turns.Select(turn => RunTurnAsync(turn, cancellationToken)));
+        }
+
+        ReviewTarget target = context.Request.Target;
+        GitRepositoryLocation location = GitRepositoryLocation.From(context.Repository);
+        AgentRunResult[] results = await PrepareCheckoutAsync(location, target, cancellationToken) is { } notPrepared
+            ? turns.Select(_ => notPrepared).ToArray()
+            : await Task.WhenAll(turns.Select(turn => RunTurnAsync(turn, cancellationToken)));
+        return await RemoveCheckoutAsync(location, target) is { } cleanupFailure
+            ? results.Select(result => result.Report is null ? AgentRunResult.NotReported(result.Outcome, $"{result.FailureReason} {cleanupFailure}") : result).ToArray()
+            : results;
+    }
+
+    /// <returns>Null when the checkout is ready; otherwise the result of every turn that cannot run.</returns>
+    private async Task<AgentRunResult?> PrepareCheckoutAsync(GitRepositoryLocation location, ReviewTarget target, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await git.PrepareWorktreeAsync(location, new WorktreeSpec(target.Branch, target.DiffHead, target.WorkingDirectory), cancellationToken);
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return AgentRunResult.NotReported(AgentRunOutcome.Cancelled, "The review was cancelled while preparing its checkout.");
+        }
+        catch (Exception exception)
+        {
+            return AgentRunResult.NotReported(AgentRunOutcome.Failed, $"Preparing the review checkout {target.WorkingDirectory} failed: {exception.Message}");
+        }
+    }
+
+    /// <summary>Removed even when the run is cancelled; the next round checks out the reviewed commit again.</summary>
+    /// <returns>Why removing the checkout failed; null when it is gone.</returns>
+    private async Task<string?> RemoveCheckoutAsync(GitRepositoryLocation location, ReviewTarget target)
+    {
+        try
+        {
+            await git.CleanupWorktreeAsync(location, target.WorkingDirectory, CancellationToken.None);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return $"Removing the review checkout {target.WorkingDirectory} failed: {exception.Message}";
+        }
+    }
 
     /// <summary>An unexpected error fails only this turn (retried like any failed turn), so no step stays running.</summary>
     private async Task<AgentRunResult> RunTurnAsync(ReviewerTurn turn, CancellationToken cancellationToken)

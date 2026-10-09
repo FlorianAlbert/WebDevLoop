@@ -6,6 +6,7 @@ using WebDevLoop.Core.Orchestration.Findings;
 using WebDevLoop.Core.Orchestration.Results;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.Findings;
+using WebDevLoop.Core.Tests.Orchestration.Completion;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Completion.Testing;
@@ -388,4 +389,55 @@ public sealed class SpecTestRunnerTests
         Assert.Single(_fixture.Tester.Started);
         Assert.Single(_fixture.Target.Reserved);
     }
+
+    [Fact]
+    public async Task Duplicate_runner_that_loses_the_claim_leaves_the_winners_checkout_alone()
+    {
+        SeededSpec spec = await _fixture.SeedTestingAsync();
+        string checkout = TestWorkspace.For(TicketExecutionFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
+        var duplicateGit = new ControlledGitWorkspace(_fixture.Execution.Git);
+        duplicateGit.PauseAtNextBranchTip();
+        Task<TestingResult> duplicate = _fixture.Runner(git: duplicateGit).RunAsync(new TestingAssignment(spec.Id), TestingFixture.Token);
+        Assert.True(duplicateGit.IsPaused);
+        CommitSha? testerWork = null;
+        WorktreeInspection? checkoutAfterDuplicate = null;
+        _fixture.Tester.DuringTurn = _ =>
+        {
+            testerWork = _fixture.Execution.Git.CommitInWorktree(checkout, "evidence.md");
+            duplicateGit.Resume();
+            checkoutAfterDuplicate = Inspect(spec.Location, checkout);
+        };
+        _fixture.Tester.Reports(TestingFixture.Pass());
+
+        TestingResult result = await _fixture.RunAsync(spec.Id);
+
+        Assert.True(duplicate.IsCompleted);
+        Assert.Equal((WorktreeStatus.Clean, testerWork), (checkoutAfterDuplicate!.Status, checkoutAfterDuplicate.Head));
+        Assert.Equal(TestingOutcome.ConcurrencyConflict, (await duplicate).Outcome);
+        Assert.Equal(TestingOutcome.Passed, result.Outcome);
+        Assert.Single(_fixture.Tester.Started);
+        Assert.Equal(WorktreeStatus.Missing, Inspect(spec.Location, checkout).Status);
+    }
+
+    [Fact]
+    public async Task Checkout_failure_fails_the_claimed_step_frees_the_port_and_releases_the_lease()
+    {
+        _fixture.Configure(settings => settings with { MaxRetries = 0 });
+        SeededSpec spec = await _fixture.SeedTestingAsync();
+        var git = new ControlledGitWorkspace(_fixture.Execution.Git) { FailNextPrepare = new IOException("disk full") };
+
+        TestingResult result = await _fixture.Runner(git: git).RunAsync(new TestingAssignment(spec.Id), TestingFixture.Token);
+
+        Assert.Equal(TestingOutcome.Failed, result.Outcome);
+        Assert.Empty(_fixture.Tester.Started);
+        StepRun step = Assert.Single(_fixture.TestSteps(spec.Id));
+        Assert.Equal(StepStatus.Failed, step.Status);
+        Assert.Contains("disk full", step.FailureReason, StringComparison.Ordinal);
+        Assert.False(Assert.Single(_fixture.Leases.Rows).IsActive);
+        Assert.Equal(41000, Assert.Single(_fixture.Target.Stopped).Target.Port);
+        Assert.Equal(SpecRunStatus.NeedsAttention, _fixture.Spec(spec.Id).Status);
+    }
+
+    private WorktreeInspection Inspect(GitRepositoryLocation location, string path) =>
+        _fixture.Execution.Git.InspectWorktreeAsync(location, path, TestingFixture.Token).GetAwaiter().GetResult();
 }

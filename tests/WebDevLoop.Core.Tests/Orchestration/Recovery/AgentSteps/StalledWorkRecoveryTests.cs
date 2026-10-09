@@ -169,6 +169,25 @@ public sealed class StalledWorkRecoveryTests
         Assert.Equal([new RecoveredWork(RecoveredWorkKind.Testing, spec.Id)], report.Relaunched);
     }
 
+    [Theory]
+    [InlineData(SpecRunStatus.Testing)]
+    [InlineData(SpecRunStatus.ParentReviewing)]
+    public async Task a_spec_retried_into_a_phase_just_now_is_not_stalled_although_it_started_long_ago(SpecRunStatus phase)
+    {
+        SeededSpec spec = await _fixture.Testing.SeedTestingAsync();
+        _fixture.Clock.Advance(AgentStepRecoveryFixture.GracePeriod * 3);
+        await _fixture.Testing.Parent.MoveSpecAsync(spec.Id, SpecRunStatus.NeedsAttention);
+        await _fixture.Testing.Parent.MoveSpecAsync(spec.Id, phase);
+
+        AgentStepRecoveryReport justRetried = await _fixture.RecoverAsync();
+        _fixture.Clock.Advance(AgentStepRecoveryFixture.GracePeriod);
+        AgentStepRecoveryReport stalled = await _fixture.RecoverAsync();
+
+        Assert.Empty(justRetried.Relaunched);
+        RecoveredWorkKind kind = phase == SpecRunStatus.Testing ? RecoveredWorkKind.Testing : RecoveredWorkKind.ParentReview;
+        Assert.Equal([new RecoveredWork(kind, spec.Id)], stalled.Relaunched);
+    }
+
     [Fact]
     public async Task an_interrupted_conflict_resolution_relaunches_the_integration_saga()
     {

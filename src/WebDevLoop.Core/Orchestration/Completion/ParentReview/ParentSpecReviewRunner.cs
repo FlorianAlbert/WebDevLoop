@@ -112,24 +112,18 @@ public sealed class ParentSpecReviewRunner(
 
     private async Task<ReviewRoundResult> ReviewAsync(ParentReviewContext context, ReviewRound round, FindingAxis[] axes, CancellationToken cancellationToken)
     {
+        // The review runner creates the checkout only after claiming the reviewer steps, so a duplicate runner that lost the
+        // claim never resets or removes the checkout the winner's reviewers are reading.
         ParentReviewWorkspace workspace = ParentReviewWorkspace.For(context.Settings.WorkspaceRootDirectory, context.Spec.Id);
-        await git.PrepareWorktreeAsync(context.Location, new WorktreeSpec(workspace.Branch, context.Head, workspace.CheckoutDirectory), cancellationToken);
-        try
-        {
-            var request = new ReviewRequest(
-                context.Spec.Id,
-                null,
-                ReviewScope.ParentSpec,
-                new ReviewTarget(workspace.CheckoutDirectory, workspace.Branch, context.Base, context.Head),
-                round,
-                axes);
-            return await reviews.RunAsync(request, cancellationToken);
-        }
-        finally
-        {
-            // The checkout is recreated from the integration tip for every round, so it is removed even when the run is cancelled.
-            await git.CleanupWorktreeAsync(context.Location, workspace.CheckoutDirectory, CancellationToken.None);
-        }
+        var request = new ReviewRequest(
+            context.Spec.Id,
+            null,
+            ReviewScope.ParentSpec,
+            new ReviewTarget(workspace.CheckoutDirectory, workspace.Branch, context.Base, context.Head),
+            round,
+            axes,
+            CreatesCheckout: true);
+        return await reviews.RunAsync(request, cancellationToken);
     }
 
     private async Task<ParentReviewResult> IssueFindingsAsync(ParentReviewContext context, SourcedFinding[] sourced, CancellationToken cancellationToken)

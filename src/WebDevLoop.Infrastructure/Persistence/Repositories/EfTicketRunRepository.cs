@@ -37,6 +37,12 @@ public sealed class EfTicketRunRepository(WebDevLoopDbContext context) : ITicket
         return new ImplementerSlotUsage(repositoryIds.Count, repositoryIds.Count(id => id == repositoryId));
     }
 
+    public async Task<TicketRunStatus?> GetCommittedStatusAsync(TicketRunId id, CancellationToken cancellationToken) =>
+        await context.TicketRuns.AsNoTracking()
+            .Where(ticket => ticket.Id == id)
+            .Select(ticket => (TicketRunStatus?)ticket.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
     public void Add(TicketRun ticketRun) => context.TicketRuns.Add(ticketRun);
 
     public void AddDependency(TicketDependency dependency) => context.TicketDependencies.Add(dependency);

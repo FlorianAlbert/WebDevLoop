@@ -156,7 +156,7 @@ internal sealed class ReadyAndMergeFixture
         ticket.TransitionTo(TicketRunStatus.Integrating, Clock.UtcNow);
         var conflicts = new ConflictResolutionRunner(
             Store, Store, Git, new ScriptedAgentRunner(), new PromptRenderer(), Store, Store, Ids, Clock, new IntegrationOptions(SkillsRoot));
-        var steps = new IntegrationSagaSteps(Store, Store, Git, Pulls, Issues, conflicts, Store, Store, Clock);
+        var steps = new IntegrationSagaSteps(Store, Store, Store, Git, Pulls, Issues, conflicts, Store, Store, Clock);
         var saga = new IntegrationSagaRunner(Store, Store, Store, Store, Store, Settings, Gate, steps, Store, Store, Clock);
 
         IntegrationResult result = await saga.RunAsync(new IntegrationAssignment(Repository.Id, spec.Id, ticket.Id), Token);
@@ -195,7 +195,7 @@ internal sealed class ReadyAndMergeFixture
     {
         Tester.Reports(TestingFixture.Pass());
         var issuer = new FindingTicketIssuer(Store, Store, Issues, Store, Ids, Clock);
-        var attempts = new TesterAttemptRunner(Store, Store, Tester, Target, new PromptRenderer(), Store, Store, Ids, Clock, new TestingOptions(SkillsRoot));
+        var attempts = new TesterAttemptRunner(Store, Store, Tester, Target, Git, new PromptRenderer(), Store, Store, Ids, Clock, new TestingOptions(SkillsRoot));
         var runner = new SpecTestRunner(Store, Store, Store, Store, Settings, Git, attempts, issuer, Store, Store, Clock);
 
         TestingResult result = await runner.RunAsync(new TestingAssignment(spec.Id), Token);

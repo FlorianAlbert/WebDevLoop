@@ -1,5 +1,5 @@
-using System.Globalization;
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Orchestration.Completion.Testing;
 using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Orchestration.Recovery.AgentSteps;
@@ -8,7 +8,8 @@ namespace WebDevLoop.Core.Orchestration.Recovery.AgentSteps;
 /// Kills leftover tester processes of leases no live tester owns — leases acquired by a previous process, and leases that
 /// outlived their time-to-live (the tester's timeout plus grace, so its runner is hung) — and releases them, freeing the
 /// port and the spec for a new tester attempt. Leases of live testers of this process are left alone, so this is safe to
-/// run periodically.
+/// run periodically. This is the only stopper of orphaned tester processes; startup and periodic recovery both reach it
+/// through <see cref="AgentStepRecoveryService"/>.
 /// </summary>
 public sealed class OrphanedTestLeaseStopper(ITestLeaseRepository leases, ITestTargetRunner targets, IUnitOfWork unitOfWork, IClock clock, ProcessBoot boot)
 {
@@ -39,17 +40,10 @@ public sealed class OrphanedTestLeaseStopper(ITestLeaseRepository leases, ITestT
     private async Task<StoppedTestLease?> StopAsync(TestLease lease, DateTimeOffset now, CancellationToken cancellationToken)
     {
         bool expired = lease.IsExpiredAt(now);
-        TestTargetStopResult result = await targets.StopAsync(TargetOf(lease), cancellationToken);
+        TestTargetStopResult result = await targets.StopAsync(TestLeaseTarget.Of(lease), cancellationToken);
         lease.Release(now);
         return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved
             ? new StoppedTestLease(lease.SpecRunId, lease.Port, expired, result.TerminatedProcessCount)
             : null;
     }
-
-    /// <summary>The supervisor identifies a target's processes by spec run and port; URL and environment are not needed to stop it.</summary>
-    private static TestTarget TargetOf(TestLease lease) => new(
-        lease.SpecRunId,
-        lease.Port,
-        new Uri(string.Create(CultureInfo.InvariantCulture, $"http://localhost:{lease.Port}/")),
-        new Dictionary<string, string>());
 }

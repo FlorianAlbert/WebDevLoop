@@ -1,11 +1,12 @@
 using WebDevLoop.Core.Agents;
+using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Orchestration.Recovery.AgentSteps;
 
 /// <summary>
-/// Single entry point of agent-step recovery, for startup (after prerequisites, before schedulers) and for a periodic
-/// timer. One pass:
+/// Agent-step recovery, the second stage of every <see cref="RecoveryCoordinator"/> cycle (startup, after
+/// prerequisites and external reconciliation and before schedulers; and periodic). One pass:
 /// <list type="number">
 /// <item>stops Copilot runtimes no session used for their idle timeout (e.g. per-tester-port runtimes), then replaces
 /// runtimes whose token is about to expire, so resumed sessions start on a fresh runtime;</item>
@@ -22,7 +23,7 @@ public sealed class AgentStepRecoveryService(
     ICopilotRuntimePool runtimes,
     OrphanedTestLeaseStopper leases,
     InterruptedStepFinisher steps,
-    StalledWorkRelauncher relauncher)
+    StalledWorkRelauncher relauncher) : IAgentStepRecovery
 {
     public async Task<AgentStepRecoveryReport> RecoverAsync(CancellationToken cancellationToken)
     {

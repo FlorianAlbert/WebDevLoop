@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Infrastructure.Events;
 using WebDevLoop.Infrastructure.Tests.Persistence;
 

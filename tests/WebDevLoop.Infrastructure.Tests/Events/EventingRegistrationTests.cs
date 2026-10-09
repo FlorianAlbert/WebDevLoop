@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Infrastructure.Events;
 using WebDevLoop.Infrastructure.Persistence;
@@ -28,6 +29,16 @@ public sealed class EventingRegistrationTests
         Assert.IsType<EfOutbox>(scope.ServiceProvider.GetRequiredService<IOutbox>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<OutboxDispatcher>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<FrontierReconciliationSignal>());
+    }
+
+    [Fact]
+    public void Recovery_stages_of_the_eventing_feature_resolve_to_the_scoped_dispatcher_and_signal()
+    {
+        using ServiceProvider provider = BuildProvider();
+        using IServiceScope scope = provider.CreateScope();
+
+        Assert.Same(scope.ServiceProvider.GetRequiredService<OutboxDispatcher>(), scope.ServiceProvider.GetRequiredService<IOutboxReplay>());
+        Assert.Same(scope.ServiceProvider.GetRequiredService<FrontierReconciliationSignal>(), scope.ServiceProvider.GetRequiredService<IFrontierReconciliationTrigger>());
     }
 
     [Fact]

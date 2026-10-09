@@ -31,7 +31,7 @@ public sealed class ActiveWorkStopper(IAgentRunner agents, ITestTargetRunner tar
         {
             try
             {
-                await targets.StopAsync(TestLeaseReaper.TargetOf(releasedLease), CancellationToken.None);
+                await targets.StopAsync(TestLeaseTarget.Of(releasedLease), CancellationToken.None);
             }
             catch (Exception exception)
             {

@@ -2,13 +2,14 @@ using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Ports;
 
-namespace WebDevLoop.Infrastructure.Events;
+namespace WebDevLoop.Core.Orchestration.Recovery.Startup;
 
 /// <summary>
-/// Periodic recovery nudge: durably asks for a frontier recomputation of every non-terminal spec run, so work cannot stall
-/// because an in-process event was missed. Meant to be raised on a timer by a background worker.
+/// Recovery nudge: durably asks for a frontier recomputation of every non-terminal spec run, so work cannot stall because
+/// an in-process event was missed. Raised by every recovery cycle (startup and periodic).
 /// </summary>
 public sealed class FrontierReconciliationSignal(ISpecRunRepository specRuns, IOutbox outbox, IUnitOfWork unitOfWork, IClock clock)
+    : IFrontierReconciliationTrigger
 {
     /// <summary>Returns the number of runs a reconciliation was requested for.</summary>
     public async Task<int> RaiseAsync(CancellationToken cancellationToken)

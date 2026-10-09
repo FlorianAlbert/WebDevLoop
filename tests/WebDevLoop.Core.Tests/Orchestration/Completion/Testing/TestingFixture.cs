@@ -59,12 +59,6 @@ internal sealed class TestingFixture
     public Task<TestingResult> RunAsync(RunId specRunId, CancellationToken? cancellationToken = null) =>
         Runner().RunAsync(new TestingAssignment(specRunId), cancellationToken ?? Token);
 
-    public TestLeaseReaper Reaper()
-    {
-        TestingWorkflowScope scope = OpenScope();
-        return new TestLeaseReaper(scope, Target, scope, Execution.Clock);
-    }
-
     public TestingEventHandler Handler() => new(Launcher);
 
     /// <summary>A spec whose integrated ticket (#2) passed the parent-spec review: <c>Testing</c>, test cycle 1.</summary>

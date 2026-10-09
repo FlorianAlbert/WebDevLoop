@@ -1,3 +1,4 @@
+using WebDevLoop.Web.Api;
 using WebDevLoop.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +20,7 @@ app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages:
 app.UseHttpsRedirection();
 
 app.MapStaticAssets();
+app.MapWebDevLoopApi();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

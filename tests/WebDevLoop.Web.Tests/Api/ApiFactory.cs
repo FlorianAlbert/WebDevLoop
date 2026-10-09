@@ -10,13 +10,18 @@ using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Queries;
 using WebDevLoop.Infrastructure.Events;
 using WebDevLoop.Infrastructure.Prerequisites;
-using WebDevLoop.Web.DependencyInjection;
+using WebDevLoop.Web.Background;
 
 namespace WebDevLoop.Web.Tests.Api;
 
-/// <summary>Hosts the real web app (Program.cs) with every application service replaced by a fake.</summary>
+/// <summary>
+/// Hosts the real web app (Program.cs) with every application service replaced by a fake. The workflow workers are disabled
+/// and startup initialization (migrations, settings, prerequisite evaluation) is skipped, so nothing touches a database.
+/// </summary>
 internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
 {
+    private readonly string _dataDirectory = Path.Combine(AppContext.BaseDirectory, "api-sandboxes", Guid.NewGuid().ToString("N"));
+
     public FakeRepositoryRegistry Registry { get; } = new();
 
     public FakeRepositoryQueries Repositories { get; } = new();
@@ -53,10 +58,22 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
         return this;
     }
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) =>
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        if (Directory.Exists(_dataDirectory))
+        {
+            Directory.Delete(_dataDirectory, recursive: true);
+        }
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseSetting("WebDevLoop:DataDirectory", _dataDirectory);
+        builder.UseSetting("WebDevLoop:Workflow:Enabled", "false");
         builder.ConfigureTestServices(services =>
         {
-            services.AddWebDevLoopApi();
+            services.AddSingleton<IAppInitializer, SkippedInitialization>();
             services.AddSingleton<IRepositoryRegistry>(Registry);
             services.AddSingleton<IRepositoryQueries>(Repositories);
             services.AddSingleton<ISettingsManager>(Settings);
@@ -68,6 +85,12 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
             services.AddSingleton<IRunEventBus>(EventBus);
             services.AddSingleton(Readiness);
         });
+    }
+
+    private sealed class SkippedInitialization : IAppInitializer
+    {
+        public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
 }
 
 /// <summary>The real in-process bus plus a live subscriber count, so tests can see that streams unsubscribe.</summary>

@@ -11,14 +11,10 @@
             <input id="reg-name" name="name" class="form-control form-control-sm" placeholder="widgets" @bind="_name" />
         </div>
         <div class="col-md-6">
-            <label class="form-label small mb-0" for="reg-path">Local path</label>
-            <input id="reg-path" name="localPath" class="form-control form-control-sm" placeholder="/home/me/dev/widgets" @bind="_localPath" />
-        </div>
-        <div class="col-md-3">
             <label class="form-label small mb-0" for="reg-branch">Default base branch <span class="text-muted">(optional)</span></label>
             <input id="reg-branch" name="defaultBaseBranch" class="form-control form-control-sm" placeholder="main" @bind="_defaultBaseBranch" />
         </div>
-        <div class="col-md-9">
+        <div class="col-md-6">
             <label class="form-label small mb-0" for="reg-clone">Clone URL <span class="text-muted">(optional, defaults to the GitHub HTTPS URL)</span></label>
             <input id="reg-clone" name="cloneUrl" class="form-control form-control-sm" @bind="_cloneUrl" />
         </div>
@@ -36,7 +32,6 @@
 @code {
     private string? _owner;
     private string? _name;
-    private string? _localPath;
     private string? _defaultBaseBranch;
     private string? _cloneUrl;
     private string? _error;
@@ -54,7 +49,7 @@
         _error = null;
         try
         {
-            var command = new RegisterRepositoryCommand(Clean(_owner), Clean(_name), Clean(_localPath), Clean(_defaultBaseBranch), Clean(_cloneUrl));
+            var command = new RegisterRepositoryCommand(Clean(_owner), Clean(_name), null, Clean(_defaultBaseBranch), Clean(_cloneUrl));
             CommandResult<RepositoryView> result = await InScopeAsync(services =>
                 services.GetRequiredService<IRepositoryRegistry>().RegisterAsync(command, CancellationToken.None));
             if (result.IsSuccess)

@@ -56,13 +56,24 @@ public sealed class RepositoriesPageTests : UiTestContext
         cut.Find("[data-testid=show-register]").Click();
         cut.Find("input[name=owner]").Change(" acme ");
         cut.Find("input[name=name]").Change("tools");
-        cut.Find("input[name=localPath]").Change("/work/acme/tools");
         cut.Find("[data-testid=register-form]").Submit();
 
         cut.WaitForAssertion(() => Assert.Equal(3, Selection.CurrentRepositoryId));
         RegisterRepositoryCommand command = Assert.Single(Registry.Registered);
-        Assert.Equal(new RegisterRepositoryCommand("acme", "tools", "/work/acme/tools", null, null), command);
+        Assert.Equal(new RegisterRepositoryCommand("acme", "tools", null, null, null), command);
         Assert.Empty(cut.FindAll("[data-testid=register-form]"));
+    }
+
+    [Fact]
+    public void forms_do_not_ask_for_a_local_path_because_the_workspace_derives_it()
+    {
+        IRenderedComponent<RepositoriesPage> cut = Render<RepositoriesPage>();
+
+        cut.Find("[data-testid=show-register]").Click();
+        cut.Find("[data-testid=edit-1]").Click();
+
+        Assert.Empty(cut.FindAll("input[name=localPath]"));
+        Assert.Equal(["owner", "name", "defaultBaseBranch", "cloneUrl"], cut.Find("[data-testid=register-form]").QuerySelectorAll("input").Select(i => i.GetAttribute("name")!).ToArray());
     }
 
     [Fact]
@@ -74,7 +85,6 @@ public sealed class RepositoriesPageTests : UiTestContext
         cut.Find("[data-testid=show-register]").Click();
         cut.Find("input[name=owner]").Change("acme");
         cut.Find("input[name=name]").Change("tools");
-        cut.Find("input[name=localPath]").Change("/work/acme/tools");
         cut.Find("[data-testid=register-form]").Submit();
 
         cut.WaitForAssertion(() => Assert.Single(Registry.Registered));
@@ -121,19 +131,19 @@ public sealed class RepositoriesPageTests : UiTestContext
         cut.WaitForAssertion(() => Assert.Empty(cut.FindAll("[data-testid=edit-form]")));
         (int id, UpdateRepositoryCommand command) = Assert.Single(Registry.Updated);
         Assert.Equal(1, id);
-        Assert.Equal(new UpdateRepositoryCommand("develop", "https://github.com/acme/widgets.git", "/work/acme/widgets", true), command);
+        Assert.Equal(new UpdateRepositoryCommand("develop", "https://github.com/acme/widgets.git", null, true), command);
     }
 
     [Fact]
     public void shows_validation_errors_of_the_edit_form()
     {
-        Registry.UpdateResult = CommandResult<RepositoryView>.Invalid([new SettingsValidationError("LocalPath", "must be absolute")]);
+        Registry.UpdateResult = CommandResult<RepositoryView>.Invalid([new SettingsValidationError("CloneUrl", "must be an https URL")]);
         IRenderedComponent<RepositoriesPage> cut = Render<RepositoriesPage>();
 
         cut.Find("[data-testid=edit-1]").Click();
         cut.Find("[data-testid=edit-form]").Submit();
 
-        cut.WaitForAssertion(() => Assert.Contains("LocalPath: must be absolute", cut.Find("[data-testid=edit-errors]").TextContent));
+        cut.WaitForAssertion(() => Assert.Contains("CloneUrl: must be an https URL", cut.Find("[data-testid=edit-errors]").TextContent));
         Assert.NotEmpty(cut.FindAll("[data-testid=edit-form]"));
     }
 

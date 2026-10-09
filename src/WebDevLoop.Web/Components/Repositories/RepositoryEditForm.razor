@@ -5,13 +5,9 @@
         <label class="form-label small mb-0">Base branch</label>
         <input name="defaultBaseBranch" class="form-control form-control-sm" @bind="_defaultBaseBranch" />
     </div>
-    <div class="col-md-4">
+    <div class="col-md-5">
         <label class="form-label small mb-0">Clone URL</label>
         <input name="cloneUrl" class="form-control form-control-sm" @bind="_cloneUrl" />
-    </div>
-    <div class="col-md-3">
-        <label class="form-label small mb-0">Local path</label>
-        <input name="localPath" class="form-control form-control-sm" @bind="_localPath" />
     </div>
     <div class="col-md-1">
         <div class="form-check">
@@ -32,7 +28,6 @@
 @code {
     private string? _defaultBaseBranch;
     private string? _cloneUrl;
-    private string? _localPath;
     private bool _isEnabled;
     private string? _error;
     private bool _submitting;
@@ -48,7 +43,7 @@
 
     protected override void OnInitialized()
     {
-        (_defaultBaseBranch, _cloneUrl, _localPath, _isEnabled) = (Repository.DefaultBaseBranch, Repository.CloneUrl, Repository.LocalPath, Repository.IsEnabled);
+        (_defaultBaseBranch, _cloneUrl, _isEnabled) = (Repository.DefaultBaseBranch, Repository.CloneUrl, Repository.IsEnabled);
     }
 
     private async Task SubmitAsync()
@@ -57,7 +52,7 @@
         _error = null;
         try
         {
-            var command = new UpdateRepositoryCommand(_defaultBaseBranch, _cloneUrl, _localPath, _isEnabled);
+            var command = new UpdateRepositoryCommand(_defaultBaseBranch, _cloneUrl, null, _isEnabled);
             CommandResult<RepositoryView> result = await InScopeAsync(services =>
                 services.GetRequiredService<IRepositoryRegistry>().UpdateAsync(Repository.Id, command, CancellationToken.None));
             if (result.IsSuccess)

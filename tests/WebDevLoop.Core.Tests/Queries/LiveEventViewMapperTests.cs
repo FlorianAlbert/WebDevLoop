@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Queries;
@@ -92,6 +93,32 @@ public sealed class LiveEventViewMapperTests
         var envelope = new EventEnvelope(12, new SpecTestingPassed(Run, 3, 2, At));
 
         Assert.Equal(new LiveEventView(12, nameof(SpecTestingPassed), "run-1", null, null, "Passed", At), envelope.ToView());
+    }
+
+    [Fact]
+    public void completion_report_exposes_the_run_and_its_integration_branch()
+    {
+        var envelope = new EventEnvelope(13, new SpecCompletionReported(Run, 3, new BranchName("webdevloop/run-1/integration"), new CommitSha(new string('a', 40)), 2, At));
+
+        Assert.Equal(new LiveEventView(13, nameof(SpecCompletionReported), "run-1", null, null, "webdevloop/run-1/integration", At), envelope.ToView());
+    }
+
+    [Fact]
+    public void worktree_cleanup_exposes_whether_worktrees_were_retained()
+    {
+        var clean = new EventEnvelope(14, new SpecWorktreesCleanedUp(Run, 3, 2, [], At));
+        var retained = new EventEnvelope(15, new SpecWorktreesCleanedUp(Run, 3, 1, ["/work/wt is dirty"], At));
+
+        Assert.Equal(new LiveEventView(14, nameof(SpecWorktreesCleanedUp), "run-1", null, null, "Removed", At), clean.ToView());
+        Assert.Equal(new LiveEventView(15, nameof(SpecWorktreesCleanedUp), "run-1", null, null, "Retained", At), retained.ToView());
+    }
+
+    [Fact]
+    public void stack_awaiting_trunk_exposes_the_run()
+    {
+        var envelope = new EventEnvelope(16, new SpecStackAwaitingTrunk(Run, 3, new PullRequestNumber(4), At));
+
+        Assert.Equal(new LiveEventView(16, nameof(SpecStackAwaitingTrunk), "run-1", null, null, "AwaitingTrunk", At), envelope.ToView());
     }
 
     [Fact]

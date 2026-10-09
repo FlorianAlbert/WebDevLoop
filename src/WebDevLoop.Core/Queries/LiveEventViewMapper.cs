@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 
@@ -7,6 +8,9 @@ namespace WebDevLoop.Core.Queries;
 public static class LiveEventViewMapper
 {
     private const string PassedStatus = "Passed";
+    private const string RemovedStatus = "Removed";
+    private const string RetainedStatus = "Retained";
+    private const string AwaitingTrunkStatus = "AwaitingTrunk";
 
     public static LiveEventView ToView(this EventEnvelope envelope)
     {
@@ -21,6 +25,9 @@ public static class LiveEventViewMapper
             SpecRunQueued e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, null, at),
             FrontierReconciliationRequested e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, null, at),
             SpecTestingPassed e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, PassedStatus, at),
+            SpecCompletionReported e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, e.IntegrationBranch.Value, at),
+            SpecWorktreesCleanedUp e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, e.Warnings is { Count: > 0 } ? RetainedStatus : RemovedStatus, at),
+            SpecStackAwaitingTrunk e => new(envelope.MessageId, type, e.SpecRunId.Value, null, null, AwaitingTrunkStatus, at),
             _ => new(envelope.MessageId, type, null, null, null, null, at),
         };
     }

@@ -1,0 +1,24 @@
+@using WebDevLoop.Core.Domain
+
+<section class="my-3" data-testid="merge-tracking">
+    <h2 class="h5">Merge tracking</h2>
+    <p class="mb-0">@Describe()</p>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public SpecRunStatus Status { get; set; }
+
+    [Parameter] public int LayerCount { get; set; }
+
+    [Parameter] public string? FailureReason { get; set; }
+
+    private string Describe() => Status switch
+    {
+        SpecRunStatus.ReadyForReview => $"Stack ready for review ({LayerCount} pull requests).",
+        SpecRunStatus.AwaitingMerge => $"Awaiting merge of {LayerCount} stacked pull requests into the base branch.",
+        SpecRunStatus.Completed => "Merged: the base branch contains the top layer of the stack.",
+        SpecRunStatus.NeedsAttention => $"Needs attention: {FailureReason ?? "the stack was closed unmerged or merge tracking failed"}.",
+        SpecRunStatus.Aborted => "Aborted before the stack was merged.",
+        _ => "Merge tracking starts once the stack is ready for review.",
+    };
+}

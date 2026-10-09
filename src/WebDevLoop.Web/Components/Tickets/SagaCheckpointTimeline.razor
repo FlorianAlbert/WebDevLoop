@@ -1,0 +1,38 @@
+@using WebDevLoop.Core.Domain
+
+<section class="my-3" data-testid="saga">
+    <h2 class="h5">Integration saga</h2>
+    @if (Saga is null)
+    {
+        <p class="text-muted">No integration has started for this ticket.</p>
+    }
+    else
+    {
+        <ol class="list-inline">
+            @foreach (IntegrationSagaCheckpoint checkpoint in Enum.GetValues<IntegrationSagaCheckpoint>())
+            {
+                string state = checkpoint < Saga.Checkpoint ? "done" : checkpoint == Saga.Checkpoint ? "current" : "pending";
+                <li class="list-inline-item badge @StateClass(state)" data-testid="saga-step-@checkpoint" data-state="@state">@checkpoint</li>
+            }
+        </ol>
+        <p class="small mb-0">
+            Stack branch <code>@Saga.StackBranch</code>@(Saga.PullRequestNumber is { } pr ? $", PR #{pr}" : "").
+            Updated @Saga.UpdatedAt.ToString("u").
+        </p>
+        @if (Saga.LastError is { } error)
+        {
+            <p class="alert alert-danger mt-2" data-testid="saga-error">@error</p>
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public SagaCheckpointView? Saga { get; set; }
+
+    private static string StateClass(string state) => state switch
+    {
+        "done" => "text-bg-success",
+        "current" => "text-bg-primary",
+        _ => "text-bg-light border",
+    };
+}

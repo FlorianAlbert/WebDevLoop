@@ -1,0 +1,94 @@
+@page "/steps/{Id}"
+@inherits LiveDetailPageBase
+@using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Management
+@using WebDevLoop.Core.Queries
+@using WebDevLoop.Web.Api
+@using WebDevLoop.Web.Components.Runs
+
+<PageTitle>@(_step is null ? "Step" : $"{_step.Kind} step")</PageTitle>
+
+@if (IsNotFound)
+{
+    <p class="alert alert-warning" data-testid="not-found">Step '@Id' was not found.</p>
+}
+else if (_step is not null)
+{
+    <h1>@_step.Kind step</h1>
+    <p>
+        <StatusBadge Status="@_step.Status.ToString()" data-testid="step-status" />
+        <a class="ms-2" href="/runs/@_step.SpecRunId" data-testid="spec-link">Spec run @_step.SpecRunId</a>
+        @if (_step.TicketRunId is { } ticketId)
+        {
+            <a class="ms-2" href="/tickets/@ticketId" data-testid="ticket-link">Ticket run @ticketId</a>
+        }
+    </p>
+    @if (_step.FailureReason is { } failure)
+    {
+        <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
+    }
+
+    <dl class="row">
+        <dt class="col-sm-3">Role</dt>
+        <dd class="col-sm-9" data-testid="step-role">@(_step.AgentRole?.ToString() ?? "none (app-run step)")</dd>
+        <dt class="col-sm-3">Model</dt>
+        <dd class="col-sm-9" data-testid="step-model">@(_model ?? "–") <span class="text-muted small">(currently configured)</span></dd>
+        <dt class="col-sm-3">Attempt</dt>
+        <dd class="col-sm-9">@_step.Attempt</dd>
+        <dt class="col-sm-3">Copilot session</dt>
+        <dd class="col-sm-9" data-testid="copilot-session"><code>@(_step.CopilotSessionId ?? "–")</code></dd>
+        <dt class="col-sm-3">Branch / worktree</dt>
+        <dd class="col-sm-9"><code>@(_step.BranchName ?? "–")</code> <code>@(_step.WorktreePath ?? "")</code></dd>
+        <dt class="col-sm-3">Prompt hash</dt>
+        <dd class="col-sm-9"><code>@_step.InputPromptHash</code></dd>
+        <dt class="col-sm-3">Started / completed / timeout</dt>
+        <dd class="col-sm-9">@Format(_step.StartedAt) / @Format(_step.CompletedAt) / @Format(_step.TimeoutAt)</dd>
+    </dl>
+
+    <RunControlsArea Scope="step" />
+
+    @if (_policy is not null)
+    {
+        <RolePolicyPanel Policy="_policy" />
+    }
+
+    <StructuredReportPanel ResultJson="@_step.StructuredResultJson" />
+    <AgentLogTail StepRunId="@_step.Id" Follow="@(_step.Status is StepStatus.Pending or StepStatus.Running)" PollInterval="LogPollInterval" />
+}
+
+@code {
+    private StepRunView? _step;
+    private RolePolicySummary? _policy;
+    private string? _model;
+
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    /// <summary>How often the log tail polls while the step is active; zero disables polling.</summary>
+    [Parameter] public TimeSpan LogPollInterval { get; set; } = TimeSpan.FromSeconds(1);
+
+    protected override bool IsRelevant(LiveEventView view) => RunEventSubscription.Concerns(view, _step?.SpecRunId);
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var queries = ScopedServices.GetRequiredService<IRunQueries>();
+        if (ApiIds.Step(Id) is not { } stepId || await queries.GetStepAsync(stepId, cancellationToken) is not { } step)
+        {
+            IsNotFound = true;
+            _step = null;
+            return;
+        }
+
+        IsNotFound = false;
+        _step = step;
+        _policy = step.AgentRole is { } role ? RolePolicySummary.For(role) : null;
+        _model = null;
+        if (step.AgentRole is { } modelRole
+            && await queries.GetSpecRunAsync(new RunId(step.SpecRunId), cancellationToken) is { } spec)
+        {
+            var models = await RoleModels.LoadAsync(ScopedServices.GetRequiredService<ISettingsManager>(), spec.RepositoryId, cancellationToken);
+            _model = models.GetValueOrDefault(modelRole);
+        }
+    }
+
+    private static string Format(DateTimeOffset? value) => value?.ToString("u") ?? "–";
+}

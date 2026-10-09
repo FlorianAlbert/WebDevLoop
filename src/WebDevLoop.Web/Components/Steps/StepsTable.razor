@@ -1,0 +1,41 @@
+@using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Queries
+@using WebDevLoop.Web.Components.Runs
+
+<section class="my-3" data-testid="steps">
+    <h2 class="h5">Steps</h2>
+    @if (Steps.Count == 0)
+    {
+        <p class="text-muted">No steps yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Step</th><th>Role</th><th>Model</th><th>Status</th><th>Attempt</th><th>Review iteration</th><th>Findings</th></tr></thead>
+            <tbody>
+                @foreach (StepRunView step in Steps)
+                {
+                    StepReport? report = StepReportParser.TryParse(step.StructuredResultJson);
+                    <tr data-testid="step-row-@step.Id">
+                        <td><a href="/steps/@step.Id" data-testid="step-link-@step.Id">@step.Kind</a></td>
+                        <td data-testid="step-role-@step.Id">@(step.AgentRole?.ToString() ?? "–")</td>
+                        <td data-testid="step-model-@step.Id">@ModelOf(step)</td>
+                        <td><StatusBadge Status="@step.Status.ToString()" data-testid="@($"step-status-{step.Id}")" /></td>
+                        <td data-testid="step-attempt-@step.Id">@step.Attempt</td>
+                        <td data-testid="step-iteration-@step.Id">@(report?.Iteration?.ToString() ?? "–")</td>
+                        <td data-testid="step-findings-@step.Id">@(report is null ? "–" : report.Findings.Count)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StepRunView> Steps { get; set; } = [];
+
+    [Parameter] public IReadOnlyDictionary<AgentRole, string> Models { get; set; } = new Dictionary<AgentRole, string>();
+
+    private string ModelOf(StepRunView step) =>
+        step.AgentRole is { } role && Models.TryGetValue(role, out string? model) ? model : "–";
+}

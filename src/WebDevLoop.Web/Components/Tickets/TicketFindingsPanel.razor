@@ -1,0 +1,49 @@
+@using WebDevLoop.Core.Queries
+@using WebDevLoop.Web.Components.Steps
+
+<section class="my-3" data-testid="findings">
+    <h2 class="h5">Review findings</h2>
+    @if (_findings.Count == 0)
+    {
+        <p class="text-muted">No findings reported.</p>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach ((StepRunView step, ReportFinding finding) in _findings)
+            {
+                <li class="list-group-item" data-testid="finding">
+                    <strong>@finding.Title</strong>
+                    @if (finding.Category is { } category)
+                    {
+                        <span class="badge text-bg-warning ms-1">@category</span>
+                    }
+                    @if (finding.File is { } file)
+                    {
+                        <code class="ms-2">@file@(finding.Line is { } line ? $":{line}" : "")</code>
+                    }
+                    <a class="ms-2 small" href="/steps/@step.Id">@step.Kind step</a>
+                    @if (finding.Description is { } description)
+                    {
+                        <div class="small">@description</div>
+                    }
+                    @if (finding.Recommendation is { } recommendation)
+                    {
+                        <div class="small text-muted">Recommendation: @recommendation</div>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<(StepRunView Step, ReportFinding Finding)> _findings = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<StepRunView> Steps { get; set; } = [];
+
+    protected override void OnParametersSet() =>
+        _findings = Steps
+            .SelectMany(step => (StepReportParser.TryParse(step.StructuredResultJson)?.Findings ?? []).Select(finding => (step, finding)))
+            .ToList();
+}

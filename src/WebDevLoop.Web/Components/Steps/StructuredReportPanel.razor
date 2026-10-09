@@ -1,0 +1,65 @@
+<section class="my-3" data-testid="structured-report-section">
+    <h2 class="h5">Structured result</h2>
+    @if (_report is null)
+    {
+        <p class="text-muted" data-testid="no-report">No structured result has been recorded yet.</p>
+    }
+    else
+    {
+        <div data-testid="structured-report">
+            @if (_report.Summary is { } summary)
+            {
+                <p>@summary</p>
+            }
+            <p class="small">
+                @if (_report.Verdict is { } verdict)
+                {
+                    <span class="me-3">Verdict: <strong>@verdict</strong></span>
+                }
+                @if (_report.Iteration is { } iteration)
+                {
+                    <span>Review iteration: @iteration</span>
+                }
+            </p>
+            @if (_report.Findings.Count > 0)
+            {
+                <ul class="list-group mb-2">
+                    @foreach (ReportFinding finding in _report.Findings)
+                    {
+                        <li class="list-group-item" data-testid="report-finding">
+                            <strong>@finding.Title</strong>
+                            @if (finding.Category is { } category)
+                            {
+                                <span class="badge text-bg-warning ms-1">@category</span>
+                            }
+                            @if (finding.File is { } file)
+                            {
+                                <code class="ms-2">@file@(finding.Line is { } line ? $":{line}" : "")</code>
+                            }
+                            @if (finding.Description is { } description)
+                            {
+                                <div class="small">@description</div>
+                            }
+                            @if (finding.Recommendation is { } recommendation)
+                            {
+                                <div class="small text-muted">Recommendation: @recommendation</div>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+        <details>
+            <summary>Raw JSON</summary>
+            <pre class="small" data-testid="report-json">@_report.PrettyJson</pre>
+        </details>
+    }
+</section>
+
+@code {
+    private StepReport? _report;
+
+    [Parameter] public string? ResultJson { get; set; }
+
+    protected override void OnParametersSet() => _report = StepReportParser.TryParse(ResultJson);
+}

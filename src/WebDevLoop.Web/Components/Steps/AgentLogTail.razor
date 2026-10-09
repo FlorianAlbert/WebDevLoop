@@ -1,0 +1,131 @@
+@implements IDisposable
+@using WebDevLoop.Core.Agents
+@using WebDevLoop.Web.Api
+@using WebDevLoop.Core.Queries
+@inject IAgentLogReader Logs
+
+<section class="my-3" data-testid="log-tail">
+    <h2 class="h5">Agent log</h2>
+    @if (_hidden > 0)
+    {
+        <p class="small text-muted" data-testid="log-hidden">@_hidden earlier entries not shown.</p>
+    }
+    @if (_entries.Count == 0)
+    {
+        <p class="text-muted" data-testid="log-empty">No agent output yet.</p>
+    }
+    else
+    {
+        <div class="border rounded p-2 bg-body-tertiary small font-monospace overflow-auto" style="max-height: 30rem">
+            @foreach (AgentLogView entry in _entries)
+            {
+                <div data-testid="log-entry" data-kind="@entry.Kind" class="@(KindClass(entry.Kind))">
+                    <span class="text-muted">@entry.At.ToString("HH:mm:ss")</span>
+                    <span class="badge text-bg-light">@entry.Kind</span>
+                    <span style="white-space: pre-wrap">@entry.Text</span>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private readonly List<AgentLogView> _entries = [];
+    private readonly SemaphoreSlim _readGate = new(1, 1);
+    private readonly CancellationTokenSource _disposed = new();
+    private int _lastSequence;
+    private int _hidden;
+    private bool _wasFollowing;
+
+    [Parameter, EditorRequired] public string StepRunId { get; set; } = string.Empty;
+
+    /// <summary>True while the step runs: the log is polled for new entries. Turning false triggers one last read.</summary>
+    [Parameter] public bool Follow { get; set; }
+
+    /// <summary>Zero disables the background polling timer.</summary>
+    [Parameter] public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(1);
+
+    [Parameter] public int MaxEntries { get; set; } = 500;
+
+    protected override Task OnInitializedAsync() => ReadNewAsync();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_wasFollowing && !Follow)
+        {
+            await ReadNewAsync();
+        }
+
+        _wasFollowing = Follow;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && PollInterval > TimeSpan.Zero)
+        {
+            _ = PollAsync(PollInterval);
+        }
+    }
+
+    private async Task PollAsync(TimeSpan interval)
+    {
+        using var timer = new PeriodicTimer(interval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_disposed.Token))
+            {
+                if (Follow)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        if (await ReadNewAsync())
+                        {
+                            StateHasChanged();
+                        }
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task<bool> ReadNewAsync()
+    {
+        if (ApiIds.Step(StepRunId) is not { } stepId)
+        {
+            return false;
+        }
+
+        await _readGate.WaitAsync(_disposed.Token);
+        try
+        {
+            IReadOnlyList<AgentLogView> fresh = await Logs.ReadAsync(stepId, _lastSequence, _disposed.Token);
+            if (fresh.Count == 0)
+            {
+                return false;
+            }
+
+            _entries.AddRange(fresh);
+            _lastSequence = fresh[^1].Sequence;
+            int overflow = Math.Max(0, _entries.Count - MaxEntries);
+            _entries.RemoveRange(0, overflow);
+            _hidden += overflow;
+            return true;
+        }
+        finally
+        {
+            _readGate.Release();
+        }
+    }
+
+    private static string KindClass(AgentLogKind kind) => kind switch
+    {
+        AgentLogKind.Error or AgentLogKind.PermissionDenied => "text-danger",
+        AgentLogKind.Reasoning => "text-muted fst-italic",
+        _ => string.Empty,
+    };
+
+    public void Dispose() => _disposed.Cancel();
+}

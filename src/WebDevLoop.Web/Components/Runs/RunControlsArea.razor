@@ -1,0 +1,21 @@
+@* Retry/Skip/Abort belong to a later work package: it supplies ChildContent; until then only the marked placeholder renders. *@
+<section class="card my-3" data-testid="run-controls">
+    <div class="card-body">
+        <h2 class="h6 card-title">Controls</h2>
+        @if (ChildContent is not null)
+        {
+            @ChildContent
+        }
+        else
+        {
+            <p class="text-muted mb-0" data-testid="controls-placeholder">Run controls (retry, skip, abort) for this @Scope are not available yet.</p>
+        }
+    </div>
+</section>
+
+@code {
+    /// <summary>Names what the controls act on, e.g. "spec run".</summary>
+    [Parameter, EditorRequired] public string Scope { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

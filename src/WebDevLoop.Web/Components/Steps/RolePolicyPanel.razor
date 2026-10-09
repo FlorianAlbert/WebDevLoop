@@ -1,0 +1,27 @@
+<section class="my-3" data-testid="role-policy">
+    <h2 class="h5">Role policy: @Policy.Role</h2>
+    <dl class="row mb-0">
+        <dt class="col-sm-3">Allowed capabilities</dt>
+        <dd class="col-sm-9">
+            @foreach (var capability in Policy.AllowedCapabilities)
+            {
+                <span class="badge text-bg-light border me-1">@capability</span>
+            }
+        </dd>
+        <dt class="col-sm-3">Denied commands</dt>
+        <dd class="col-sm-9">
+            @foreach (string command in Policy.DeniedCommands)
+            {
+                <code class="me-2">@command</code>
+            }
+        </dd>
+        <dt class="col-sm-3">GitHub token</dt>
+        <dd class="col-sm-9">@Policy.TokenAccess</dd>
+        <dt class="col-sm-3">Report tool</dt>
+        <dd class="col-sm-9"><code>@Policy.ReportTool</code></dd>
+    </dl>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public RolePolicySummary Policy { get; set; } = default!;
+}

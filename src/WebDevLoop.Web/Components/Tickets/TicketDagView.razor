@@ -1,0 +1,56 @@
+@using WebDevLoop.Core.Queries
+@using WebDevLoop.Web.Components.Runs
+
+<section class="my-3" data-testid="ticket-dag">
+    <h2 class="h5">Tickets</h2>
+    @if (_rows.Count == 0)
+    {
+        <p class="text-muted">No tickets yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>Layer</th><th>Ticket</th><th>Status</th><th>Blocked by</th><th>Review iteration</th><th>PR</th><th>Integration</th></tr>
+            </thead>
+            <tbody>
+                @foreach (TicketDagRow row in _rows)
+                {
+                    TicketRunView ticket = row.Ticket;
+                    <tr data-testid="ticket-row-@ticket.Id">
+                        <td data-testid="ticket-layer-@ticket.Id">@row.Layer</td>
+                        <td><a href="/tickets/@ticket.Id" data-testid="ticket-link-@ticket.Id">#@ticket.IssueNumber @ticket.Title</a></td>
+                        <td>
+                            <StatusBadge Status="@ticket.Status.ToString()" data-testid="@($"ticket-status-{ticket.Id}")" />
+                            @if (row.IsFrontier)
+                            {
+                                <span class="badge text-bg-warning" data-testid="frontier-@ticket.Id" title="All blockers integrated: may be implemented now">frontier</span>
+                            }
+                        </td>
+                        <td data-testid="ticket-blockers-@ticket.Id">
+                            @foreach (TicketBlocker blocker in row.Blockers)
+                            {
+                                <span class="me-2 @(blocker.IsSatisfied ? "text-success" : "text-muted")">
+                                    @(blocker.Issue is { } issue ? $"#{issue}" : blocker.TicketRunId) (@(blocker.Status?.ToString() ?? "unknown"))
+                                </span>
+                            }
+                        </td>
+                        <td>@ticket.ReviewIteration</td>
+                        <td>@(ticket.PullRequestNumber is { } pr ? $"#{pr}" : "–")</td>
+                        <td data-testid="saga-checkpoint-@ticket.Id">@(Sagas.TryGetValue(ticket.Id, out SagaCheckpointView? saga) ? saga.Checkpoint.ToString() : "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    private IReadOnlyList<TicketDagRow> _rows = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<TicketRunView> Tickets { get; set; } = [];
+
+    [Parameter] public IReadOnlyDictionary<string, SagaCheckpointView> Sagas { get; set; } = new Dictionary<string, SagaCheckpointView>();
+
+    protected override void OnParametersSet() => _rows = TicketDagLayout.Build(Tickets);
+}

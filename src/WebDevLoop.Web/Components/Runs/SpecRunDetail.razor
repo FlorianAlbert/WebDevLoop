@@ -1,0 +1,76 @@
+@page "/runs/{Id}"
+@inherits LiveDetailPageBase
+@using WebDevLoop.Core.Queries
+@using WebDevLoop.Core.Ports
+@using WebDevLoop.Web.Api
+@using WebDevLoop.Web.Components.Tickets
+
+<PageTitle>@(_spec?.Title ?? "Spec run")</PageTitle>
+
+@if (IsNotFound)
+{
+    <p class="alert alert-warning" data-testid="not-found">Spec run '@Id' was not found.</p>
+}
+else if (_spec is not null)
+{
+    <h1>@_spec.Title</h1>
+    <p>
+        <StatusBadge Status="@_spec.Status.ToString()" data-testid="spec-status" />
+        <span class="ms-2">Spec issue #@_spec.ParentIssueNumber</span>
+        <span class="ms-2">Queue position @_spec.QueuePosition</span>
+        @if (_spec.DependencyModeUsed is { } mode)
+        {
+            <span class="ms-2" data-testid="dependency-mode">Dependency mode: @mode</span>
+        }
+    </p>
+    @if (_spec.FailureReason is { } failure)
+    {
+        <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
+    }
+
+    <dl class="row">
+        <dt class="col-sm-3">Integration branch</dt>
+        <dd class="col-sm-9" data-testid="integration-branch"><code>@_spec.IntegrationBranch</code> (base <code>@(_spec.BaseBranch ?? "–")</code>, tip <code>@(_spec.IntegrationTipSha ?? "–")</code>)</dd>
+        <dt class="col-sm-3">Cycles</dt>
+        <dd class="col-sm-9">Parent review @_spec.ReviewCycle, tester @_spec.TestCycle</dd>
+        <dt class="col-sm-3">Created</dt>
+        <dd class="col-sm-9">@_spec.CreatedAt.ToString("u")</dd>
+    </dl>
+
+    <RunControlsArea Scope="spec run" />
+
+    <TicketDagView Tickets="_tickets" Sagas="_sagas" />
+    <StackLayersPanel Layers="_stack" />
+    <MergeTrackingPanel Status="_spec.Status" LayerCount="_stack.Count" FailureReason="_spec.FailureReason" />
+    <RunEventsTimeline Events="_events" />
+}
+
+@code {
+    private SpecRunView? _spec;
+    private IReadOnlyList<TicketRunView> _tickets = [];
+    private IReadOnlyList<StackLayerView> _stack = [];
+    private IReadOnlyList<RunEventView> _events = [];
+    private IReadOnlyDictionary<string, SagaCheckpointView> _sagas = new Dictionary<string, SagaCheckpointView>();
+
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    protected override bool IsRelevant(LiveEventView view) => RunEventSubscription.Concerns(view, Id);
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var queries = ScopedServices.GetRequiredService<IRunQueries>();
+        if (ApiIds.SpecRun(Id) is not { } runId || await queries.GetSpecRunAsync(runId, cancellationToken) is not { } spec)
+        {
+            IsNotFound = true;
+            _spec = null;
+            return;
+        }
+
+        IsNotFound = false;
+        _spec = spec;
+        _tickets = await queries.ListTicketRunsAsync(runId, cancellationToken);
+        _stack = await queries.ListStackAsync(runId, cancellationToken);
+        _events = await queries.ListEventsAsync(runId, cancellationToken);
+        _sagas = await SagaCheckpointView.LoadAsync(ScopedServices.GetRequiredService<IIntegrationSagaRepository>(), _tickets, cancellationToken);
+    }
+}

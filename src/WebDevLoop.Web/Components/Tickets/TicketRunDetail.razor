@@ -1,0 +1,102 @@
+@page "/tickets/{Id}"
+@inherits LiveDetailPageBase
+@using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Management
+@using WebDevLoop.Core.Ports
+@using WebDevLoop.Core.Queries
+@using WebDevLoop.Web.Api
+@using WebDevLoop.Web.Components.Runs
+@using WebDevLoop.Web.Components.Steps
+
+<PageTitle>@(_ticket?.Title ?? "Ticket run")</PageTitle>
+
+@if (IsNotFound)
+{
+    <p class="alert alert-warning" data-testid="not-found">Ticket run '@Id' was not found.</p>
+}
+else if (_ticket is not null)
+{
+    <h1>#@_ticket.IssueNumber @_ticket.Title</h1>
+    <p>
+        <StatusBadge Status="@_ticket.Status.ToString()" data-testid="ticket-status" />
+        <a class="ms-2" href="/runs/@_ticket.SpecRunId" data-testid="spec-link">Spec run @_ticket.SpecRunId</a>
+        @if (_ticket.PullRequestNumber is { } pr)
+        {
+            <span class="ms-2" data-testid="ticket-pr">PR #@pr@(_ticket.StackPosition is { } position ? $" (stack layer {position})" : "")</span>
+        }
+    </p>
+    @if (_ticket.FailureReason is { } failure)
+    {
+        <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
+    }
+
+    <dl class="row">
+        <dt class="col-sm-3">Branch</dt>
+        <dd class="col-sm-9" data-testid="ticket-branch"><code>@_ticket.BranchName</code></dd>
+        <dt class="col-sm-3">Worktree</dt>
+        <dd class="col-sm-9" data-testid="ticket-worktree"><code>@(_ticket.WorktreePath ?? "not created")</code></dd>
+        <dt class="col-sm-3">Attempt</dt>
+        <dd class="col-sm-9">@_ticket.Attempt</dd>
+        <dt class="col-sm-3">Review iteration</dt>
+        <dd class="col-sm-9" data-testid="review-iteration">@_ticket.ReviewIteration</dd>
+        <dt class="col-sm-3">Last implemented</dt>
+        <dd class="col-sm-9"><code>@(_ticket.LastImplementedSha ?? "–")</code></dd>
+        <dt class="col-sm-3">Integrated commit</dt>
+        <dd class="col-sm-9"><code>@(_ticket.IntegratedCommitSha ?? "–")</code></dd>
+        <dt class="col-sm-3">Blocked by</dt>
+        <dd class="col-sm-9" data-testid="ticket-blockers">
+            @if (_blockers.Count == 0)
+            {
+                <span class="text-muted">nothing</span>
+            }
+            @foreach (TicketBlocker blocker in _blockers)
+            {
+                <span class="me-2 @(blocker.IsSatisfied ? "text-success" : "")">
+                    <a href="/tickets/@blocker.TicketRunId">@(blocker.Issue is { } issue ? $"#{issue}" : blocker.TicketRunId)</a> (@(blocker.Status?.ToString() ?? "unknown"))
+                </span>
+            }
+        </dd>
+    </dl>
+
+    <RunControlsArea Scope="ticket run" />
+
+    <StepsTable Steps="_steps" Models="_models" />
+    <TicketFindingsPanel Steps="_steps" />
+    <SagaCheckpointTimeline Saga="_saga" />
+}
+
+@code {
+    private TicketRunView? _ticket;
+    private IReadOnlyList<TicketBlocker> _blockers = [];
+    private IReadOnlyList<StepRunView> _steps = [];
+    private IReadOnlyDictionary<AgentRole, string> _models = new Dictionary<AgentRole, string>();
+    private SagaCheckpointView? _saga;
+
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    protected override bool IsRelevant(LiveEventView view) => RunEventSubscription.Concerns(view, _ticket?.SpecRunId);
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        var queries = ScopedServices.GetRequiredService<IRunQueries>();
+        if (ApiIds.TicketRun(Id) is not { } ticketId || await queries.GetTicketRunAsync(ticketId, cancellationToken) is not { } ticket)
+        {
+            IsNotFound = true;
+            _ticket = null;
+            return;
+        }
+
+        IsNotFound = false;
+        _ticket = ticket;
+        var siblings = await queries.ListTicketRunsAsync(new RunId(ticket.SpecRunId), cancellationToken);
+        _blockers = TicketDagLayout.Build(siblings).FirstOrDefault(row => row.Ticket.Id == ticket.Id)?.Blockers ?? [];
+        _steps = await queries.ListStepsAsync(ticketId, cancellationToken);
+        _saga = (await SagaCheckpointView.LoadAsync(ScopedServices.GetRequiredService<IIntegrationSagaRepository>(), [ticket], cancellationToken))
+            .GetValueOrDefault(ticket.Id);
+
+        if (await queries.GetSpecRunAsync(new RunId(ticket.SpecRunId), cancellationToken) is { } spec)
+        {
+            _models = await RoleModels.LoadAsync(ScopedServices.GetRequiredService<ISettingsManager>(), spec.RepositoryId, cancellationToken);
+        }
+    }
+}

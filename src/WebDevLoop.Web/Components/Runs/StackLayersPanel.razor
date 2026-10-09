@@ -1,0 +1,34 @@
+@using WebDevLoop.Core.Queries
+
+<section class="my-3" data-testid="stack-layers">
+    <h2 class="h5">Pull request stack</h2>
+    @if (Layers.Count == 0)
+    {
+        <p class="text-muted">No stack layers yet.</p>
+    }
+    else
+    {
+        <table class="table table-sm">
+            <thead><tr><th>#</th><th>Pull request</th><th>Branch</th><th>Base</th><th>Commit</th><th>Draft</th></tr></thead>
+            <tbody>
+                @foreach (StackLayerView layer in Layers.OrderBy(layer => layer.Position))
+                {
+                    <tr data-testid="stack-layer-@layer.Position">
+                        <td>@layer.Position</td>
+                        <td>#@layer.PullRequestNumber@(layer.StackNumber is { } stack ? $" (stack {stack})" : "")</td>
+                        <td><code>@layer.BranchName</code></td>
+                        <td><code>@layer.BaseBranch</code></td>
+                        <td><code>@Short(layer.CommitSha)</code></td>
+                        <td>@(layer.IsDraft ? "draft" : "ready")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StackLayerView> Layers { get; set; } = [];
+
+    private static string Short(string sha) => sha.Length > 8 ? sha[..8] : sha;
+}

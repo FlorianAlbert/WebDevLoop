@@ -1,0 +1,7 @@
+<span class="badge @StatusStyles.BadgeClass(Status)" @attributes="AdditionalAttributes">@Status</span>
+
+@code {
+    [Parameter, EditorRequired] public string Status { get; set; } = string.Empty;
+
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

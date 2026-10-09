@@ -56,6 +56,9 @@ public sealed class GitWorkspace : IGitWorkspace
     public Task<bool> IsAncestorAsync(GitRepositoryLocation repo, CommitSha ancestor, CommitSha descendant, CancellationToken cancellationToken) =>
         WithRepositoryAsync(repo, git => GitRefs.IsAncestor(git, ancestor, descendant), cancellationToken);
 
+    public Task<CommitSha?> MergeBaseAsync(GitRepositoryLocation repo, CommitSha first, CommitSha second, CancellationToken cancellationToken) =>
+        WithRepositoryAsync(repo, git => GitRefs.MergeBase(git, first, second), cancellationToken);
+
     public Task<RefUpdateResult> UpdateBranchAsync(
         GitRepositoryLocation repo,
         BranchName branch,

@@ -141,6 +141,44 @@ public sealed class GitWorkspaceMergeTests : IAsyncLifetime
             _workspace.MergeIntoWorktreeAsync(ticket with { Branch = Ticket2 }, _sandbox.InitialCommit, "merge", CancellationToken.None));
     }
 
+    [Fact]
+    public async Task merge_base_is_the_integration_commit_last_merged_into_the_ticket_after_the_tip_moved_on()
+    {
+        CommitSha firstLayer = await IntegrateAsync(Ticket2, "t-2", "other.txt", _sandbox.InitialCommit);
+        TicketWorktree ticket = await PrepareAsync(Ticket1, "t-1", _sandbox.InitialCommit);
+        CommitSha ticketTip = GitSandbox.CommitInWorktree(ticket.Path, new Dictionary<string, string> { ["mine.txt"] = "m" }, "mine");
+        CommitSha merged = (await _workspace.MergeIntoWorktreeAsync(ticket with { Head = ticketTip }, firstLayer, "Merge integration", CancellationToken.None)).Commit!.Value;
+        CommitSha movedTip = await IntegrateAsync(new BranchName("webdevloop/run-1/t-3"), "t-3", "third.txt", firstLayer);
+
+        CommitSha? mergeBase = await _workspace.MergeBaseAsync(_sandbox.Location, merged, movedTip, CancellationToken.None);
+
+        Assert.Equal(firstLayer, mergeBase);
+    }
+
+    [Fact]
+    public async Task merge_base_of_a_commit_and_its_descendant_is_the_commit()
+    {
+        CommitSha layer = await IntegrateAsync(Ticket2, "t-2", "other.txt", _sandbox.InitialCommit);
+
+        Assert.Equal(_sandbox.InitialCommit, await _workspace.MergeBaseAsync(_sandbox.Location, layer, _sandbox.InitialCommit, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task merge_base_with_an_unknown_commit_is_null()
+    {
+        CommitSha unknown = new(new string('f', 40));
+
+        Assert.Null(await _workspace.MergeBaseAsync(_sandbox.Location, _sandbox.InitialCommit, unknown, CancellationToken.None));
+    }
+
+    /// <summary>A ticket branch squashed onto <paramref name="onto"/>; the returned layer is not yet the integration ref.</summary>
+    private async Task<CommitSha> IntegrateAsync(BranchName branch, string directory, string file, CommitSha onto)
+    {
+        TicketWorktree worktree = await PrepareAsync(branch, directory, onto);
+        CommitSha tip = GitSandbox.CommitInWorktree(worktree.Path, new Dictionary<string, string> { [file] = file }, file);
+        return (await _workspace.CreateSquashCommitAsync(_sandbox.Location, new SquashRequest(tip, onto, file), CancellationToken.None)).Commit!.Value;
+    }
+
     private Task<TicketWorktree> PrepareAsync(BranchName branch, string directory, CommitSha start) =>
         _workspace.PrepareWorktreeAsync(_sandbox.Location, new WorktreeSpec(branch, start, _sandbox.WorktreePath(directory)), CancellationToken.None);
 

@@ -17,6 +17,9 @@ public interface IGitWorkspace
 
     Task<bool> IsAncestorAsync(GitRepositoryLocation repo, CommitSha ancestor, CommitSha descendant, CancellationToken cancellationToken);
 
+    /// <summary>The best common ancestor of two commits, or null when they share no history or one does not exist.</summary>
+    Task<CommitSha?> MergeBaseAsync(GitRepositoryLocation repo, CommitSha first, CommitSha second, CancellationToken cancellationToken);
+
     /// <summary>Compare-and-swap on a local branch; a null <paramref name="expectedPriorTip"/> means the branch must not exist yet.</summary>
     Task<RefUpdateResult> UpdateBranchAsync(
         GitRepositoryLocation repo,

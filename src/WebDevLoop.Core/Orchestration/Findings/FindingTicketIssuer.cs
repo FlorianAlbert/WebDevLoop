@@ -6,11 +6,11 @@ namespace WebDevLoop.Core.Orchestration.Findings;
 
 /// <summary>
 /// Workflow steps 10 and 12: turns structured parent-review or tester findings into finding tickets — sub-issues of the
-/// spec plus <see cref="TicketRun"/>s that the normal ticket flow picks up — with blocking relations where the findings
-/// indicate them (see <see cref="FindingDependencyPlanner"/>). Idempotent per normalized fingerprint: an issuance record
-/// is saved before the issue is created and completed together with the ticket run afterwards, so a restart in between
-/// inspects the spec's sub-issues for the embedded fingerprint instead of creating the issue again, and a finding reported
-/// again later reuses its ticket. Blocking relations that would close a dependency cycle are rejected.
+/// spec plus <see cref="TicketRun"/>s that the normal ticket flow picks up — with blocking relations where the reporter
+/// stated them in the findings' <c>blocked_by</c> (see <see cref="FindingDependencyPlanner"/>). Idempotent per normalized
+/// fingerprint: an issuance record is saved before the issue is created and completed together with the ticket run
+/// afterwards, so a restart in between inspects the spec's sub-issues for the embedded fingerprint instead of creating the
+/// issue again, and a finding reported again later reuses its ticket. Blocking relations that would close a dependency cycle are rejected.
 /// </summary>
 public sealed class FindingTicketIssuer(
     ITicketRunRepository ticketRuns,
@@ -24,10 +24,10 @@ public sealed class FindingTicketIssuer(
     {
         ArgumentNullException.ThrowIfNull(spec);
         ArgumentNullException.ThrowIfNull(findings);
-        PlannedFinding[] planned = findings
+        PlannedFinding[] reported = findings
             .Select(finding => new PlannedFinding(FindingFingerprints.Compute(spec.Id, finding.SourceKind, finding.Finding), finding))
-            .DistinctBy(finding => finding.Fingerprint)
             .ToArray();
+        PlannedFinding[] planned = reported.DistinctBy(finding => finding.Fingerprint).ToArray();
         if (await PlanAsync(spec, planned, cancellationToken) is not { } newlyPlanned)
         {
             return FindingIssuanceResult.ConcurrencyConflict;
@@ -44,7 +44,7 @@ public sealed class FindingTicketIssuer(
             tickets.Add(ticket);
         }
 
-        return await LinkAsync(spec, planned, tickets, cancellationToken);
+        return await LinkAsync(spec, reported, tickets, cancellationToken);
     }
 
     /// <summary>Saves the pre-creation issuance record of every finding not issued before.</summary>
@@ -104,14 +104,14 @@ public sealed class FindingTicketIssuer(
         return issue;
     }
 
-    private async Task<FindingIssuanceResult> LinkAsync(SpecRun spec, PlannedFinding[] planned, List<FindingTicket> tickets, CancellationToken cancellationToken)
+    private async Task<FindingIssuanceResult> LinkAsync(SpecRun spec, PlannedFinding[] reported, List<FindingTicket> tickets, CancellationToken cancellationToken)
     {
         Dictionary<FindingFingerprint, FindingTicket> byFingerprint = tickets.ToDictionary(ticket => ticket.Fingerprint);
         Dictionary<TicketRunId, TicketRun> runs = (await ticketRuns.ListBySpecRunAsync(spec.Id, cancellationToken)).ToDictionary(ticket => ticket.Id);
         List<DependencyEdge<TicketRunId>> edges = (await ticketRuns.ListDependenciesAsync(spec.Id, cancellationToken)).Select(edge => edge.ToEdge()).ToList();
         var added = new List<DependencyEdge<TicketRunId>>();
         var rejected = new List<DependencyEdge<TicketRunId>>();
-        foreach (DependencyEdge<FindingFingerprint> relation in FindingDependencyPlanner.Plan(planned.Select(finding => (finding.Fingerprint, finding.Source.Finding)).ToArray()))
+        foreach (DependencyEdge<FindingFingerprint> relation in FindingDependencyPlanner.Plan(reported.Select(finding => (finding.Fingerprint, finding.Source)).ToArray()))
         {
             (FindingTicket blocked, FindingTicket blocking) = (byFingerprint[relation.Blocked], byFingerprint[relation.Blocking]);
             var candidate = new DependencyEdge<TicketRunId>(blocked.TicketRunId, blocking.TicketRunId);

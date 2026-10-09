@@ -62,6 +62,19 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
     public Task<bool> IsAncestorAsync(GitRepositoryLocation repo, CommitSha ancestor, CommitSha descendant, CancellationToken cancellationToken) =>
         Task.FromResult(Reachable(descendant).Contains(ancestor));
 
+    public Task<CommitSha?> MergeBaseAsync(GitRepositoryLocation repo, CommitSha first, CommitSha second, CancellationToken cancellationToken)
+    {
+        if (!_commits.ContainsKey(first) || !_commits.ContainsKey(second))
+        {
+            return Task.FromResult<CommitSha?>(null);
+        }
+
+        HashSet<CommitSha> common = Reachable(first);
+        common.IntersectWith(Reachable(second));
+        HashSet<CommitSha> superseded = common.SelectMany(sha => _commits[sha].Parents).SelectMany(Reachable).ToHashSet();
+        return Task.FromResult(common.Where(sha => !superseded.Contains(sha)).Order().Select(sha => (CommitSha?)sha).FirstOrDefault());
+    }
+
     public Task<RefUpdateResult> UpdateBranchAsync(
         GitRepositoryLocation repo,
         BranchName branch,

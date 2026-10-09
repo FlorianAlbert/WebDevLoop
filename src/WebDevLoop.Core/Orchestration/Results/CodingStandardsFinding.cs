@@ -13,7 +13,10 @@ public sealed record CodingStandardsFinding : Finding
         string evidence,
         string rule,
         string description,
-        string recommendation)
+        string recommendation,
+        string? id = null,
+        IReadOnlyList<string>? blockedBy = null)
+        : base(id, blockedBy)
     {
         Severity = severity;
         File = ReportGuard.RequireText(file, nameof(file));

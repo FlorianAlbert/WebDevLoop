@@ -51,6 +51,8 @@ Report an issue for behaviour that contradicts the parent spec, or that a user w
 - `steps_to_reproduce`: exact, numbered user actions starting from {app_url};
 - `expected` and `actual` behaviour;
 - `evidence`: paths of the screenshots, snapshots and log excerpts you saved, plus key console or network lines.
+- `id`: a short identifier that is unique within this report (for example `F1`), only needed so that other issues can name this one in `blocked_by`;
+- `blocked_by` (optional): the `id`s of issues in this report that must be fixed first because the failure cannot be fixed or reproduced before theirs is fixed. Leave it out for independent issues, which are fixed in parallel; never use it for a cycle.
 
 ## Rules
 

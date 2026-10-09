@@ -14,7 +14,10 @@ public sealed record TestIssue : Finding
         IReadOnlyList<string> stepsToReproduce,
         string expected,
         string actual,
-        IReadOnlyList<string> evidence)
+        IReadOnlyList<string> evidence,
+        string? id = null,
+        IReadOnlyList<string>? blockedBy = null)
+        : base(id, blockedBy)
     {
         Title = ReportGuard.RequireText(title, nameof(title));
         Severity = severity;

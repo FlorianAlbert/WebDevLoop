@@ -60,8 +60,10 @@ Report a finding for every missing, incorrect or out-of-scope behaviour. Every f
 - `spec_reference`: the quoted line of the specification it concerns (for out-of-scope behaviour, the closest relevant line or "not requested");
 - `file` and `line` evidence for the implementation, or for missing behaviour, the place where it is expected;
 - `description` of expected versus actual behaviour, and a concrete `recommendation`.
+- `id`: a short identifier that is unique within this report (for example `F1`), only needed so that other findings can name this one in `blocked_by`;
+- `blocked_by` (optional): the `id`s of findings in this report that must be fixed first because this fix builds on theirs or edits the same code and would otherwise conflict with it. Leave it out for independent findings, which are fixed in parallel; never use it for a cycle.
 
-In scope `parent_spec`, each finding becomes a new ticket in the issue tracker. Write it so that it can be implemented on its own, and name the tickets it depends on, if any.
+In scope `parent_spec`, each finding becomes a new ticket in the issue tracker. Write it so that it can be implemented on its own, and express the findings it depends on in `blocked_by`.
 
 The verdict is `clean` only if there are no findings.
 

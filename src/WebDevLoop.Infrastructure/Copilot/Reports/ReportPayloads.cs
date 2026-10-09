@@ -45,9 +45,11 @@ internal sealed record CodingStandardsFindingPayload(
     string Evidence,
     string Rule,
     string Description,
-    string Recommendation)
+    string Recommendation,
+    string? Id = null,
+    IReadOnlyList<string>? BlockedBy = null)
 {
-    public CodingStandardsFinding ToDomain() => new(Severity, File, Line, Evidence, Rule, Description, Recommendation);
+    public CodingStandardsFinding ToDomain() => new(Severity, File, Line, Evidence, Rule, Description, Recommendation, Id, BlockedBy);
 }
 
 internal sealed record SpecificationFindingPayload(
@@ -56,9 +58,11 @@ internal sealed record SpecificationFindingPayload(
     string File,
     int? Line,
     string Description,
-    string Recommendation)
+    string Recommendation,
+    string? Id = null,
+    IReadOnlyList<string>? BlockedBy = null)
 {
-    public SpecificationFinding ToDomain() => new(Kind, SpecReference, File, Line, Description, Recommendation);
+    public SpecificationFinding ToDomain() => new(Kind, SpecReference, File, Line, Description, Recommendation, Id, BlockedBy);
 }
 
 internal sealed record CodingStandardsReviewPayload(
@@ -106,9 +110,11 @@ internal sealed record TestIssuePayload(
     IReadOnlyList<string> StepsToReproduce,
     string Expected,
     string Actual,
-    IReadOnlyList<string> Evidence)
+    IReadOnlyList<string> Evidence,
+    string? Id = null,
+    IReadOnlyList<string>? BlockedBy = null)
 {
-    public TestIssue ToDomain() => new(Title, Severity, SpecReference, StepsToReproduce, Expected, Actual, Evidence);
+    public TestIssue ToDomain() => new(Title, Severity, SpecReference, StepsToReproduce, Expected, Actual, Evidence, Id, BlockedBy);
 }
 
 internal sealed record TestPayload(

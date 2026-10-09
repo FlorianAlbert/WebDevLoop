@@ -43,24 +43,84 @@ public sealed class FindingTicketIssuerTests
     }
 
     [Fact]
-    public async Task Findings_in_the_same_file_are_serialized_by_one_blocking_relation()
+    public async Task Findings_in_the_same_file_stay_independent_without_blocked_by()
     {
         SeededSpec spec = await SeedAsync();
 
         FindingIssuanceResult result = await _fixture.IssueAsync(
             spec.Id,
             FindingsFixture.ParentReview(FindingsFixture.MagicNumber("src/Feature.cs")),
-            FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", "src/Other.cs")),
             FindingsFixture.ParentReview(FindingsFixture.Missing("Retries are missing.", "src/Feature.cs", 40)));
 
-        Assert.Equal(3, _fixture.Issues.CreatedDrafts.Count);
-        (FindingTicket first, FindingTicket other, FindingTicket third) = (result.Tickets[0], result.Tickets[1], result.Tickets[2]);
-        var expected = new DependencyEdge<TicketRunId>(third.TicketRunId, first.TicketRunId);
+        Assert.Equal(2, _fixture.Issues.CreatedDrafts.Count);
+        Assert.Empty(result.AddedDependencies);
+        Assert.Empty(_fixture.Issues.BlockedByCalls);
+        Assert.Empty(_fixture.FindingDependencies(spec.Id));
+    }
+
+    [Fact]
+    public async Task Blocked_by_creates_one_blocking_relation_between_the_named_findings()
+    {
+        SeededSpec spec = await SeedAsync();
+
+        FindingIssuanceResult result = await _fixture.IssueAsync(
+            spec.Id,
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Retries are missing.", "src/Other.cs", id: "F2", blockedBy: "F1")),
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", "src/Feature.cs", id: "F1")),
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Timeouts are missing.", "src/Feature.cs", 40, id: "F3")));
+
+        (FindingTicket blocked, FindingTicket blocking, FindingTicket independent) = (result.Tickets[0], result.Tickets[1], result.Tickets[2]);
+        var expected = new DependencyEdge<TicketRunId>(blocked.TicketRunId, blocking.TicketRunId);
         Assert.Equal([expected], result.AddedDependencies);
-        Assert.Equal([(third.Issue.Number, first.Issue.Number)], _fixture.Issues.BlockedByCalls.Select(call => (call.Blocked.Number, call.Blocking.Number)));
+        Assert.Equal([(blocked.Issue.Number, blocking.Issue.Number)], _fixture.Issues.BlockedByCalls.Select(call => (call.Blocked.Number, call.Blocking.Number)));
         TicketDependency dependency = Assert.Single(_fixture.FindingDependencies(spec.Id));
         Assert.Equal(expected, dependency.ToEdge());
-        Assert.DoesNotContain(_fixture.Execution.Db.TicketDependencies, edge => edge.BlockedTicketRunId == other.TicketRunId || edge.BlockingTicketRunId == other.TicketRunId);
+        Assert.DoesNotContain(_fixture.Execution.Db.TicketDependencies, edge => edge.BlockedTicketRunId == independent.TicketRunId || edge.BlockingTicketRunId == independent.TicketRunId);
+    }
+
+    [Fact]
+    public async Task Blocked_by_ids_are_scoped_to_the_report_that_assigned_them()
+    {
+        SeededSpec spec = await SeedAsync();
+
+        FindingIssuanceResult result = await _fixture.IssueAsync(
+            spec.Id,
+            FindingsFixture.ParentReview(FindingsFixture.MagicNumber(id: "F1")),
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", id: "F1")),
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Retries are missing.", id: "F2", blockedBy: "F1")));
+
+        Assert.Equal([new DependencyEdge<TicketRunId>(result.Tickets[2].TicketRunId, result.Tickets[1].TicketRunId)], result.AddedDependencies);
+    }
+
+    [Fact]
+    public async Task Blocked_by_cycle_between_findings_is_rejected()
+    {
+        SeededSpec spec = await SeedAsync();
+
+        FindingIssuanceResult result = await _fixture.IssueAsync(
+            spec.Id,
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", id: "A", blockedBy: "B")),
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Retries are missing.", "src/Other.cs", id: "B", blockedBy: "A")));
+
+        Assert.Equal([new DependencyEdge<TicketRunId>(result.Tickets[0].TicketRunId, result.Tickets[1].TicketRunId)], result.AddedDependencies);
+        Assert.Equal([new DependencyEdge<TicketRunId>(result.Tickets[1].TicketRunId, result.Tickets[0].TicketRunId)], result.RejectedDependencies);
+        Assert.Single(_fixture.FindingDependencies(spec.Id));
+        Assert.Single(_fixture.Issues.BlockedByCalls);
+    }
+
+    [Fact]
+    public async Task Blocked_by_naming_a_repeated_finding_resolves_to_its_single_ticket()
+    {
+        SeededSpec spec = await SeedAsync();
+
+        FindingIssuanceResult result = await _fixture.IssueAsync(
+            spec.Id,
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", id: "F1")),
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", id: "F2")),
+            FindingsFixture.ParentReview(FindingsFixture.Missing("Retries are missing.", "src/Other.cs", id: "F3", blockedBy: "F2")));
+
+        Assert.Equal(2, result.Tickets.Count);
+        Assert.Equal([new DependencyEdge<TicketRunId>(result.Tickets[1].TicketRunId, result.Tickets[0].TicketRunId)], result.AddedDependencies);
     }
 
     [Fact]
@@ -121,18 +181,19 @@ public sealed class FindingTicketIssuerTests
     }
 
     [Fact]
-    public async Task Blocking_relation_that_would_close_a_cycle_is_rejected()
+    public async Task Blocking_relation_that_would_close_a_cycle_with_an_earlier_report_is_rejected()
     {
         SeededSpec spec = await SeedAsync();
-        SourcedFinding first = FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", line: 10));
-        SourcedFinding second = FindingsFixture.ParentReview(FindingsFixture.Missing("Retries are missing.", line: 40));
+        SourcedFinding first = FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", line: 10, id: "F1"));
+        SourcedFinding second = FindingsFixture.ParentReview(FindingsFixture.Missing("Retries are missing.", line: 40, id: "F2", blockedBy: "F1"));
         FindingIssuanceResult initial = await _fixture.IssueAsync(spec.Id, first, second);
         Assert.Single(initial.AddedDependencies);
+        SourcedFinding reversed = FindingsFixture.ParentReview(FindingsFixture.Missing("Errors are not logged.", line: 10, id: "F1", blockedBy: "F2"));
 
-        FindingIssuanceResult reordered = await _fixture.IssueAsync(spec.Id, second, first);
+        FindingIssuanceResult later = await _fixture.IssueAsync(spec.Id, reversed, second);
 
-        Assert.Empty(reordered.AddedDependencies);
-        DependencyEdge<TicketRunId> rejected = Assert.Single(reordered.RejectedDependencies);
+        Assert.Empty(later.AddedDependencies);
+        DependencyEdge<TicketRunId> rejected = Assert.Single(later.RejectedDependencies);
         Assert.Equal(new DependencyEdge<TicketRunId>(initial.Tickets[0].TicketRunId, initial.Tickets[1].TicketRunId), rejected);
         Assert.Single(_fixture.FindingDependencies(spec.Id));
         Assert.Single(_fixture.Issues.BlockedByCalls);

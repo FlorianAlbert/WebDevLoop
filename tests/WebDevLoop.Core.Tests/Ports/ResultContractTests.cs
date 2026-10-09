@@ -20,6 +20,71 @@ public sealed class ResultContractTests
         "Saving an empty title crashes the page", TestIssueSeverity.Major, "> Titles are required",
         ["Open /todos", "Click Save with an empty title"], "Validation message", "Unhandled error page", ["evidence/save.png"]);
 
+    private static SpecificationFinding SpecFindingWith(string? id, params string[] blockedBy) => new(
+        SpecificationFindingKind.Missing, "> Users can export as CSV", "src/Export/ExportController.cs", null,
+        "CSV export is missing.", "Add a CSV endpoint.", id, blockedBy);
+
+    [Fact]
+    public void findings_have_no_id_and_no_dependencies_unless_reported()
+    {
+        Assert.Null(SpecFinding.Id);
+        Assert.Empty(SpecFinding.BlockedBy);
+        Assert.Null(Issue.Id);
+        Assert.Empty(Issue.BlockedBy);
+    }
+
+    [Fact]
+    public void finding_ids_and_dependencies_are_trimmed_and_kept_on_every_finding_kind()
+    {
+        var issue = new TestIssue(
+            "Saving crashes", TestIssueSeverity.Major, null, ["Open /todos"], "Validation", "Crash", [], " T2 ", [" T1 "]);
+        var standards = new CodingStandardsFinding(
+            CodingStandardsSeverity.Blocking, "src/a.cs", 1, "x", "rule", "Bad.", "Fix.", "C1", ["C2"]);
+
+        Assert.Equal("T2", issue.Id);
+        Assert.Equal(["T1"], issue.BlockedBy);
+        Assert.Equal("C1", standards.Id);
+        Assert.Equal(["C2"], standards.BlockedBy);
+    }
+
+    [Fact]
+    public void a_finding_cannot_be_blocked_by_itself_or_by_a_blank_id()
+    {
+        Assert.Throws<InvalidAgentReportException>(() => SpecFindingWith("F1", "F1"));
+        Assert.Throws<InvalidAgentReportException>(() => SpecFindingWith("F1", " "));
+    }
+
+    [Fact]
+    public void review_findings_may_only_be_blocked_by_findings_of_the_same_report()
+    {
+        SpecificationFinding blocker = SpecFindingWith("F1");
+        SpecificationFinding blocked = SpecFindingWith("F2", "F1");
+
+        ReviewReport report = ReviewReport.IssuesFound(FindingAxis.Specification, "2 gaps", [blocker, blocked]);
+
+        Assert.Equal(["F1"], report.Findings[1].BlockedBy);
+        Assert.Throws<InvalidAgentReportException>(() => ReviewReport.IssuesFound(FindingAxis.Specification, "x", [SpecFindingWith("F2", "F9")]));
+    }
+
+    [Fact]
+    public void finding_ids_must_be_unique_within_a_report()
+    {
+        Assert.Throws<InvalidAgentReportException>(() =>
+            ReviewReport.IssuesFound(FindingAxis.Specification, "x", [SpecFindingWith("F1"), SpecFindingWith("f1")]));
+    }
+
+    [Fact]
+    public void test_issues_may_only_be_blocked_by_issues_of_the_same_report()
+    {
+        TestIssue Make(string id, params string[] blockedBy) =>
+            new("Crash " + id, TestIssueSeverity.Major, null, ["Open /"], "Page", "Crash", [], id, blockedBy);
+
+        var report = new TestReport(TestVerdict.IssuesFound, "2 bugs", [], [Make("T1"), Make("T2", "T1")]);
+
+        Assert.Equal(["T1"], report.Issues[1].BlockedBy);
+        Assert.Throws<InvalidAgentReportException>(() => new TestReport(TestVerdict.IssuesFound, "x", [], [Make("T2", "T1")]));
+    }
+
     [Fact]
     public void clean_review_rejects_findings()
     {

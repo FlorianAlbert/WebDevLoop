@@ -62,6 +62,13 @@ internal static class GitRefs
         return older.Id == newer.Id || repo.ObjectDatabase.FindMergeBase(older, newer)?.Id == older.Id;
     }
 
+    public static CommitSha? MergeBase(Repository repo, CommitSha first, CommitSha second)
+    {
+        Commit? left = repo.Lookup<Commit>(first.Value);
+        Commit? right = repo.Lookup<Commit>(second.Value);
+        return left is null || right is null || repo.ObjectDatabase.FindMergeBase(left, right) is not { } common ? null : ToSha(common);
+    }
+
     public static IReadOnlyList<string> ChangedFiles(Repository repo, CommitSha from, CommitSha to)
     {
         TreeChanges changes = repo.Diff.Compare<TreeChanges>(RequireCommit(repo, from).Tree, RequireCommit(repo, to).Tree);

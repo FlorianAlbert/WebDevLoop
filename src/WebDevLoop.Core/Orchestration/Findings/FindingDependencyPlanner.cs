@@ -1,43 +1,43 @@
 using WebDevLoop.Core.Domain;
-using WebDevLoop.Core.Orchestration.Results;
 
 namespace WebDevLoop.Core.Orchestration.Findings;
 
 /// <summary>
-/// Derives blocking relations between finding tickets from the findings' structured locations: findings in the same file
-/// would edit the same code in parallel worktrees and conflict at squash time, so each one is blocked by the previous
-/// finding (in report order) in that file. Findings without a file location (tester issues) stay independent.
+/// Derives blocking relations between finding tickets from the dependencies the reporter stated: a finding's
+/// <c>blocked_by</c> names the <c>id</c>s of findings in the same report (the same reviewer or tester step). Findings
+/// without <c>blocked_by</c> stay independent; unknown ids are ignored, as the report contracts already reject them.
 /// </summary>
 public static class FindingDependencyPlanner
 {
-    /// <param name="findings">Distinct findings in report order, keyed by fingerprint.</param>
-    public static IReadOnlyList<DependencyEdge<FindingFingerprint>> Plan(IReadOnlyList<(FindingFingerprint Fingerprint, Finding Finding)> findings)
+    /// <param name="findings">All reported findings in report order, keyed by fingerprint; repeated findings share a fingerprint.</param>
+    public static IReadOnlyList<DependencyEdge<FindingFingerprint>> Plan(IReadOnlyList<(FindingFingerprint Fingerprint, SourcedFinding Source)> findings)
     {
         ArgumentNullException.ThrowIfNull(findings);
-        var lastInFile = new Dictionary<string, FindingFingerprint>(StringComparer.OrdinalIgnoreCase);
-        var edges = new List<DependencyEdge<FindingFingerprint>>();
-        foreach ((FindingFingerprint fingerprint, Finding finding) in findings)
+        var byReportedId = new Dictionary<(StepRunId Step, string Id), FindingFingerprint>();
+        foreach ((FindingFingerprint fingerprint, SourcedFinding source) in findings)
         {
-            if (FileOf(finding) is not { } file)
+            if (source.Finding.Id is { } id)
             {
-                continue;
+                byReportedId.TryAdd((source.SourceStepRunId, id.ToUpperInvariant()), fingerprint);
             }
+        }
 
-            if (lastInFile.TryGetValue(file, out FindingFingerprint previous))
+        var edges = new List<DependencyEdge<FindingFingerprint>>();
+        foreach ((FindingFingerprint blocked, SourcedFinding source) in findings)
+        {
+            foreach (string blockerId in source.Finding.BlockedBy)
             {
-                edges.Add(new DependencyEdge<FindingFingerprint>(fingerprint, previous));
+                if (byReportedId.TryGetValue((source.SourceStepRunId, blockerId.ToUpperInvariant()), out FindingFingerprint blocking) && blocking != blocked)
+                {
+                    var edge = new DependencyEdge<FindingFingerprint>(blocked, blocking);
+                    if (!edges.Contains(edge))
+                    {
+                        edges.Add(edge);
+                    }
+                }
             }
-
-            lastInFile[file] = fingerprint;
         }
 
         return edges;
     }
-
-    private static string? FileOf(Finding finding) => finding switch
-    {
-        CodingStandardsFinding standards => FindingPaths.Normalize(standards.File),
-        SpecificationFinding specification => FindingPaths.Normalize(specification.File),
-        _ => null,
-    };
 }

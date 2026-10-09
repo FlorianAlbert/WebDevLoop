@@ -5,7 +5,10 @@ using WebDevLoop.Core.Orchestration.Results;
 
 namespace WebDevLoop.Core.Orchestration.ReviewLoop;
 
-/// <summary>Renders <c>{review_findings_json}</c>: the findings to fix, each with an app-assigned id (<c>cs-1</c>, <c>spec-1</c>, …).</summary>
+/// <summary>
+/// Renders <c>{review_findings_json}</c>: the findings to fix, each with an app-assigned id (<c>cs-1</c>, <c>spec-1</c>, …).
+/// The reviewer's own ids and dependencies only matter for parent-review tickets and are left out.
+/// </summary>
 internal static class ReviewFindingsJson
 {
     private static readonly IReadOnlyDictionary<FindingAxis, string> IdPrefixes = new Dictionary<FindingAxis, string>
@@ -19,7 +22,7 @@ internal static class ReviewFindingsJson
         FindingRecord[] records = findings
             .GroupBy(finding => finding.Axis)
             .OrderBy(group => group.Key)
-            .SelectMany(group => group.Select((finding, index) => FindingRecord.From(finding, IdFor(group.Key, index))))
+            .SelectMany(group => group.Select((finding, index) => FindingRecord.From(finding, IdFor(group.Key, index)) with { ReportedId = null, BlockedBy = null }))
             .ToArray();
         return JsonSerializer.Serialize(records, ReviewJson.Indented);
     }

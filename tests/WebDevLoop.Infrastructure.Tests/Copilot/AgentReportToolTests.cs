@@ -39,7 +39,8 @@ public sealed class AgentReportToolTests
         Assert.Equal(["passed", "failed", "not_run"], EnumValues(Property(scenario, "outcome")));
         Assert.Equal(["name", "outcome"], RequiredNames(scenario));
         JsonElement issue = Items(Property(schema, "issues"));
-        Assert.Equal(["title", "severity", "spec_reference", "steps_to_reproduce", "expected", "actual", "evidence"], PropertyNames(issue));
+        Assert.Equal(["title", "severity", "spec_reference", "steps_to_reproduce", "expected", "actual", "evidence", "id", "blocked_by"], PropertyNames(issue));
+        Assert.Equal(["title", "severity", "spec_reference", "steps_to_reproduce", "expected", "actual", "evidence"], RequiredNames(issue));
         Assert.Equal(["critical", "major", "minor"], EnumValues(Property(issue, "severity")));
     }
 
@@ -67,8 +68,8 @@ public sealed class AgentReportToolTests
     }
 
     [Theory]
-    [InlineData(AgentRole.ReviewerCodingStandards, "coding_standards", new[] { "severity", "file", "line", "evidence", "rule", "description", "recommendation" })]
-    [InlineData(AgentRole.ReviewerSpecification, "specification", new[] { "kind", "spec_reference", "file", "line", "description", "recommendation" })]
+    [InlineData(AgentRole.ReviewerCodingStandards, "coding_standards", new[] { "severity", "file", "line", "evidence", "rule", "description", "recommendation", "id", "blocked_by" })]
+    [InlineData(AgentRole.ReviewerSpecification, "specification", new[] { "kind", "spec_reference", "file", "line", "description", "recommendation", "id", "blocked_by" })]
     public void review_report_schema_is_pinned_to_the_reviewer_axis(AgentRole role, string axis, string[] findingFields)
     {
         JsonElement schema = AgentReportToolFactory.For(role).ParametersSchema;
@@ -148,6 +149,56 @@ public sealed class AgentReportToolTests
         Assert.Equal(FindingAxis.CodingStandards, report.Axis);
         var finding = Assert.IsType<CodingStandardsFinding>(Assert.Single(report.Findings));
         Assert.Equal(12, finding.Line);
+    }
+
+    [Fact]
+    public void review_findings_carry_an_optional_id_and_blocked_by()
+    {
+        ReportParseResult result = Parse(AgentRole.ReviewerSpecification, """
+            {
+              "axis": "specification", "verdict": "issues_found", "summary": "Two gaps.",
+              "findings": [
+                { "kind": "missing", "spec_reference": "> CSV", "file": "src/A.cs", "line": null, "description": "No CSV.", "recommendation": "Add it.", "id": "F1" },
+                { "kind": "incorrect", "spec_reference": "> JSON", "file": "src/A.cs", "line": 3, "description": "Bad JSON.", "recommendation": "Fix it.", "id": "F2", "blocked_by": ["F1"] }
+              ]
+            }
+            """);
+
+        var report = Assert.IsType<ReviewReport>(result.Report);
+        Assert.Equal(["F1", "F2"], report.Findings.Select(finding => finding.Id));
+        Assert.Empty(report.Findings[0].BlockedBy);
+        Assert.Equal(["F1"], report.Findings[1].BlockedBy);
+    }
+
+    [Fact]
+    public void test_issues_carry_an_optional_id_and_blocked_by()
+    {
+        ReportParseResult result = Parse(AgentRole.Tester, """
+            {
+              "verdict": "issues_found", "summary": "Two bugs.", "scenarios": [],
+              "issues": [
+                { "title": "Login 500", "severity": "critical", "spec_reference": null, "steps_to_reproduce": ["Open /login"], "expected": "Dashboard", "actual": "500", "evidence": [], "id": "T1" },
+                { "title": "Logout fails", "severity": "major", "spec_reference": null, "steps_to_reproduce": ["Log out"], "expected": "Login", "actual": "500", "evidence": [], "blocked_by": ["T1"] }
+              ]
+            }
+            """);
+
+        var report = Assert.IsType<TestReport>(result.Report);
+        Assert.Equal(["T1"], report.Issues[1].BlockedBy);
+    }
+
+    [Fact]
+    public void blocked_by_naming_an_unknown_finding_is_rejected_with_a_reason()
+    {
+        ReportParseResult result = Parse(AgentRole.ReviewerSpecification, """
+            {
+              "axis": "specification", "verdict": "issues_found", "summary": "One gap.",
+              "findings": [{ "kind": "missing", "spec_reference": "> CSV", "file": "src/A.cs", "line": null, "description": "No CSV.", "recommendation": "Add it.", "blocked_by": ["F9"] }]
+            }
+            """);
+
+        Assert.Null(result.Report);
+        Assert.Contains("F9", result.Error, StringComparison.Ordinal);
     }
 
     [Theory]

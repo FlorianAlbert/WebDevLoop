@@ -81,6 +81,21 @@ public sealed class ParentSpecReviewRunnerTests
     }
 
     [Fact]
+    public async Task Reported_finding_dependencies_survive_the_persisted_review_and_become_blocking_relations()
+    {
+        SeededSpec spec = await _fixture.SeedParentReviewingAsync();
+        _fixture.SpecificationIssues(
+            FindingsFixture.Missing("Errors are not logged.", "src/Feature.cs", id: "F1"),
+            FindingsFixture.Missing("Retries are missing.", "src/Other.cs", id: "F2", blockedBy: "F1"));
+
+        ParentReviewResult result = await _fixture.RunAsync(spec.Id);
+
+        Assert.Equal(2, result.Tickets.Count);
+        TicketDependency dependency = Assert.Single(_fixture.Execution.Db.TicketDependencies, edge => edge.Source == DependencySource.CreatedFinding);
+        Assert.Equal((result.Tickets[1].TicketRunId, result.Tickets[0].TicketRunId), (dependency.BlockedTicketRunId, dependency.BlockingTicketRunId));
+    }
+
+    [Fact]
     public async Task Restart_after_github_issue_creation_but_before_db_completion_reuses_the_issue()
     {
         SeededSpec spec = await _fixture.SeedParentReviewingAsync();

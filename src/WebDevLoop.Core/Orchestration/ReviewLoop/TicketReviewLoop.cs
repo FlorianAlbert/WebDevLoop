@@ -115,8 +115,9 @@ public sealed class TicketReviewLoop(
     }
 
     /// <summary>
-    /// The newest integration commit the ticket branch contains, so the changed files are exactly the ticket's own changes.
-    /// The local integration ref is the freshest tip; older recorded tips cover a tip that advanced after the last merge.
+    /// The integration commit last merged into the ticket branch (the merge base with the integration tip), so the diff is
+    /// exactly the ticket's own changes even when the tip has moved on since. The local integration ref is the freshest
+    /// tip; the recorded tips cover a ref that is missing locally.
     /// </summary>
     private async Task<CommitSha?> DiffBaseAsync(ImplementationContext context, CommitSha head, CancellationToken cancellationToken)
     {
@@ -124,9 +125,9 @@ public sealed class TicketReviewLoop(
         CommitSha? localTip = await git.GetBranchTipAsync(context.Location, spec.IntegrationBranch, GitRefScope.Local, cancellationToken);
         foreach (CommitSha candidate in new[] { localTip, spec.IntegrationTipSha, spec.IntegrationBaseSha }.OfType<CommitSha>().Distinct())
         {
-            if (await git.IsAncestorAsync(context.Location, candidate, head, cancellationToken))
+            if (await git.MergeBaseAsync(context.Location, head, candidate, cancellationToken) is { } mergeBase)
             {
-                return candidate;
+                return mergeBase;
             }
         }
 

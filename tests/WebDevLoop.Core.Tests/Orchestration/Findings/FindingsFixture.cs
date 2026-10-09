@@ -34,11 +34,12 @@ internal sealed class FindingsFixture
     public static SourcedFinding ParentReview(Finding finding) =>
         new(StepKind.ParentReview, finding.Axis == FindingAxis.CodingStandards ? StandardsStep : SpecificationStep, finding);
 
-    public static SpecificationFinding Missing(string description, string file = "src/Feature.cs", int? line = null) =>
-        new(SpecificationFindingKind.Missing, "Errors must be logged.", file, line, description, "Implement it as specified.");
+    public static SpecificationFinding Missing(
+        string description, string file = "src/Feature.cs", int? line = null, string? id = null, params string[] blockedBy) =>
+        new(SpecificationFindingKind.Missing, "Errors must be logged.", file, line, description, "Implement it as specified.", id, blockedBy);
 
-    public static CodingStandardsFinding MagicNumber(string file = "src/Feature.cs") =>
-        new(CodingStandardsSeverity.Blocking, file, 12, "var delay = 42;", "CONTRIBUTING.md: no magic values", "Magic number 42 in Feature.", "Name the constant.");
+    public static CodingStandardsFinding MagicNumber(string file = "src/Feature.cs", string? id = null, params string[] blockedBy) =>
+        new(CodingStandardsSeverity.Blocking, file, 12, "var delay = 42;", "CONTRIBUTING.md: no magic values", "Magic number 42 in Feature.", "Name the constant.", id, blockedBy);
 
     public TicketRun Ticket(TicketRunId id) => Execution.Ticket(id);
 

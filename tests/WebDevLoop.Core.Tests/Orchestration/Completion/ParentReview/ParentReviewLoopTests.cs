@@ -17,8 +17,8 @@ public sealed class ParentReviewLoopTests
     {
         SeededSpec spec = await _fixture.SeedParentReviewingAsync();
         _fixture.SpecificationIssues(
-            FindingsFixture.Missing("Errors are not logged.", "src/Feature.cs", 10),
-            FindingsFixture.Missing("Retries are missing.", "src/Feature.cs", 40));
+            FindingsFixture.Missing("Errors are not logged.", "src/Feature.cs", 10, id: "F1"),
+            FindingsFixture.Missing("Retries are missing.", "src/Feature.cs", 40, id: "F2", blockedBy: "F1"));
 
         ParentReviewResult first = await _fixture.RunAsync(spec.Id);
         Assert.Equal(ParentReviewOutcome.FindingTicketsCreated, first.Outcome);

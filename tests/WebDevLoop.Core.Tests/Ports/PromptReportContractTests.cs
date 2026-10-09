@@ -37,6 +37,20 @@ public sealed partial class PromptReportContractTests
         }
     }
 
+    [Theory]
+    [InlineData("ReviewerCodingStandards.md")]
+    [InlineData("ReviewerSpecification.md")]
+    [InlineData("Tester.md")]
+    public void finding_sections_tell_agents_how_to_express_dependencies(string template)
+    {
+        string[] lines = File.ReadAllLines(Path.Combine(RepositoryRoot(), PromptDirectory, template));
+
+        string[] fields = Section(lines, FindingSectionPrefix).SelectMany(bullet => FieldNames(bullet)).ToArray();
+
+        Assert.Contains("id", fields);
+        Assert.Contains("blocked_by", fields);
+    }
+
     private static void AssertSectionMatches(string template, IReadOnlyList<string> bullets, Type? contract)
     {
         Assert.True(contract is not null, $"{template}: contract type is missing.");

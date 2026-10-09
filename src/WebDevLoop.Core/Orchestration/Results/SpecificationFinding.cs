@@ -13,7 +13,10 @@ public sealed record SpecificationFinding : Finding
         string file,
         int? line,
         string description,
-        string recommendation)
+        string recommendation,
+        string? id = null,
+        IReadOnlyList<string>? blockedBy = null)
+        : base(id, blockedBy)
     {
         Kind = kind;
         SpecReference = ReportGuard.RequireText(specReference, nameof(specReference));

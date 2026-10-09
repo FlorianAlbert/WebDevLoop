@@ -20,6 +20,9 @@ internal sealed class JournalingGitWorkspace(IGitWorkspace inner, ExternalCallJo
     public Task<bool> IsAncestorAsync(GitRepositoryLocation repo, CommitSha ancestor, CommitSha descendant, CancellationToken cancellationToken) =>
         inner.IsAncestorAsync(repo, ancestor, descendant, cancellationToken);
 
+    public Task<CommitSha?> MergeBaseAsync(GitRepositoryLocation repo, CommitSha first, CommitSha second, CancellationToken cancellationToken) =>
+        inner.MergeBaseAsync(repo, first, second, cancellationToken);
+
     public Task<RefUpdateResult> UpdateBranchAsync(
         GitRepositoryLocation repo,
         BranchName branch,

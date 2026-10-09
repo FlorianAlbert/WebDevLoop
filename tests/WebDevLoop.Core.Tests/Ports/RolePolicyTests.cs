@@ -94,6 +94,26 @@ public sealed class RolePolicyTests
     }
 
     [Fact]
+    public void tester_writes_evidence_only_into_the_notes_test_evidence_directory()
+    {
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Tester, Workspace);
+
+        Assert.True(policy.Allows(AgentCapability.WriteNotes));
+        Assert.True(policy.Paths.CanWrite($"{Notes}/{RoleCapabilityPolicies.TestEvidenceDirectoryName}/attempt-1/home.png"));
+        Assert.False(policy.Paths.CanWrite($"{Notes}/README.md"));
+        Assert.False(policy.Paths.CanWrite($"{Worktree}/src/a.cs"));
+        Assert.True(policy.Paths.CanRead($"{Notes}/README.md"));
+    }
+
+    [Fact]
+    public void tester_without_notes_directory_writes_nothing()
+    {
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Tester, new AgentWorkspace(Worktree));
+
+        Assert.Empty(policy.Paths.WritableRoots);
+    }
+
+    [Fact]
     public void conflict_resolver_edits_and_commits_in_its_worktree_only()
     {
         RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.ConflictResolver, Workspace);

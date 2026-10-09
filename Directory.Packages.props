@@ -7,6 +7,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0-rc.1.26425.128" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0-rc.1.26425.128" />
     <PackageVersion Include="bunit" Version="2.11.3" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.18" />
     <PackageVersion Include="LibGit2Sharp" Version="0.32.0" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
   </ItemGroup>

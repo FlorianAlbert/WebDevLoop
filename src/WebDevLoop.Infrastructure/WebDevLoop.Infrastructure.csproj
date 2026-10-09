@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <PackageReference Include="LibGit2Sharp" />
@@ -15,5 +15,28 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <!--
+    The Copilot SDK can download its pinned Copilot CLI runtime (~75 MB) at build time. Builds stay offline by default and
+    use the Copilot CLI configured in CopilotRuntimeOptions.CliPath (validated at startup). Pass
+    -p:CopilotSkipCliDownload=false to bundle the runtime into the app output instead.
+  -->
+  <PropertyGroup>
+    <CopilotSkipCliDownload Condition="'$(CopilotSkipCliDownload)' == ''">true</CopilotSkipCliDownload>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GitHub.Copilot.SDK" />
+  </ItemGroup>
+
+  <!-- Bundled agent skills ship with the app output under skills/ (see Skills/Bundled/skills-manifest.json). -->
+  <ItemGroup>
+    <None Remove="Skills\Bundled\**" />
+    <None Include="Skills\Bundled\**\*" Link="skills\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebDevLoop.Infrastructure.Tests" />
+  </ItemGroup>
 
 </Project>

@@ -5,6 +5,9 @@ namespace WebDevLoop.Core.Agents;
 /// <summary>The role → capability table from the architecture. App ports, never agents, perform Git/GitHub publishing.</summary>
 public static class RoleCapabilityPolicies
 {
+    /// <summary>Subdirectory of the exploration notes directory where the tester stores its evidence.</summary>
+    public const string TestEvidenceDirectoryName = "test-evidence";
+
     private static readonly DeniedCommand[] PublishingCommands =
     [
         new("gh"),
@@ -115,14 +118,17 @@ public static class RoleCapabilityPolicies
                 AgentReportTools.ConflictResolution),
             AgentRole.Tester => Create(
                 role,
-                [.. ReadOnlyInspection, AgentCapability.UseBrowser],
-                new PathConfinement(workingDirectory, readable, []),
+                [.. ReadOnlyInspection, AgentCapability.WriteNotes, AgentCapability.UseBrowser],
+                new PathConfinement(workingDirectory, readable, TestEvidenceRoots(workspace)),
                 RepositoryMutationCommands,
                 GitHubTokenAccess.None,
                 AgentReportTools.Test),
             _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown agent role."),
         };
     }
+
+    private static string[] TestEvidenceRoots(AgentWorkspace workspace) =>
+        workspace.NotesDirectory is null ? [] : [Path.Combine(RequireNotesOutsideRepository(workspace), TestEvidenceDirectoryName)];
 
     private static string RequireNotesOutsideRepository(AgentWorkspace workspace)
     {

@@ -29,6 +29,9 @@ public sealed class IntegrationSaga : VersionedEntity
 
     public string? LastError { get; private set; }
 
+    /// <summary>Unexpected errors in a row without the saga making progress (reset by every advance or retarget).</summary>
+    public int ConsecutiveFaults { get; private set; }
+
     public DateTimeOffset CreatedAt { get; private set; }
 
     public DateTimeOffset UpdatedAt { get; private set; }
@@ -61,6 +64,7 @@ public sealed class IntegrationSaga : VersionedEntity
 
         Checkpoint = checkpoint;
         LastError = null;
+        ConsecutiveFaults = 0;
         UpdatedAt = at;
     }
 
@@ -79,7 +83,15 @@ public sealed class IntegrationSaga : VersionedEntity
         SquashCommitSha = null;
         Checkpoint = IntegrationSagaCheckpoint.Started;
         LastError = null;
+        ConsecutiveFaults = 0;
         UpdatedAt = at;
+    }
+
+    /// <summary>Records an unexpected error (e.g. a transient GitHub failure) that interrupted the saga at its checkpoint.</summary>
+    public void RecordFault(string error, DateTimeOffset at)
+    {
+        RecordError(error, at);
+        ConsecutiveFaults++;
     }
 
     public void RecordError(string error, DateTimeOffset at)

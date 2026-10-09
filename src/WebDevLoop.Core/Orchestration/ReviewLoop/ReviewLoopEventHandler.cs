@@ -9,7 +9,10 @@ namespace WebDevLoop.Core.Orchestration.ReviewLoop;
 /// <summary>
 /// Event-bus subscriber that starts review loops: a freshly implemented ticket entering <c>Reviewing</c> is reviewed, and
 /// when an implementer slot frees, tickets whose findings wait for a fix turn are launched again. A ticket coming back
-/// from a fix is not launched here; the loop that ran the fix continues with the next review round itself.
+/// from a fix is not launched here; the loop that ran the fix continues with the next review round itself. A (periodic or
+/// startup) <see cref="FrontierReconciliationRequested"/> relaunches every <c>Reviewing</c> ticket of the run without an
+/// active step: loops waiting for a slot whose release was missed, and loops that died between rounds. Relaunching is
+/// safe: each review round and fix turn is claimed once.
 /// </summary>
 public sealed class ReviewLoopEventHandler(
     IReviewLoopLauncher launcher,
@@ -20,32 +23,48 @@ public sealed class ReviewLoopEventHandler(
     public async Task HandleAsync(EventEnvelope envelope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(envelope);
-        if (envelope.Event is not TicketRunStatusChanged changed)
+        switch (envelope.Event)
         {
-            return;
-        }
+            case FrontierReconciliationRequested requested:
+                await LaunchIdleReviewLoopsAsync(requested.SpecRunId, cancellationToken);
+                break;
+            case TicketRunStatusChanged changed:
+                if (changed is { From: TicketRunStatus.Implementing, To: TicketRunStatus.Reviewing })
+                {
+                    launcher.Launch(new ReviewAssignment(changed.SpecRunId, changed.TicketRunId));
+                }
 
-        if (changed is { From: TicketRunStatus.Implementing, To: TicketRunStatus.Reviewing })
-        {
-            launcher.Launch(new ReviewAssignment(changed.SpecRunId, changed.TicketRunId));
-        }
+                if (ImplementerCapacity.Occupies(changed.From) && !ImplementerCapacity.Occupies(changed.To))
+                {
+                    foreach (SpecRun specRun in await specRuns.ListNonTerminalAsync(cancellationToken))
+                    {
+                        await LaunchTicketsAwaitingFixAsync(specRun.Id, cancellationToken);
+                    }
+                }
 
-        if (ImplementerCapacity.Occupies(changed.From) && !ImplementerCapacity.Occupies(changed.To))
-        {
-            await LaunchTicketsAwaitingFixAsync(cancellationToken);
+                break;
         }
     }
 
-    private async Task LaunchTicketsAwaitingFixAsync(CancellationToken cancellationToken)
+    private async Task LaunchTicketsAwaitingFixAsync(RunId specRunId, CancellationToken cancellationToken)
     {
-        foreach (SpecRun specRun in await specRuns.ListNonTerminalAsync(cancellationToken))
+        foreach (TicketRun ticket in await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken))
         {
-            foreach (TicketRun ticket in await ticketRuns.ListBySpecRunAsync(specRun.Id, cancellationToken))
+            if (ticket.Status == TicketRunStatus.Reviewing && await AwaitsFixAsync(ticket, cancellationToken))
             {
-                if (ticket.Status == TicketRunStatus.Reviewing && await AwaitsFixAsync(ticket, cancellationToken))
-                {
-                    launcher.Launch(new ReviewAssignment(specRun.Id, ticket.Id));
-                }
+                launcher.Launch(new ReviewAssignment(specRunId, ticket.Id));
+            }
+        }
+    }
+
+    private async Task LaunchIdleReviewLoopsAsync(RunId specRunId, CancellationToken cancellationToken)
+    {
+        foreach (TicketRun ticket in await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken))
+        {
+            if (ticket.Status == TicketRunStatus.Reviewing
+                && !(await stepRuns.ListByTicketRunAsync(ticket.Id, cancellationToken)).Any(step => step.IsActive))
+            {
+                launcher.Launch(new ReviewAssignment(specRunId, ticket.Id));
             }
         }
     }

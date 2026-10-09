@@ -97,7 +97,7 @@ public sealed class TicketDispatcherTests
         await _fixture.MoveAsync(alpha[1], TicketRunStatus.Ready, TicketRunStatus.Implementing);
         await _fixture.MoveAsync(beta[1], TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing, TicketRunStatus.FixingReviewFindings);
         CasWorkflowScope scope = _fixture.Db.OpenScope();
-        var capacity = new ImplementerCapacity(scope, scope);
+        var capacity = new ImplementerCapacity(scope);
 
         int available = await capacity.GetAvailableAsync(
             alpha.RepositoryId,

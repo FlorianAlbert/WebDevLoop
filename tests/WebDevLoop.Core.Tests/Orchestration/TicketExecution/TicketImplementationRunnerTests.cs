@@ -86,7 +86,7 @@ public sealed class TicketImplementationRunnerTests
     }
 
     [Fact]
-    public async Task integration_tip_merge_missing_from_ticket_branch_returns_fix_signal()
+    public async Task integration_tip_advancing_during_the_implementer_turn_does_not_fail_validation()
     {
         SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
         await _fixture.ReconcileAsync(spec.Id);
@@ -95,19 +95,41 @@ public sealed class TicketImplementationRunnerTests
         _fixture.Agents.Reply(first, TicketExecutionFixture.Completed(_fixture.CommitInWorktree(first)));
         await _fixture.IntegrateAsync(spec, spec[1]);
 
-        CommitSha unmerged = _fixture.CommitInWorktree(second, "other.cs");
-        _fixture.Agents.Reply(second, TicketExecutionFixture.Completed(unmerged));
+        CommitSha basedOnStartTip = _fixture.CommitInWorktree(second, "other.cs");
+        _fixture.Agents.Reply(second, TicketExecutionFixture.Completed(basedOnStartTip));
+        await _fixture.Launcher.WhenAllFinishedAsync();
+
+        Assert.Equal(ImplementationOutcome.Implemented, _fixture.Results[^1].Outcome);
+        TicketRun ticket = _fixture.Ticket(spec[2]);
+        Assert.Equal(TicketRunStatus.Reviewing, ticket.Status);
+        Assert.Equal(basedOnStartTip, ticket.LastImplementedSha);
+    }
+
+    [Fact]
+    public async Task ticket_branch_missing_the_integration_tip_the_implementer_started_from_returns_fix_signal()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, [1]));
+        CommitSha baseSha = _fixture.Spec(spec.Id).IntegrationBaseSha!.Value;
+        await _fixture.ReconcileAsync(spec.Id);
+        AgentRunRequest first = Assert.Single(_fixture.Agents.InFlight);
+        _fixture.Agents.Reply(first, TicketExecutionFixture.Completed(_fixture.CommitInWorktree(first)));
+        await _fixture.IntegrateAsync(spec, spec[1]);
+        await _fixture.ReconcileAsync(spec.Id);
+        AgentRunRequest request = Assert.Single(_fixture.Agents.InFlight);
+        CommitSha startTip = _fixture.Spec(spec.Id).IntegrationTipSha!.Value;
+        TicketRun ticket = _fixture.Ticket(spec[2]);
+        await _fixture.Git.PrepareWorktreeAsync(spec.Location, new WorktreeSpec(ticket.BranchName, baseSha, ticket.WorktreePath!), Token);
+
+        _fixture.Agents.Reply(request, TicketExecutionFixture.Completed(_fixture.CommitInWorktree(request, "reset.cs")));
         await _fixture.Launcher.WhenAllFinishedAsync();
 
         ImplementationResult result = _fixture.Results[^1];
-        CommitSha newTip = _fixture.Spec(spec.Id).IntegrationTipSha!.Value;
         Assert.Equal(ImplementationOutcome.IntegrationMergeMissing, result.Outcome);
-        Assert.Contains(newTip.Value, result.Reason);
-        TicketRun ticket = _fixture.Ticket(spec[2]);
-        Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Contains(startTip.Value, result.Reason);
+        Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[2]).Status);
         StepRun step = Assert.Single(_fixture.Steps(ticket.Id));
         Assert.Equal(StepStatus.NeedsAttention, step.Status);
-        Assert.Equal(second.SessionId.Value, step.CopilotSessionId);
+        Assert.Equal(request.SessionId.Value, step.CopilotSessionId);
     }
 
     [Fact]

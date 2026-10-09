@@ -20,6 +20,10 @@ public static class TicketRunStatusRules
     public static bool IsTerminal(this TicketRunStatus status) =>
         status is TicketRunStatus.Integrated or TicketRunStatus.Skipped or TicketRunStatus.Aborted;
 
+    /// <summary>An implementer works on the ticket: its initial implementation or a review fix turn.</summary>
+    public static bool OccupiesImplementerSlot(this TicketRunStatus status) =>
+        status is TicketRunStatus.Implementing or TicketRunStatus.FixingReviewFindings;
+
     public static bool CanTransitionTo(this TicketRunStatus from, TicketRunStatus to)
     {
         if (from.IsTerminal())

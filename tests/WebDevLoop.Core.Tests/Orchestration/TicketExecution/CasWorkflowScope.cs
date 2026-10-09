@@ -85,6 +85,16 @@ internal sealed class CasWorkflowScope(CasWorkflowDatabase database) :
     Task<IReadOnlyList<TicketDependency>> ITicketRunRepository.ListDependenciesAsync(RunId specRunId, CancellationToken cancellationToken) =>
         List(database.TicketDependencies.Where(dependency => dependency.SpecRunId == specRunId));
 
+    /// <summary>Reads committed rows directly, bypassing this scope's identity map (an untracked query).</summary>
+    public Task<ImplementerSlotUsage> CountOccupiedImplementerSlotsAsync(int repositoryId, CancellationToken cancellationToken)
+    {
+        Dictionary<RunId, int> repositoryOf = database.LoadAll<SpecRun>(run => !run.IsTerminal).ToDictionary(run => run.Id, run => run.RepositoryId);
+        int[] occupied = database.LoadAll<TicketRun>(ticket => ticket.Status.OccupiesImplementerSlot() && repositoryOf.ContainsKey(ticket.SpecRunId))
+            .Select(ticket => repositoryOf[ticket.SpecRunId])
+            .ToArray();
+        return Task.FromResult(new ImplementerSlotUsage(occupied.Length, occupied.Count(id => id == repositoryId)));
+    }
+
     public void Add(TicketRun ticketRun) => _added.Add(ticketRun);
 
     public void AddDependency(TicketDependency dependency) => _addedDependencies.Add(dependency);

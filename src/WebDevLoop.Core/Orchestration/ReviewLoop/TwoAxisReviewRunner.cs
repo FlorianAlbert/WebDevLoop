@@ -69,7 +69,7 @@ public sealed class TwoAxisReviewRunner(
                 return ReviewRoundResult.Failed(renderFailure);
             }
 
-            AgentRunResult[] results = await Task.WhenAll(turns.Started.Select(turn => agents.StartAsync(turn.Request, cancellationToken)));
+            AgentRunResult[] results = await Task.WhenAll(turns.Started.Select(turn => RunTurnAsync(turn, cancellationToken)));
             bool cancelled = false;
             foreach ((ReviewerTurn turn, AgentRunResult result) in turns.Started.Zip(results))
             {
@@ -197,6 +197,19 @@ public sealed class TwoAxisReviewRunner(
     }
 
     private static StepKind KindOf(ReviewScope scope) => scope == ReviewScope.ParentSpec ? StepKind.ParentReview : StepKind.Review;
+
+    /// <summary>An unexpected error fails only this turn (retried like any failed turn), so no step stays running.</summary>
+    private async Task<AgentRunResult> RunTurnAsync(ReviewerTurn turn, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await agents.StartAsync(turn.Request, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return AgentRunResult.NotReported(AgentRunOutcome.Failed, $"The reviewer turn failed unexpectedly: {exception.Message}");
+        }
+    }
 
     private static AxisVerdict Judge(FindingAxis axis, AgentRunResult result) => result switch
     {

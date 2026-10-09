@@ -22,6 +22,21 @@ public sealed class EfTicketRunRepository(WebDevLoopDbContext context) : ITicket
             .OrderBy(dependency => dependency.Id)
             .ToListAsync(cancellationToken);
 
+    public async Task<ImplementerSlotUsage> CountOccupiedImplementerSlotsAsync(int repositoryId, CancellationToken cancellationToken)
+    {
+        TicketRunStatus[] occupying = StatusSets.Active<TicketRunStatus>(TicketRunStatusRules.OccupiesImplementerSlot);
+        SpecRunStatus[] terminal = StatusSets.Terminal<SpecRunStatus>(SpecRunStatusRules.IsTerminal);
+        List<int> repositoryIds = await context.TicketRuns.AsNoTracking()
+            .Where(ticket => occupying.Contains(ticket.Status))
+            .Join(
+                context.SpecRuns.AsNoTracking().Where(run => !terminal.Contains(run.Status)),
+                ticket => ticket.SpecRunId,
+                run => run.Id,
+                (_, run) => run.RepositoryId)
+            .ToListAsync(cancellationToken);
+        return new ImplementerSlotUsage(repositoryIds.Count, repositoryIds.Count(id => id == repositoryId));
+    }
+
     public void Add(TicketRun ticketRun) => context.TicketRuns.Add(ticketRun);
 
     public void AddDependency(TicketDependency dependency) => context.TicketDependencies.Add(dependency);

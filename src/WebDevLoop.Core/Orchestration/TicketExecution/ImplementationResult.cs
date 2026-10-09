@@ -7,8 +7,8 @@ public enum ImplementationOutcome
     /// <summary>The reported commit is not the ticket branch head; the ticket needs attention.</summary>
     UnexpectedCommitSha,
     /// <summary>
-    /// Fix signal: the ticket branch does not contain the current integration tip. The ticket needs attention and the
-    /// step keeps its Copilot session id so a fix turn can resume the implementer.
+    /// Fix signal: the ticket branch does not contain the integration tip the implementer was given. The ticket needs
+    /// attention and the step keeps its Copilot session id so a fix turn can resume the implementer.
     /// </summary>
     IntegrationMergeMissing,
     /// <summary>The worktree, prompt, or every allowed agent attempt failed; the ticket needs attention.</summary>

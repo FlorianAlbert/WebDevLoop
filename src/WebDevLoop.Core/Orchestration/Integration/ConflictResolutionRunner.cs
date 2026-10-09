@@ -73,17 +73,35 @@ public sealed class ConflictResolutionRunner(
             return ConflictResolution.ConcurrencyConflict;
         }
 
-        AgentRunResult run = await agents.StartAsync(BuildRequest(context, step, prompt), cancellationToken);
-        Verdict verdict = await JudgeAsync(context, run, integrationTip, cancellationToken);
-        DateTimeOffset now = clock.UtcNow;
-        step.Finish(verdict.StepStatus, now, verdict.ResultJson, verdict.Resolution.Reason);
-        outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
+        Verdict verdict;
+        try
+        {
+            AgentRunResult run = await agents.StartAsync(BuildRequest(context, step, prompt), cancellationToken);
+            verdict = await JudgeAsync(context, run, integrationTip, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A step left running would block every later saga run (AlreadyRunning); the saga records the fault itself.
+            ConflictResolution failed = ConflictResolution.Failed($"The conflict resolver turn failed unexpectedly: {exception.Message}");
+            FinishStep(step, new Verdict(StepStatus.Failed, failed, null));
+            await SaveAsync(cancellationToken);
+            throw;
+        }
+
+        FinishStep(step, verdict);
         if (verdict.ResolvedHead is { } head)
         {
             context.Ticket.LastImplementedSha = head;
         }
 
         return await SaveAsync(cancellationToken) ? verdict.Resolution : ConflictResolution.ConcurrencyConflict;
+    }
+
+    private void FinishStep(StepRun step, Verdict verdict)
+    {
+        DateTimeOffset now = clock.UtcNow;
+        step.Finish(verdict.StepStatus, now, verdict.ResultJson, verdict.Resolution.Reason);
+        outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
     }
 
     /// <returns>Null when the worktree is a clean checkout of the ticket branch at the reviewed commit; otherwise the problem.</returns>

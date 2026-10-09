@@ -99,6 +99,17 @@ public sealed class InMemoryWorkflowStore :
     Task<IReadOnlyList<TicketDependency>> ITicketRunRepository.ListDependenciesAsync(RunId specRunId, CancellationToken cancellationToken) =>
         List(_ticketDependencies.Where(dependency => dependency.SpecRunId == specRunId));
 
+    public Task<ImplementerSlotUsage> CountOccupiedImplementerSlotsAsync(int repositoryId, CancellationToken cancellationToken)
+    {
+        int[] occupied = _ticketRuns
+            .Where(ticket => ticket.Status.OccupiesImplementerSlot())
+            .Select(ticket => _specRuns.FirstOrDefault(run => run.Id == ticket.SpecRunId && !run.IsTerminal))
+            .OfType<SpecRun>()
+            .Select(run => run.RepositoryId)
+            .ToArray();
+        return Task.FromResult(new ImplementerSlotUsage(occupied.Length, occupied.Count(id => id == repositoryId)));
+    }
+
     public void Add(TicketRun ticketRun) => _ticketRuns.Add(ticketRun);
 
     public void AddDependency(TicketDependency dependency) => _ticketDependencies.Add(dependency);

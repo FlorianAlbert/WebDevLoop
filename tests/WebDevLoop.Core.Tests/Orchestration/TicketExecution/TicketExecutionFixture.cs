@@ -56,7 +56,7 @@ internal sealed class TicketExecutionFixture
         scope ??= Db.OpenScope();
         var dispatcher = new TicketDispatcher(
             Settings,
-            new ImplementerCapacity(scope, scope),
+            new ImplementerCapacity(scope),
             gate ?? Gate,
             Launcher,
             scope,

@@ -5,7 +5,7 @@ namespace WebDevLoop.Core.Orchestration.TicketExecution;
 
 /// <summary>
 /// App-side Git checks around an implementer turn. Agent reports are claims; these checks compare them with the actual
-/// ticket branch and the current integration tip.
+/// ticket branch and the integration tip the agent was given.
 /// </summary>
 internal sealed class TicketBranchVerifier(IGitWorkspace git)
 {

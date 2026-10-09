@@ -36,6 +36,25 @@ public sealed class IntegrationEventHandlerTests
         Assert.Equal([new IntegrationAssignment(_f.Repository.Id, spec.Id, waiting.Id)], _launcher.Launched);
     }
 
+    [Fact]
+    public async Task Reconciliation_relaunches_every_integrating_ticket_of_the_run()
+    {
+        SpecRun spec = _f.SeedRunningSpec();
+        TicketRun faulted = _f.SeedReviewedTicket(spec, 1, "first.cs");
+        TicketRun waiting = _f.SeedReviewedTicket(spec, 2, "second.cs");
+        _f.SeedReviewedTicket(spec, 3, "third.cs");
+        TicketRun otherRun = _f.SeedReviewedTicket(_f.SeedRunningSpec(), 4, "other.cs");
+        IntegrationFixture.MoveToIntegrating(faulted);
+        IntegrationFixture.MoveToIntegrating(waiting);
+        IntegrationFixture.MoveToIntegrating(otherRun);
+
+        await HandleAsync(new FrontierReconciliationRequested(spec.Id, IntegrationFixture.T0));
+
+        Assert.Equal(
+            [new IntegrationAssignment(_f.Repository.Id, spec.Id, faulted.Id), new IntegrationAssignment(_f.Repository.Id, spec.Id, waiting.Id)],
+            _launcher.Launched);
+    }
+
     [Theory]
     [InlineData(TicketRunStatus.Implementing, TicketRunStatus.Reviewing)]
     [InlineData(TicketRunStatus.Integrating, TicketRunStatus.NeedsAttention)]

@@ -13,20 +13,25 @@ public enum IntegrationOutcome
 
     /// <summary>
     /// An earlier ticket of the same spec moved the integration branch but has not finished publishing its layer. The ticket
-    /// stays <c>Integrating</c> and is launched again when that layer completes (see <see cref="IntegrationEventHandler"/>).
+    /// stays <c>Integrating</c> and is launched again when that layer completes or the run is reconciled (see
+    /// <see cref="IntegrationEventHandler"/>).
     /// </summary>
     WaitingForEarlierLayer,
 
     /// <summary>A saga step failed in a way retrying cannot fix (conflicts not resolved, moved refs, diff verification); the ticket needs attention.</summary>
     NeedsAttention,
 
-    /// <summary>An unexpected error (for example a transient GitHub failure) interrupted the saga; it is recorded and the saga resumes on the next run.</summary>
+    /// <summary>
+    /// An unexpected error (for example a transient GitHub failure) interrupted the saga; it is recorded and the saga resumes
+    /// on the next run (launched by reconciliation, see <see cref="IntegrationEventHandler"/>). More than <c>MaxRetries</c>
+    /// faults in a row without progress yield <see cref="NeedsAttention"/> instead.
+    /// </summary>
     Faulted,
 
     /// <summary>The conflict resolver was cancelled; the ticket is left to whoever cancelled it.</summary>
     Cancelled,
 
-    /// <summary>A save lost a compare-and-swap race; the saga resumes from its last persisted checkpoint on the next run.</summary>
+    /// <summary>A save lost a compare-and-swap race; the saga resumes from its last persisted checkpoint on the next run (see <see cref="Faulted"/>).</summary>
     ConcurrencyConflict,
 }
 

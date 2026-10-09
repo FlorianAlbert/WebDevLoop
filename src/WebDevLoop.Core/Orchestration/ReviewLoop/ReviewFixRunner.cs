@@ -118,16 +118,17 @@ public sealed class ReviewFixRunner(
             return TurnResult.Finished(FixResult.ConcurrencyConflict);
         }
 
-        if (await VerifyWorktreeAsync(context, cancellationToken) is { } problem)
+        Verdict verdict;
+        try
         {
-            return TurnResult.Finished(await FinishAsync(context, step, new Verdict(StepStatus.Failed, FixOutcome.Failed, problem, null), cancellationToken));
+            verdict = await RunStartedTurnAsync(context, step, resumable, prompt, integrationTip, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A step left running would hold the implementer slot and block every relaunch (AlreadyRunning).
+            verdict = Verdict.Retryable(StepStatus.Failed, $"The fix turn failed unexpectedly: {exception.Message}", null);
         }
 
-        AgentRunRequest request = BuildRequest(context, step, prompt);
-        AgentRunResult run = resumable is null
-            ? await agents.StartAsync(request, cancellationToken)
-            : await agents.ResumeAsync(request, cancellationToken);
-        Verdict verdict = await JudgeAsync(context, run, integrationTip, cancellationToken);
         if (verdict.Outcome is null)
         {
             _journal.Finish(step, verdict.StepStatus, verdict.ResultJson, verdict.Failure);
@@ -135,6 +136,27 @@ public sealed class ReviewFixRunner(
         }
 
         return TurnResult.Finished(await FinishAsync(context, step, verdict, cancellationToken));
+    }
+
+    /// <summary>Checks the worktree, runs (or resumes) the implementer with the findings, and judges its report.</summary>
+    private async Task<Verdict> RunStartedTurnAsync(
+        ImplementationContext context,
+        StepRun step,
+        AgentSessionId? resumable,
+        string prompt,
+        CommitSha integrationTip,
+        CancellationToken cancellationToken)
+    {
+        if (await VerifyWorktreeAsync(context, cancellationToken) is { } problem)
+        {
+            return new Verdict(StepStatus.Failed, FixOutcome.Failed, problem, null);
+        }
+
+        AgentRunRequest request = BuildRequest(context, step, prompt);
+        AgentRunResult run = resumable is null
+            ? await agents.StartAsync(request, cancellationToken)
+            : await agents.ResumeAsync(request, cancellationToken);
+        return await JudgeAsync(context, run, integrationTip, cancellationToken);
     }
 
     private async Task<CommitSha?> CurrentIntegrationTipAsync(ImplementationContext context, CancellationToken cancellationToken) =>
@@ -195,15 +217,17 @@ public sealed class ReviewFixRunner(
             RoleCapabilityPolicies.For(Role, new AgentWorkspace(context.WorktreePath, context.Layout.ExplorationNotesDirectory)));
     }
 
-    /// <param name="startTip">Integration tip when the turn started; the current tip may have moved on since.</param>
+    /// <param name="startTip">
+    /// The integration tip the agent was given. The report must contain it; a tip that another ticket's integration moved
+    /// on since is not required, because the integration saga squashes onto the current tip (resolving conflicts) anyway.
+    /// </param>
     private async Task<Verdict> JudgeAsync(ImplementationContext context, AgentRunResult run, CommitSha startTip, CancellationToken cancellationToken)
     {
         switch (run)
         {
             case { Report: ImplementationReport { Status: ReportStatus.Completed, HeadCommitSha: { } head } report }:
-                CommitSha integrationTip = await CurrentIntegrationTipAsync(context, cancellationToken) ?? startTip;
                 ReportVerification verification = await _verifier.VerifyReportAsync(
-                    context.Location, context.WorktreePath, context.Ticket.BranchName, head, integrationTip, cancellationToken);
+                    context.Location, context.WorktreePath, context.Ticket.BranchName, head, startTip, cancellationToken);
                 return verification.Outcome switch
                 {
                     ImplementationOutcome.Implemented => new Verdict(StepStatus.Succeeded, FixOutcome.Fixed, null, Serialize(report), head),

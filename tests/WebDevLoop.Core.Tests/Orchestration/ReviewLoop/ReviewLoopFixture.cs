@@ -57,7 +57,7 @@ internal sealed class ReviewLoopFixture
             Git,
             Agents,
             new PromptRenderer(),
-            new ImplementerCapacity(scope, scope),
+            new ImplementerCapacity(scope),
             Gate,
             scope,
             scope,

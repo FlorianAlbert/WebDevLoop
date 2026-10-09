@@ -13,7 +13,7 @@ public enum ReviewLoopOutcome
 
     /// <summary>
     /// Findings must be fixed but no implementer slot is free. The ticket stays <c>Reviewing</c> with the persisted findings
-    /// and the loop is launched again when a slot frees (see <see cref="ReviewLoopEventHandler"/>).
+    /// and the loop is launched again when a slot frees or the run is reconciled (see <see cref="ReviewLoopEventHandler"/>).
     /// </summary>
     AwaitingImplementerCapacity,
 

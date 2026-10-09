@@ -122,15 +122,17 @@ public sealed class TicketImplementationRunner(
             return AttemptResult.Finished(ImplementationResult.ConcurrencyConflict);
         }
 
-        await git.PrepareWorktreeAsync(
-            context.Location, new WorktreeSpec(ticket.BranchName, integrationTip, context.WorktreePath), cancellationToken);
-        if (await _verifier.VerifyWorktreeBaseAsync(context.Location, context.WorktreePath, ticket.BranchName, integrationTip, cancellationToken) is { } problem)
+        Verdict verdict;
+        try
         {
-            return AttemptResult.Finished(await FinishAsync(context, step, new Verdict(StepStatus.Failed, ImplementationOutcome.Failed, problem, null), cancellationToken));
+            verdict = await RunStartedStepAsync(context, step, prompt, integrationTip, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A step left running would hold the implementer slot and block every relaunch (AlreadyRunning).
+            verdict = Verdict.Retryable(StepStatus.Failed, $"The implementer step failed unexpectedly: {exception.Message}", null);
         }
 
-        AgentRunResult run = await agents.StartAsync(BuildRequest(context, step, prompt), cancellationToken);
-        Verdict verdict = await JudgeAsync(context, run, integrationTip, cancellationToken);
         if (verdict.Outcome is null)
         {
             FinishStep(step, verdict);
@@ -140,6 +142,25 @@ public sealed class TicketImplementationRunner(
         }
 
         return AttemptResult.Finished(await FinishAsync(context, step, verdict, cancellationToken));
+    }
+
+    /// <summary>Resets the worktree onto <paramref name="integrationTip"/>, runs the implementer, and judges its report.</summary>
+    private async Task<Verdict> RunStartedStepAsync(
+        ImplementationContext context,
+        StepRun step,
+        string prompt,
+        CommitSha integrationTip,
+        CancellationToken cancellationToken)
+    {
+        BranchName branch = context.Ticket.BranchName;
+        await git.PrepareWorktreeAsync(context.Location, new WorktreeSpec(branch, integrationTip, context.WorktreePath), cancellationToken);
+        if (await _verifier.VerifyWorktreeBaseAsync(context.Location, context.WorktreePath, branch, integrationTip, cancellationToken) is { } problem)
+        {
+            return new Verdict(StepStatus.Failed, ImplementationOutcome.Failed, problem, null);
+        }
+
+        AgentRunResult run = await agents.StartAsync(BuildRequest(context, step, prompt), cancellationToken);
+        return await JudgeAsync(context, run, integrationTip, cancellationToken);
     }
 
     /// <summary>The local integration ref is updated before the run's recorded tip, so it is the freshest source.</summary>
@@ -184,15 +205,17 @@ public sealed class TicketImplementationRunner(
             RoleCapabilityPolicies.For(Role, new AgentWorkspace(context.WorktreePath, context.Layout.ExplorationNotesDirectory)));
     }
 
-    /// <param name="startTip">Integration tip the worktree started from; the current tip may have moved on since.</param>
+    /// <param name="startTip">
+    /// The integration tip the agent was given. The report must contain it; a tip that another ticket's integration moved
+    /// on since is not required, because the integration saga squashes onto the current tip (resolving conflicts) anyway.
+    /// </param>
     private async Task<Verdict> JudgeAsync(ImplementationContext context, AgentRunResult run, CommitSha startTip, CancellationToken cancellationToken)
     {
         switch (run)
         {
             case { Report: ImplementationReport { Status: ReportStatus.Completed, HeadCommitSha: { } head } report }:
-                CommitSha integrationTip = await CurrentIntegrationTipAsync(context, cancellationToken) ?? startTip;
                 ReportVerification verification = await _verifier.VerifyReportAsync(
-                    context.Location, context.WorktreePath, context.Ticket.BranchName, head, integrationTip, cancellationToken);
+                    context.Location, context.WorktreePath, context.Ticket.BranchName, head, startTip, cancellationToken);
                 return verification.Outcome switch
                 {
                     ImplementationOutcome.Implemented => new Verdict(StepStatus.Succeeded, ImplementationOutcome.Implemented, null, Serialize(report), head),

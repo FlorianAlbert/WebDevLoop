@@ -42,11 +42,29 @@ public sealed class IntegrationSagaSteps(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            context.Saga.RecordError(exception.Message, clock.UtcNow);
-            return await SaveAsync(cancellationToken)
-                ? new IntegrationResult(IntegrationOutcome.Faulted, exception.Message)
-                : IntegrationResult.ConcurrencyConflict;
+            return await RecordFaultAsync(context, exception, cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// A fault leaves the ticket <c>Integrating</c> so reconciliation resumes the saga; once more faults than
+    /// <c>MaxRetries</c> occur in a row without progress, the ticket needs attention so the user can decide and retry.
+    /// </summary>
+    private async Task<IntegrationResult> RecordFaultAsync(IntegrationContext context, Exception exception, CancellationToken cancellationToken)
+    {
+        IntegrationSaga saga = context.Saga;
+        saga.RecordFault(exception.Message, clock.UtcNow);
+        if (saga.ConsecutiveFaults > context.Settings.MaxRetries)
+        {
+            return await NeedsAttentionAsync(
+                context,
+                $"Integration failed {saga.ConsecutiveFaults} time(s) in a row at checkpoint {saga.Checkpoint}: {exception.Message}",
+                cancellationToken);
+        }
+
+        return await SaveAsync(cancellationToken)
+            ? new IntegrationResult(IntegrationOutcome.Faulted, exception.Message)
+            : IntegrationResult.ConcurrencyConflict;
     }
 
     /// <returns>Null to continue with the next checkpoint; otherwise why the saga stops.</returns>

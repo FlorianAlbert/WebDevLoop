@@ -10,6 +10,15 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
 {
     private static string CommentsPath(int number) => $"{IssuePath(number)}/comments";
 
+    private const string IssuesPath = "/repos/acme/widgets/issues";
+
+    // The parent (issue 1) was created at a known time so the repository-wide dedupe search can be bounded by it.
+    private void ScriptRepoIssues(params object[] issues)
+    {
+        Api.Get(IssuePath(1), new { number = 1, id = 100L, node_id = "I_100", title = "Spec", body = "", state = "open", created_at = "2026-01-02T03:04:05Z" });
+        Api.Get(IssuesPath, issues);
+    }
+
     private void ScriptRelationRejectedAsDuplicate(string path)
     {
         Api.Respond(HttpMethod.Post, path, HttpStatusCode.UnprocessableEntity, new { message = "Validation Failed" });
@@ -100,6 +109,7 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
         var fingerprint = new FindingFingerprint("Missing null check");
         string issuesPath = "/repos/acme/widgets/issues";
         Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        ScriptRepoIssues(Array.Empty<object>());
         Api.Respond(HttpMethod.Post, issuesPath, HttpStatusCode.Created, Issue(5, 500, "Fix null check", "Details"));
         Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
         Api.Get(BlockedByPath(5), Array.Empty<object>());
@@ -115,6 +125,64 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
         Assert.True(FindingFingerprintMarker.IsPresentIn(body, fingerprint));
         IssuesApiRequest link = Assert.Single(Api.RequestsTo(HttpMethod.Post, SubIssuesPath(1)));
         Assert.Equal(500, link.Json.GetProperty("sub_issue_id").GetInt64());
+    }
+
+    [Fact]
+    public async Task CreateFindingIssue_links_an_unlinked_issue_left_by_an_earlier_attempt_instead_of_creating_a_duplicate()
+    {
+        var fingerprint = new FindingFingerprint("Missing null check");
+        Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        ScriptRepoIssues(
+            new { number = 9, id = 900L, node_id = "I_900", title = "A pull request", body = FindingFingerprintMarker.Render(fingerprint), state = "open", pull_request = new { url = "x" } },
+            new { number = 6, id = 600L, node_id = "I_600", title = "Unrelated", body = "nothing", state = "open" },
+            new { number = 5, id = 500L, node_id = "I_500", title = "Orphan", body = $"Details\n\n{FindingFingerprintMarker.Render(fingerprint)}", state = "open" });
+        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(7, 700, "Duplicate"));
+        Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
+        Api.Get(BlockedByPath(5), Array.Empty<object>());
+
+        IssueSnapshot reused = await CreateSut().CreateFindingIssueAsync(
+            new FindingIssueDraft(Ref(1, 100), "Fix null check", "Details", fingerprint), CancellationToken.None);
+
+        Assert.Equal(5, reused.Ref.Number);
+        Assert.Empty(Api.RequestsTo(HttpMethod.Post, IssuesPath));
+        IssuesApiRequest link = Assert.Single(Api.RequestsTo(HttpMethod.Post, SubIssuesPath(1)));
+        Assert.Equal(500, link.Json.GetProperty("sub_issue_id").GetInt64());
+    }
+
+    [Fact]
+    public async Task CreateFindingIssue_only_searches_repository_issues_updated_since_the_parent_was_created()
+    {
+        var fingerprint = new FindingFingerprint("Missing null check");
+        Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        ScriptRepoIssues(Array.Empty<object>());
+        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(5, 500));
+        Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
+        Api.Get(BlockedByPath(5), Array.Empty<object>());
+
+        await CreateSut().CreateFindingIssueAsync(
+            new FindingIssueDraft(Ref(1, 100), "Fix null check", "Details", fingerprint), CancellationToken.None);
+
+        IssuesApiRequest search = Assert.Single(Api.Requests, request => request.Method == HttpMethod.Get && request.Path == IssuesPath);
+        Assert.Contains("since=2026-01-02T03:04:05Z", search.PathAndQuery);
+        Assert.Contains("state=all", search.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task CreateFindingIssue_ignores_a_matching_issue_that_already_belongs_to_another_parent()
+    {
+        var fingerprint = new FindingFingerprint("Missing null check");
+        Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        ScriptRepoIssues(
+            new { number = 4, id = 400L, node_id = "I_400", title = "Other spec's finding", body = FindingFingerprintMarker.Render(fingerprint), state = "open", parent_issue_url = "https://api.github.com/repos/acme/widgets/issues/2" });
+        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(5, 500));
+        Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
+        Api.Get(BlockedByPath(5), Array.Empty<object>());
+
+        IssueSnapshot created = await CreateSut().CreateFindingIssueAsync(
+            new FindingIssueDraft(Ref(1, 100), "Fix null check", "Details", fingerprint), CancellationToken.None);
+
+        Assert.Equal(5, created.Ref.Number);
+        Assert.Single(Api.RequestsTo(HttpMethod.Post, IssuesPath));
     }
 
     [Fact]

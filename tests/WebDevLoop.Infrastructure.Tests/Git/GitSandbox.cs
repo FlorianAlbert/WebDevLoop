@@ -42,8 +42,9 @@ internal sealed class GitSandbox : IDisposable
 
     public string WorktreePath(string name) => Path.Combine(WorkspaceRoot, "worktrees", name);
 
-    public GitWorkspace CreateWorkspace() =>
-        new(new GitWorkspaceOptions { WorkspaceRoot = WorkspaceRoot }, Credentials, new FixedClock(Now));
+    public GitWorkspace CreateWorkspace() => CreateWorkspace(new GitWorkspaceOptions { WorkspaceRoot = WorkspaceRoot });
+
+    public GitWorkspace CreateWorkspace(GitWorkspaceOptions options) => new(options, Credentials, new FixedClock(Now));
 
     /// <summary>Commits directly into the bare remote on top of the branch's current tip (or as a root commit).</summary>
     public CommitSha CommitToRemote(BranchName branch, IReadOnlyDictionary<string, string> files, string message)

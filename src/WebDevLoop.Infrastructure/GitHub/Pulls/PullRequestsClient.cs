@@ -10,6 +10,9 @@ internal sealed class PullRequestsClient(GitHubApiClient api)
     private const string MarkReadyMutation =
         "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { id number isDraft } } }";
 
+    private static readonly GitHubPermissionSet CompareRequiredPermissions =
+        GitHubPermissionSet.PullRequestsWrite.With("contents", GitHubPermissionLevel.Read);
+
     public async Task<PullRequestDto?> FindByHeadAsync(GitHubRepoRef repo, BranchName head, CancellationToken cancellationToken)
     {
         string filter = Uri.EscapeDataString($"{repo.Owner}:{head}");
@@ -71,15 +74,15 @@ internal sealed class PullRequestsClient(GitHubApiClient api)
         await api.GraphQlAsync(repo, MarkReadyMutation, new { id = pull.NodeId }, cancellationToken);
     }
 
-    /// <summary>True when <paramref name="commit"/> is reachable from <paramref name="branch"/> (compare says identical or ahead).</summary>
+    /// <summary>
+    /// True when <paramref name="commit"/> is reachable from <paramref name="branch"/> (compare says identical or ahead). The compare
+    /// endpoint needs <c>contents:read</c>; any non-success response (including 403/404 on private repositories) is an error, never "not contained".
+    /// </summary>
     public async Task<bool> BranchContainsAsync(GitHubRepoRef repo, BranchName branch, string commit, CancellationToken cancellationToken)
     {
         string branchPath = string.Join('/', branch.Value.Split('/').Select(Uri.EscapeDataString));
-        GitHubApiResponse response = await api.SendAsync(HttpMethod.Get, repo, $"compare/{commit}...{branchPath}", null, cancellationToken);
-        if (response.Status == HttpStatusCode.NotFound)
-        {
-            return false;
-        }
+        GitHubApiResponse response = await api.SendAsync(
+            HttpMethod.Get, repo, $"compare/{commit}...{branchPath}", null, cancellationToken, CompareRequiredPermissions);
 
         string? status = JsonNode.Parse(response.EnsureSuccess().Content)?["status"]?.GetValue<string>();
         return status is "ahead" or "identical";

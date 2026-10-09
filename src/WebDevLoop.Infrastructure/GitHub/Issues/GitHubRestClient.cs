@@ -25,7 +25,7 @@ internal sealed partial class GitHubRestClient(HttpClient http, ITokenProvider t
     public async Task<IReadOnlyList<JsonElement>> GetAllAsync(GitHubRepoRef repo, string path, CancellationToken cancellationToken)
     {
         var items = new List<JsonElement>();
-        Uri? next = new(_baseAddress, $"{path}?per_page={PageSize}");
+        Uri? next = new(_baseAddress, $"{path}{(path.Contains('?') ? '&' : '?')}per_page={PageSize}");
 
         while (next is not null)
         {

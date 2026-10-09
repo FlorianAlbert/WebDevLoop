@@ -28,7 +28,7 @@ public sealed class GitWorkspace : IGitWorkspace
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(clock);
         _paths = new WorkspacePathGuard(options.WorkspaceRoot);
-        _remote = new GitRemoteSync(credentials);
+        _remote = new GitRemoteSync(credentials, options.AllowUserTokenFallback);
         _options = options;
         _clock = clock;
     }

@@ -12,6 +12,9 @@ namespace WebDevLoop.Infrastructure.Events;
 /// </summary>
 public sealed class EfOutbox(IOutboxMessageRepository messages, IUnitOfWork unitOfWork, IClock clock) : IOutbox
 {
+    /// <summary>Failed deliveries after which a message is dead-lettered instead of being retried forever.</summary>
+    public const int MaxDeliveryAttempts = 10;
+
     public void Append(WorkflowEvent workflowEvent)
     {
         ArgumentNullException.ThrowIfNull(workflowEvent);
@@ -20,32 +23,42 @@ public sealed class EfOutbox(IOutboxMessageRepository messages, IUnitOfWork unit
         messages.Add(OutboxMessage.Create(type, payloadJson, clock.UtcNow));
     }
 
-    /// <summary>Rows that cannot be read back are skipped and flagged with a recorded failure so they never block valid messages.</summary>
+    /// <summary>
+    /// Rows that cannot be read back are dead-lettered so they never block valid messages. Because dead-lettered rows
+    /// free their slots, the read repeats until it finds a readable message or the pending set is exhausted.
+    /// </summary>
     public async Task<IReadOnlyList<EventEnvelope>> ReadPendingAsync(int maxCount, CancellationToken cancellationToken)
     {
-        IReadOnlyList<OutboxMessage> pending = await messages.ListPendingAsync(maxCount, cancellationToken);
-        List<EventEnvelope> envelopes = new(pending.Count);
-        bool flaggedUnreadable = false;
-
-        foreach (OutboxMessage message in pending)
+        while (true)
         {
-            try
+            IReadOnlyList<OutboxMessage> pending = await messages.ListPendingAsync(maxCount, cancellationToken);
+            List<EventEnvelope> envelopes = new(pending.Count);
+            bool deadLettered = false;
+
+            foreach (OutboxMessage message in pending)
             {
-                envelopes.Add(new EventEnvelope(message.Id, WorkflowEventSerializer.Deserialize(message.Type, message.PayloadJson)));
+                try
+                {
+                    envelopes.Add(new EventEnvelope(message.Id, WorkflowEventSerializer.Deserialize(message.Type, message.PayloadJson)));
+                }
+                catch (JsonException exception)
+                {
+                    message.RecordFailure($"Unreadable outbox message: {exception.Message}");
+                    message.DeadLetter(clock.UtcNow, message.LastError!);
+                    deadLettered = true;
+                }
             }
-            catch (JsonException exception)
+
+            if (deadLettered)
             {
-                message.RecordFailure($"Unreadable outbox message: {exception.Message}");
-                flaggedUnreadable = true;
+                await SaveAsync(cancellationToken);
+            }
+
+            if (envelopes.Count > 0 || !deadLettered)
+            {
+                return envelopes;
             }
         }
-
-        if (flaggedUnreadable)
-        {
-            await SaveAsync(cancellationToken);
-        }
-
-        return envelopes;
     }
 
     public async Task MarkDispatchedAsync(long messageId, CancellationToken cancellationToken)
@@ -69,6 +82,11 @@ public sealed class EfOutbox(IOutboxMessageRepository messages, IUnitOfWork unit
         }
 
         message.RecordFailure(error);
+        if (message.Attempts >= MaxDeliveryAttempts)
+        {
+            message.DeadLetter(clock.UtcNow, error);
+        }
+
         await SaveAsync(cancellationToken);
     }
 

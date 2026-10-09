@@ -61,7 +61,7 @@ internal sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outb
         builder.Property(message => message.Type).IsRequired();
         builder.Property(message => message.PayloadJson).IsRequired();
         builder.HasIndex(message => message.DispatchedAt)
-            .HasFilter("\"DispatchedAt\" IS NULL")
+            .HasFilter("\"DispatchedAt\" IS NULL AND \"DeadLetteredAt\" IS NULL")
             .HasDatabaseName("IX_OutboxMessages_Pending");
     }
 }

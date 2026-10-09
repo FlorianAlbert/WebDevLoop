@@ -7,7 +7,7 @@ public interface IOutboxMessageRepository
 {
     Task<OutboxMessage?> GetAsync(long id, CancellationToken cancellationToken);
 
-    /// <summary>Undispatched messages, oldest first.</summary>
+    /// <summary>Undispatched, not dead-lettered messages, oldest first.</summary>
     Task<IReadOnlyList<OutboxMessage>> ListPendingAsync(int maxCount, CancellationToken cancellationToken);
 
     void Add(OutboxMessage message);

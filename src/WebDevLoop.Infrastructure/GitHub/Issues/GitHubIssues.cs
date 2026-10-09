@@ -49,7 +49,11 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         return null;
     }
 
-    /// <summary>Reuses a sub-issue already carrying the fingerprint; otherwise creates the issue and links it to its parent right away so a crash cannot leave an unfindable orphan.</summary>
+    /// <summary>
+    /// Reuses the finding issue for the fingerprint if one exists. A sub-issue is returned as is; an issue carrying the
+    /// fingerprint that is not linked yet (a previous attempt created it and crashed before linking) is linked and returned.
+    /// Only a genuinely new finding creates an issue, which is linked to its parent right away.
+    /// </summary>
     public async Task<IssueSnapshot> CreateFindingIssueAsync(FindingIssueDraft draft, CancellationToken cancellationToken)
     {
         IssueSnapshot? existing = await FindFindingIssueAsync(draft.Parent, draft.Fingerprint, cancellationToken);
@@ -59,6 +63,13 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         }
 
         GitHubRepoRef repo = RepoOf(draft.Parent);
+        IssueSnapshot? orphan = await FindUnlinkedFindingIssueAsync(draft, repo, cancellationToken);
+        if (orphan is not null)
+        {
+            await AddSubIssueAsync(draft.Parent, orphan.Ref, cancellationToken);
+            return orphan;
+        }
+
         string body = $"{draft.Body}\n\n{FindingFingerprintMarker.Render(draft.Fingerprint)}";
         JsonElement created = (await _api.SendAsync(HttpMethod.Post, repo, $"repos/{repo.Owner}/{repo.Name}/issues", new { title = draft.Title, body }, cancellationToken))
             ?? throw new GitHubApiException(GitHubApiErrorKind.Invalid, "GitHub returned no content for the created issue.");
@@ -67,6 +78,31 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         await AddSubIssueAsync(draft.Parent, snapshot.Ref, cancellationToken);
         return snapshot;
     }
+
+    /// <summary>
+    /// Scans repository issues (not only the parent's sub-issues) for the fingerprint. Such an issue can only have been created
+    /// after the parent, so listing by <c>since</c> the parent's creation bounds the scan; the list endpoint is strongly consistent, unlike search.
+    /// </summary>
+    private async Task<IssueSnapshot?> FindUnlinkedFindingIssueAsync(FindingIssueDraft draft, GitHubRepoRef repo, CancellationToken cancellationToken)
+    {
+        JsonElement parent = await _api.GetAsync(repo, IssuePath(draft.Parent), cancellationToken);
+        string query = parent.TryGetProperty("created_at", out JsonElement createdAt) && createdAt.GetString() is { } since
+            ? $"state=all&since={since}"
+            : "state=all";
+        IReadOnlyList<JsonElement> candidates = await _api.GetAllAsync(repo, $"repos/{repo.Owner}/{repo.Name}/issues?{query}", cancellationToken);
+
+        foreach (JsonElement candidate in candidates
+            .Where(issue => !issue.TryGetProperty("pull_request", out _) && !HasParent(issue) && FindingFingerprintMarker.IsPresentIn(IssueJson.Body(issue), draft.Fingerprint))
+            .OrderBy(issue => issue.GetProperty("number").GetInt32()))
+        {
+            return await ToSnapshotAsync(candidate, repo, cancellationToken);
+        }
+
+        return null;
+    }
+
+    private static bool HasParent(JsonElement issue) =>
+        issue.TryGetProperty("parent_issue_url", out JsonElement parentUrl) && parentUrl.ValueKind == JsonValueKind.String;
 
     public async Task AddSubIssueAsync(IssueRef parent, IssueRef child, CancellationToken cancellationToken)
     {

@@ -7,7 +7,7 @@ using WebDevLoop.Infrastructure.GitHub.Auth;
 namespace WebDevLoop.Infrastructure.Git;
 
 /// <summary>Clone, fetch and push through LibGit2Sharp, resolving credentials per remote operation.</summary>
-internal sealed class GitRemoteSync(IGitCredentialSource credentials)
+internal sealed class GitRemoteSync(IGitCredentialSource credentials, bool allowUserTokenFallback)
 {
     public const string RemoteName = "origin";
 
@@ -51,7 +51,7 @@ internal sealed class GitRemoteSync(IGitCredentialSource credentials)
         Commit commit = GitRefs.RequireCommit(repo, push.Commit);
         string target = GitRefs.Canonical(push.Branch);
         CredentialsHandler credentialsHandler =
-            LibGit2Credentials.CreateHandler(credentials.CreateCallback(location.Repo, GitRemoteOperation.Push));
+            LibGit2Credentials.CreateHandler(credentials.CreateCallback(location.Repo, GitRemoteOperation.Push, allowUserTokenFallback));
         Remote remote = repo.Network.Remotes[RemoteName];
 
         CommitSha? remoteTip = RemoteTip(repo, remote, target, credentialsHandler);
@@ -103,7 +103,7 @@ internal sealed class GitRemoteSync(IGitCredentialSource credentials)
 
     private FetchOptions FetchOptionsFor(GitRepositoryLocation location, GitRemoteOperation operation, CancellationToken cancellationToken) => new()
     {
-        CredentialsProvider = LibGit2Credentials.CreateHandler(credentials.CreateCallback(location.Repo, operation)),
+        CredentialsProvider = LibGit2Credentials.CreateHandler(credentials.CreateCallback(location.Repo, operation, allowUserTokenFallback)),
         OnTransferProgress = _ => !cancellationToken.IsCancellationRequested,
         Prune = true,
     };

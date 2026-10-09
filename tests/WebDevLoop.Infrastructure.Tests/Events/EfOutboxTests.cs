@@ -138,7 +138,7 @@ public sealed class EfOutboxTests : IDisposable
     }
 
     [Fact]
-    public async Task An_unreadable_row_is_skipped_and_flagged_without_blocking_valid_messages()
+    public async Task An_unreadable_row_is_dead_lettered_without_blocking_valid_messages()
     {
         using (PersistenceScope scope = _harness.OpenScope())
         {
@@ -155,8 +155,65 @@ public sealed class EfOutboxTests : IDisposable
         Assert.Equal("run-ok", ((FrontierReconciliationRequested)valid.Event).SpecRunId.Value);
 
         using PersistenceScope verify = _harness.OpenScope();
-        IReadOnlyList<OutboxMessage> rows = await verify.Outbox.ListPendingAsync(10, CancellationToken.None);
-        Assert.Equal([1, 1, 0], rows.Select(row => row.Attempts));
+        OutboxMessage stillPending = Assert.Single(await verify.Outbox.ListPendingAsync(10, CancellationToken.None));
+        Assert.Equal(valid.MessageId, stillPending.Id);
+        foreach (long poisonId in new long[] { 1, 2 })
+        {
+            OutboxMessage poison = (await verify.Outbox.GetAsync(poisonId, CancellationToken.None))!;
+            Assert.Equal(_clock.UtcNow, poison.DeadLetteredAt);
+            Assert.Contains("Unreadable outbox message", poison.LastError);
+            Assert.False(poison.IsPending);
+        }
+    }
+
+    [Fact]
+    public async Task Unreadable_rows_beyond_the_batch_size_cannot_starve_delivery_of_valid_messages()
+    {
+        using (PersistenceScope scope = _harness.OpenScope())
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                scope.Outbox.Add(OutboxMessage.Create("RemovedEventType", "{}", Now));
+            }
+
+            NewOutbox(scope).Append(Reconciliation("run-ok"));
+            await scope.SaveAsync();
+        }
+
+        using PersistenceScope reader = _harness.OpenScope();
+        IReadOnlyList<EventEnvelope> pending = await NewOutbox(reader).ReadPendingAsync(2, CancellationToken.None);
+
+        EventEnvelope valid = Assert.Single(pending);
+        Assert.Equal("run-ok", ((FrontierReconciliationRequested)valid.Event).SpecRunId.Value);
+    }
+
+    [Fact]
+    public async Task A_message_whose_delivery_keeps_failing_is_dead_lettered_after_the_maximum_attempts()
+    {
+        await AppendAndSaveAsync(Reconciliation("run-a"));
+        long id = await FirstPendingIdAsync();
+
+        using (PersistenceScope scope = _harness.OpenScope())
+        {
+            EfOutbox outbox = NewOutbox(scope);
+            for (int attempt = 1; attempt < EfOutbox.MaxDeliveryAttempts; attempt++)
+            {
+                await outbox.RecordFailureAsync(id, $"failure {attempt}", CancellationToken.None);
+            }
+        }
+
+        using (PersistenceScope stillPending = _harness.OpenScope())
+        {
+            Assert.Single(await NewOutbox(stillPending).ReadPendingAsync(10, CancellationToken.None));
+            await NewOutbox(stillPending).RecordFailureAsync(id, "final failure", CancellationToken.None);
+        }
+
+        using PersistenceScope verify = _harness.OpenScope();
+        Assert.Empty(await NewOutbox(verify).ReadPendingAsync(10, CancellationToken.None));
+        OutboxMessage stored = (await verify.Outbox.GetAsync(id, CancellationToken.None))!;
+        Assert.Equal(EfOutbox.MaxDeliveryAttempts, stored.Attempts);
+        Assert.Equal(_clock.UtcNow, stored.DeadLetteredAt);
+        Assert.Equal("final failure", stored.LastError);
     }
 
     private static FrontierReconciliationRequested Reconciliation(string runId) => new(new RunId(runId), Now);

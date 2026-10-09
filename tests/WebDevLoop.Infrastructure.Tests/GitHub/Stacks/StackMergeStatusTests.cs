@@ -1,6 +1,7 @@
 using System.Net;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Infrastructure.GitHub.Pulls;
 using WebDevLoop.Infrastructure.Tests.GitHub.Pulls;
 using static WebDevLoop.Infrastructure.Tests.GitHub.Pulls.PullsHarness;
 
@@ -55,6 +56,35 @@ public sealed class StackMergeStatusTests
         TrunkCompare(TopMergeSha, compareStatus);
 
         Assert.Equal(StackMergeStatus.Open, await _h.Adapter.GetStackMergeStatusAsync(Repo, Layers, Trunk, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_trunk_comparison_requests_contents_read_in_addition_to_pull_request_write()
+    {
+        PullState(11, "closed", merged: true, mergeSha: Sha('b'));
+        PullState(12, "closed", merged: true, mergeSha: TopMergeSha);
+        TrunkCompare(TopMergeSha, "ahead");
+
+        await _h.Adapter.GetStackMergeStatusAsync(Repo, Layers, Trunk, CancellationToken.None);
+
+        GitHubPermissionSet expected = GitHubPermissionSet.PullRequestsWrite.With("contents", GitHubPermissionLevel.Read);
+        Assert.Equal(expected, _h.Tokens.Requests[^1].Permissions);
+        Assert.Contains(_h.Tokens.Requests, request => request.Permissions.Equals(GitHubPermissionSet.PullRequestsWrite));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task A_failing_trunk_comparison_is_an_error_and_not_reported_as_not_yet_merged(HttpStatusCode status)
+    {
+        PullState(11, "closed", merged: true, mergeSha: Sha('b'));
+        PullState(12, "closed", merged: true, mergeSha: TopMergeSha);
+        _h.Handler.Respond(HttpMethod.Get, RepoPath($"compare/{TopMergeSha}...main"), status, new { message = "Resource not accessible by integration" });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(
+            () => _h.Adapter.GetStackMergeStatusAsync(Repo, Layers, Trunk, CancellationToken.None));
+
+        Assert.Equal(status, error.StatusCode);
     }
 
     [Fact]

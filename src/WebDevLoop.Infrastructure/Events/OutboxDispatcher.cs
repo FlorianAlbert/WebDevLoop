@@ -5,7 +5,7 @@ namespace WebDevLoop.Infrastructure.Events;
 /// <summary>
 /// Publishes pending outbox messages to the in-process bus and marks each delivered. Delivery is at-least-once: a crash
 /// between publish and mark redelivers the message, which subscribers deduplicate by message id. A failed publish is
-/// recorded on the row and leaves it pending for the next pass. Call from a scope of its own: marking saves that scope's unit of work.
+/// recorded on the row and leaves it pending for the next pass until <see cref="EfOutbox.MaxDeliveryAttempts"/> is reached, after which the row is dead-lettered. Call from a scope of its own: marking saves that scope's unit of work.
 /// </summary>
 public sealed class OutboxDispatcher(IOutbox outbox, IRunEventBus bus, OutboxDispatcherOptions options)
 {

@@ -18,11 +18,14 @@ public sealed class OutboxMessage
 
     public DateTimeOffset? DispatchedAt { get; private set; }
 
+    /// <summary>Set when delivery is given up (unreadable or repeatedly failing); such a message is never listed as pending again.</summary>
+    public DateTimeOffset? DeadLetteredAt { get; private set; }
+
     public int Attempts { get; private set; }
 
     public string? LastError { get; private set; }
 
-    public bool IsPending => DispatchedAt is null;
+    public bool IsPending => DispatchedAt is null && DeadLetteredAt is null;
 
     public static OutboxMessage Create(string type, string payloadJson, DateTimeOffset at) => new()
     {
@@ -32,6 +35,12 @@ public sealed class OutboxMessage
     };
 
     public void MarkDispatched(DateTimeOffset at) => DispatchedAt = at;
+
+    public void DeadLetter(DateTimeOffset at, string error)
+    {
+        DeadLetteredAt = at;
+        LastError = error;
+    }
 
     public void RecordFailure(string error)
     {

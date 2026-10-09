@@ -13,7 +13,7 @@ public sealed class EfOutboxMessageRepository(WebDevLoopDbContext context) : IOu
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCount);
 
         return await context.OutboxMessages
-            .Where(message => message.DispatchedAt == null)
+            .Where(message => message.DispatchedAt == null && message.DeadLetteredAt == null)
             .OrderBy(message => message.Id)
             .Take(maxCount)
             .ToListAsync(cancellationToken);

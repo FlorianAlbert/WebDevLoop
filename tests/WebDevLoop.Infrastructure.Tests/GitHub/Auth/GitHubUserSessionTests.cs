@@ -6,7 +6,7 @@ namespace WebDevLoop.Infrastructure.Tests.GitHub.Auth;
 public sealed class GitHubUserSessionTests
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
-    private static readonly Uri RedirectUri = new("http://localhost:5240/auth/github/callback");
+    private static readonly Uri RedirectUri = new("https://localhost:7233/auth/github/callback");
 
     private readonly TestClock _clock = new(Start);
     private readonly FakeGitHubOAuthHandler _github = new();

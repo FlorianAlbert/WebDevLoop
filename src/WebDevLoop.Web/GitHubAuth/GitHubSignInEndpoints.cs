@@ -122,7 +122,7 @@ public static class GitHubSignInEndpoints
         }
     }
 
-    /// <summary>Must match a callback URL of the GitHub App (for example <c>http://localhost:5240/auth/github/callback</c>).</summary>
+    /// <summary>Must match a callback URL of the GitHub App (for example <c>https://localhost:7233/auth/github/callback</c>).</summary>
     private static Uri RedirectUri(HttpContext http) =>
         new($"{http.Request.Scheme}://{http.Request.Host}{http.Request.PathBase}{CallbackPath}");
 

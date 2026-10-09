@@ -41,8 +41,8 @@ App is installed on, so the installation's repository selection controls which r
 ### Create the GitHub App
 
 1. Settings → Developer settings → GitHub Apps → New GitHub App (for an organization: the organization's Developer settings).
-2. **Callback URL:** `http://localhost:5240/auth/github/callback` (add one per address you open WebDevLoop on, e.g. the
-   `https` profile's `https://localhost:7233/auth/github/callback`). Keep **Expire user authorization tokens** checked:
+2. **Callback URL:** `https://localhost:7233/auth/github/callback` (add one per address you open WebDevLoop on, e.g. the
+   `http` profile's `http://localhost:5240/auth/github/callback`). Keep **Expire user authorization tokens** checked:
    tokens then live 8 hours and WebDevLoop refreshes them automatically. **Webhook:** off (WebDevLoop polls).
 3. Repository permissions:
    - **Contents**: Read and write (clone, push integration and stack branches)
@@ -129,7 +129,7 @@ selected in the UI is remembered across restarts (`<DataDirectory>/ui-state.json
 ## Running
 
 ```bash
-dotnet run --project src/WebDevLoop.Web                       # http://localhost:5240 (launch profile "http")
+dotnet run --project src/WebDevLoop.Web                       # https://localhost:7233 (launch profile "https")
 WebDevLoop__DataDirectory=/srv/webdevloop dotnet run --project src/WebDevLoop.Web
 dotnet publish src/WebDevLoop.Web -c Release -o out            # bundles the Copilot CLI and the agent skills
 ```

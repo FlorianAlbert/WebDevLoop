@@ -13,7 +13,7 @@ namespace WebDevLoop.Core.Orchestration.Recovery.Startup;
 /// <item>agent-step recovery — Copilot runtime maintenance, killing orphaned tester processes and releasing their leases,
 /// finishing interrupted steps, and relaunching stalled work on the restored worktrees;</item>
 /// <item>outbox replay (startup only) — events the previous process persisted but never dispatched;</item>
-/// <item>queue recomputation — active-slot repair and scheduling of every enabled repository's spec queue;</item>
+/// <item>queue recomputation — scheduling of every enabled repository's spec queue;</item>
 /// <item>frontier recomputation — durable reconciliation requests for every non-terminal spec;</item>
 /// <item>scheduler start (startup only) — opens the <see cref="SchedulerStartGate"/>.</item>
 /// </list>

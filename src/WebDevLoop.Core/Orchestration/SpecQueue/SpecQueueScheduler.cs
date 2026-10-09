@@ -24,46 +24,6 @@ public sealed class SpecQueueScheduler(
 {
     private readonly SpecDependencyGate _gate = new(specRuns, issues);
 
-    /// <summary>
-    /// Repairs a repository's active-slot bookkeeping (recovery and periodic reconciliation; run before
-    /// <see cref="ScheduleRepositoryAsync"/>). A spec that is no longer active but still holds a slot (parked in
-    /// <see cref="SpecRunStatus.NeedsAttention"/>, aborted, or finished before slots were released on leaving the active
-    /// phases) gives it up, so the number cannot collide with another spec's claim once it becomes active again; an active
-    /// spec without a slot gets the lowest free one, so the unique (repository, slot) index guards it again. All changes
-    /// are saved with one compare-and-swap.
-    /// </summary>
-    public async Task<SlotReconciliation> ReconcileSlotsAsync(int repositoryId, CancellationToken cancellationToken)
-    {
-        EffectiveSettings effective = await settings.GetAsync(repositoryId, cancellationToken);
-        IReadOnlyList<SpecRun> queue = await specRuns.ListByRepositoryAsync(repositoryId, cancellationToken);
-        SpecRun[] stale = queue.Where(run => !run.IsActive && run.MaxActiveSpecsSlot is not null).ToArray();
-        foreach (SpecRun run in stale)
-        {
-            run.MaxActiveSpecsSlot = null;
-        }
-
-        var unoccupied = new Queue<int>(UnoccupiedSlots(queue, effective.MaxActiveSpecsPerRepo));
-        var assigned = new List<RunId>();
-        foreach (SpecRun run in queue.Where(run => run.IsActive && run.MaxActiveSpecsSlot is null).OrderBy(run => run.QueuePosition))
-        {
-            if (!unoccupied.TryDequeue(out int slot))
-            {
-                break;
-            }
-
-            run.MaxActiveSpecsSlot = slot;
-            assigned.Add(run.Id);
-        }
-
-        if (stale.Length == 0 && assigned.Count == 0)
-        {
-            return SlotReconciliation.Nothing;
-        }
-
-        bool saved = await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved;
-        return saved ? new SlotReconciliation(stale.Select(run => run.Id).ToArray(), assigned, false) : new SlotReconciliation([], [], true);
-    }
-
     public async Task<SpecScheduleResult> ScheduleRepositoryAsync(int repositoryId, CancellationToken cancellationToken)
     {
         RepositoryRecord? repository = await repositories.GetAsync(repositoryId, cancellationToken);
@@ -126,14 +86,11 @@ public sealed class SpecQueueScheduler(
         run.Status is SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency;
 
     /// <summary>Lowest free slot numbers first, so concurrent schedulers collide on the same slot instead of overfilling.</summary>
-    private static IEnumerable<int> FreeSlots(IReadOnlyList<SpecRun> queue, int maxActiveSpecs) =>
-        UnoccupiedSlots(queue, maxActiveSpecs).Take(Math.Max(0, maxActiveSpecs - queue.Count(run => run.IsActive)));
-
-    /// <summary>Slot numbers 1..<paramref name="maxActiveSpecs"/> no active spec holds, lowest first.</summary>
-    private static IEnumerable<int> UnoccupiedSlots(IReadOnlyList<SpecRun> queue, int maxActiveSpecs)
+    private static IEnumerable<int> FreeSlots(IReadOnlyList<SpecRun> queue, int maxActiveSpecs)
     {
-        HashSet<int> occupied = queue.Where(run => run.IsActive && run.MaxActiveSpecsSlot is not null).Select(run => run.MaxActiveSpecsSlot!.Value).ToHashSet();
-        return Enumerable.Range(1, maxActiveSpecs).Where(slot => !occupied.Contains(slot));
+        SpecRun[] active = queue.Where(run => run.IsActive).ToArray();
+        HashSet<int> occupied = active.Where(run => run.MaxActiveSpecsSlot is not null).Select(run => run.MaxActiveSpecsSlot!.Value).ToHashSet();
+        return Enumerable.Range(1, maxActiveSpecs).Where(slot => !occupied.Contains(slot)).Take(Math.Max(0, maxActiveSpecs - active.Length));
     }
 
     private static void PrepareClaim(SpecRun run, int slot, SpecStartDecision decision, BranchName trunk)

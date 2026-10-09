@@ -52,7 +52,7 @@ public sealed class SpecQueueRecomputationTests
     }
 
     [Fact]
-    public async Task a_spec_needing_attention_releases_the_slot_it_still_holds_so_a_later_retry_cannot_collide()
+    public async Task a_spec_recovery_parked_in_needs_attention_frees_its_slot_for_the_next_queued_spec()
     {
         _fixture.ConfigureQueue(maxActiveSpecs: 1);
         _fixture.SeedSpec(1);
@@ -60,54 +60,14 @@ public sealed class SpecQueueRecomputationTests
         SpecRun parked = await _fixture.EnqueueAsync(1);
         await _fixture.ScheduleAsync();
         parked.MarkNeedsAttention("Implementer interrupted too often.", _fixture.Clock.UtcNow);
-        parked.MaxActiveSpecsSlot = 1;
         SpecRun next = await _fixture.EnqueueAsync(2);
 
         QueueRecomputationReport report = await Recomputation().RecomputeAsync(Token);
 
         Assert.Null(parked.MaxActiveSpecsSlot);
         Assert.Equal((SpecRunStatus.Preparing, 1), (next.Status, next.MaxActiveSpecsSlot));
-        RepositoryQueueRecomputation repository = Assert.Single(report.Repositories);
-        Assert.Equal([parked.Id], repository.Slots.Released);
-        Assert.Equal([next.Id], repository.Schedule.Activated);
-    }
-
-    [Fact]
-    public async Task an_active_spec_without_a_slot_gets_the_lowest_free_slot_before_new_specs_are_claimed()
-    {
-        _fixture.ConfigureQueue(maxActiveSpecs: 2);
-        _fixture.SeedSpec(1);
-        _fixture.SeedSpec(2);
-        _fixture.SeedSpec(3);
-        SpecRun slotless = await _fixture.EnqueueAsync(1);
-        SpecRun holder = await _fixture.EnqueueAsync(2);
-        await _fixture.ScheduleAsync();
-        slotless.MaxActiveSpecsSlot = null;
-        SpecRun waiting = await _fixture.EnqueueAsync(3);
-
-        QueueRecomputationReport report = await Recomputation().RecomputeAsync(Token);
-
-        Assert.Equal((2, 1), (holder.MaxActiveSpecsSlot, slotless.MaxActiveSpecsSlot));
-        Assert.Equal(SpecRunStatus.Queued, waiting.Status);
-        RepositoryQueueRecomputation repository = Assert.Single(report.Repositories);
-        Assert.Equal([slotless.Id], repository.Slots.Assigned);
-        Assert.Empty(repository.Schedule.Activated);
-    }
-
-    [Fact]
-    public async Task slots_that_are_already_consistent_are_left_alone()
-    {
-        _fixture.ConfigureQueue(maxActiveSpecs: 1);
-        _fixture.SeedSpec(1);
-        SpecRun active = await _fixture.EnqueueAsync(1);
-        await _fixture.ScheduleAsync();
-
-        SlotReconciliation slots = await Scheduler().ReconcileSlotsAsync(_fixture.Repository.Id, Token);
-
-        Assert.False(slots.ConcurrencyConflict);
-        Assert.Empty(slots.Released);
-        Assert.Empty(slots.Assigned);
-        Assert.Equal(1, active.MaxActiveSpecsSlot);
+        Assert.Equal([next.Id], Assert.Single(report.Repositories).Schedule.Activated);
+        Assert.Null(await Scheduler().FindFreeSlotAsync(_fixture.Repository.Id, Token));
     }
 
     private SpecQueueRecomputation Recomputation(IRepositoryRecordRepository? repositories = null) =>

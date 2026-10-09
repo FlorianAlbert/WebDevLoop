@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WebDevLoop.Core/WebDevLoop.Core.csproj" />
+    <Project Path="src/WebDevLoop.Infrastructure/WebDevLoop.Infrastructure.csproj" />
+    <Project Path="src/WebDevLoop.Web/WebDevLoop.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WebDevLoop.Core.Tests/WebDevLoop.Core.Tests.csproj" />
+    <Project Path="tests/WebDevLoop.Infrastructure.Tests/WebDevLoop.Infrastructure.Tests.csproj" />
+    <Project Path="tests/WebDevLoop.Web.Tests/WebDevLoop.Web.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -11,7 +11,8 @@ public static class TicketRunStatusRules
             [TicketRunStatus.Reviewing] = [TicketRunStatus.FixingReviewFindings, TicketRunStatus.Integrating],
             [TicketRunStatus.FixingReviewFindings] = [TicketRunStatus.Reviewing],
             [TicketRunStatus.Integrating] = [TicketRunStatus.Integrated],
-            [TicketRunStatus.NeedsAttention] = [TicketRunStatus.Ready, TicketRunStatus.Skipped],
+            // Integrating resumes a parked integration saga whose commit already moved the integration branch.
+            [TicketRunStatus.NeedsAttention] = [TicketRunStatus.Ready, TicketRunStatus.Skipped, TicketRunStatus.Integrating],
             [TicketRunStatus.Integrated] = [],
             [TicketRunStatus.Skipped] = [],
             [TicketRunStatus.Aborted] = [],

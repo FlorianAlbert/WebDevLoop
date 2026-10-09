@@ -19,4 +19,7 @@ public interface ITicketRunRepository
     void Add(TicketRun ticketRun);
 
     void AddDependency(TicketDependency dependency);
+
+    /// <summary>Drops an edge that no longer exists on GitHub (reconciliation of the ticket graph).</summary>
+    void RemoveDependency(TicketDependency dependency);
 }

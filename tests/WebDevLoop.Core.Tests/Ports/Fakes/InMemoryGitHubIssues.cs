@@ -78,6 +78,26 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<string>> ListCommentsAsync(IssueRef issue, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>(Comments.Where(comment => comment.Issue.Number == issue.Number).Select(comment => comment.Body).ToArray());
+
+    /// <summary>A finding sub-issue that carries <paramref name="fingerprint"/> in its body, e.g. created right before a crash.</summary>
+    public IssueSnapshot SeedFindingIssue(IssueRef issue, string title, IssueRef parent, FindingFingerprint fingerprint)
+    {
+        IssueSnapshot snapshot = Seed(issue, title, parent);
+        _fingerprints[issue.Number] = fingerprint;
+        return snapshot;
+    }
+
+    /// <summary>A human detaches the sub-issue from its parent on GitHub.</summary>
+    public void RemoveSubIssue(IssueRef parent, IssueRef child) => SubIssuesOf(parent).RemoveAll(existing => existing.Number == child.Number);
+
+    /// <summary>A human reopens the issue on GitHub.</summary>
+    public void Reopen(IssueRef issue) => _issues[issue.Number] = _issues[issue.Number] with { State = IssueState.Open };
+
+    /// <summary>A human replaces the native "blocked by" relations of the issue on GitHub.</summary>
+    public void SetBlockedBy(IssueRef issue, params IssueRef[] blockers) => _issues[issue.Number] = _issues[issue.Number] with { BlockedBy = blockers };
+
     public Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken)
     {
         _issues[issue.Number] = _issues[issue.Number] with { State = IssueState.Closed };

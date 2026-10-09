@@ -39,6 +39,12 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
         return sha;
     }
 
+    /// <summary>Simulates a lost local ref, e.g. after the clone was recreated.</summary>
+    public void DeleteLocalBranch(BranchName branch) => _local.Remove(branch);
+
+    /// <summary>Simulates a worktree directory that vanished from disk.</summary>
+    public void DeleteWorktree(string path) => _worktrees.Remove(path);
+
     public void SetWorktreeStatus(string path, WorktreeStatus status) => _worktrees[path] = (_worktrees[path].Worktree, status);
 
     public IReadOnlyList<CommitSha> ParentsOf(CommitSha commit) => _commits[commit].Parents;

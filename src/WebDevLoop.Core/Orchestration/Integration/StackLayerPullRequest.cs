@@ -29,6 +29,9 @@ internal static class StackLayerPullRequest
             + $"Part of parent spec {IssueReferences.Format(spec.ParentIssue, repository)}: {spec.Title}. "
             + "This pull request contains exactly one squash commit with the ticket's changes. WebDevLoop transitions the ticket "
             + "itself, because pull requests above the bottom of a stack do not auto-close issues.\n\n"
-            + $"WebDevLoop run `{spec.Id}`, ticket run `{ticket.Id}`.";
+            + IdentityLine(spec.Id, ticket.Id);
     }
+
+    /// <summary>The body line that identifies the run and ticket a stack layer PR belongs to.</summary>
+    public static string IdentityLine(RunId runId, TicketRunId ticketRunId) => $"WebDevLoop run `{runId}`, ticket run `{ticketRunId}`.";
 }

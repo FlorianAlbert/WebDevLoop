@@ -99,6 +99,8 @@ internal sealed class CasWorkflowScope(CasWorkflowDatabase database) :
 
     public void AddDependency(TicketDependency dependency) => _addedDependencies.Add(dependency);
 
+    public void RemoveDependency(TicketDependency dependency) => throw new NotSupportedException();
+
     public Task<StepRun?> GetAsync(StepRunId id, CancellationToken cancellationToken) => Task.FromResult(Resolve(database.Load<StepRun>(id)));
 
     Task<IReadOnlyList<StepRun>> IStepRunRepository.ListBySpecRunAsync(RunId specRunId, CancellationToken cancellationToken) =>

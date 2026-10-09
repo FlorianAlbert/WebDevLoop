@@ -95,6 +95,8 @@ internal sealed class FindingIssueTracker : IGitHubIssues
 
     public Task CommentAsync(IssueRef issue, string body, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+    public Task<IReadOnlyList<string>> ListCommentsAsync(IssueRef issue, CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     private void Link(IssueRef parent, int child)

@@ -7,7 +7,9 @@ namespace WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 /// Verifies a spec's PR stack before it is marked ready (workflow step 8): layer order, trunk, linear ancestry from the
 /// integration base through every layer to the integration tip, the GitHub stack order, and that every PR still shows exactly
 /// its ticket's squash commit (open, unchanged head, base containing the layer below but not the layer itself, diff verified
-/// by the integration saga).
+/// by the integration saga). A stack-on-top spec whose blocking stack merged (often as a squash, so trunk does not contain the
+/// blocking layer commits) may have its bottom PR on trunk instead of the blocking stack branch; that is accepted once the
+/// blocking stack branch's PR is merged.
 /// </summary>
 internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pulls)
 {
@@ -34,7 +36,7 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
         await git.FetchAsync(location, cancellationToken);
         return FindOrderProblem(spec, layers, trunk)
             ?? await FindAncestryProblemAsync(spec, location, layers, cancellationToken)
-            ?? await FindGitHubStackProblemAsync(spec, location, layers, cancellationToken)
+            ?? await FindGitHubStackProblemAsync(spec, location, layers, trunk, cancellationToken)
             ?? await FindPullRequestProblemsAsync(spec, location, layers, trunk, cancellationToken);
     }
 
@@ -85,9 +87,11 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
         SpecRun spec,
         GitRepositoryLocation location,
         IReadOnlyList<PullStackLayer> layers,
+        BranchName trunk,
         CancellationToken cancellationToken)
     {
-        if (layers.Count == 1 && spec.DependencyModeUsed != SpecDependencyMode.StackOnTop)
+        if (layers.Count == 1
+            && (spec.DependencyModeUsed != SpecDependencyMode.StackOnTop || await RestsOnMergedBlockingStackAsync(location, layers[0], trunk, cancellationToken)))
         {
             return null;
         }
@@ -158,9 +162,11 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
             return $"stack branch '{layer.BranchName}' is at {stackBranchTip?.Value ?? "(missing)"} instead of {layer.CommitSha}.";
         }
 
+        // After a squash merge of the blocking stack, trunk holds its changes but not its commits.
+        bool baseMustContainBelow = pull.Base == layer.BaseBranch || !await IsBlockingStackMergedAsync(location, layer, cancellationToken);
         CommitSha? baseTip = await git.GetBranchTipAsync(location, pull.Base, GitRefScope.Remote, cancellationToken);
         if (baseTip is not { } baseHead
-            || (below is { } parent && !await git.IsAncestorAsync(location, parent, baseHead, cancellationToken))
+            || (baseMustContainBelow && below is { } parent && !await git.IsAncestorAsync(location, parent, baseHead, cancellationToken))
             || await git.IsAncestorAsync(location, layer.CommitSha, baseHead, cancellationToken))
         {
             return $"base '{pull.Base}' of pull request #{number} at {baseTip?.Value ?? "(missing)"} must contain {below?.Value ?? "the integration base"} "
@@ -176,4 +182,18 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
             ? $"layer commit {layer.CommitSha} of pull request #{number} changes no files."
             : null;
     }
+
+    /// <summary>A stack-on-top bottom layer that now targets trunk because the blocking stack branch below it merged.</summary>
+    private async Task<bool> RestsOnMergedBlockingStackAsync(
+        GitRepositoryLocation location,
+        PullStackLayer bottom,
+        BranchName trunk,
+        CancellationToken cancellationToken) =>
+        bottom.BaseBranch != trunk
+        && (await pulls.GetPullRequestAsync(location.Repo, bottom.PullRequestNumber, cancellationToken)).Base == trunk
+        && await IsBlockingStackMergedAsync(location, bottom, cancellationToken);
+
+    /// <summary>Whether the PR of the stack branch the layer was published onto is merged.</summary>
+    private async Task<bool> IsBlockingStackMergedAsync(GitRepositoryLocation location, PullStackLayer layer, CancellationToken cancellationToken) =>
+        await pulls.FindPullRequestByHeadAsync(location.Repo, layer.BaseBranch, cancellationToken) is { State: PullRequestState.Merged };
 }

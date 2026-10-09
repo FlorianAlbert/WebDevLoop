@@ -136,6 +136,12 @@ public sealed class StatusRulesTests
     }
 
     [Fact]
+    public void ticket_needs_attention_can_resume_an_integration_that_already_moved_the_integration_branch()
+    {
+        Assert.True(TicketRunStatus.NeedsAttention.CanTransitionTo(TicketRunStatus.Integrating));
+    }
+
+    [Fact]
     public void ticket_terminal_states_have_no_outgoing_transitions()
     {
         foreach (TicketRunStatus terminal in new[] { TicketRunStatus.Integrated, TicketRunStatus.Skipped, TicketRunStatus.Aborted })

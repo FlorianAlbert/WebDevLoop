@@ -132,6 +132,12 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         await _api.SendAsync(HttpMethod.Post, RepoOf(issue), $"{IssuePath(issue)}/comments", new { body }, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<string>> ListCommentsAsync(IssueRef issue, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<JsonElement> comments = await _api.GetAllAsync(RepoOf(issue), $"{IssuePath(issue)}/comments", cancellationToken);
+        return comments.Select(comment => comment.TryGetProperty("body", out JsonElement body) ? body.GetString() ?? string.Empty : string.Empty).ToList();
+    }
+
     public async Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken)
     {
         GitHubRepoRef repo = RepoOf(issue);

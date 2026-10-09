@@ -40,4 +40,6 @@ public sealed class EfTicketRunRepository(WebDevLoopDbContext context) : ITicket
     public void Add(TicketRun ticketRun) => context.TicketRuns.Add(ticketRun);
 
     public void AddDependency(TicketDependency dependency) => context.TicketDependencies.Add(dependency);
+
+    public void RemoveDependency(TicketDependency dependency) => context.TicketDependencies.Remove(dependency);
 }

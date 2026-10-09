@@ -201,7 +201,7 @@ public sealed class SpecCompletionService(
             }
         }
 
-        await issues.CommentAsync(spec.ParentIssue, IntegrationBranchReport(spec, tip, integrated), cancellationToken);
+        await ReportIntegrationBranchOnceAsync(spec, tip, integrated, cancellationToken);
         await _cleaner.CleanAsync(spec, location, cancellationToken);
         outbox.Append(new SpecCompletionReported(spec.Id, spec.RepositoryId, spec.IntegrationBranch, tip, PullRequestCount: 0, clock.UtcNow));
         _journal.Move(spec, SpecRunStatus.Completed);
@@ -210,7 +210,22 @@ public sealed class SpecCompletionService(
             : CompletionResult.ConcurrencyConflict;
     }
 
-    private static string IntegrationBranchReport(SpecRun spec, CommitSha tip, IReadOnlyList<TicketRun> integrated)
+    /// <summary>
+    /// The report carries a hidden per-run marker, so a completion resumed after a crash between posting the report and
+    /// saving <c>Completed</c> finds it instead of reporting twice.
+    /// </summary>
+    private async Task ReportIntegrationBranchOnceAsync(SpecRun spec, CommitSha tip, IReadOnlyList<TicketRun> integrated, CancellationToken cancellationToken)
+    {
+        string marker = IntegrationBranchReportMarker(spec.Id);
+        if (!(await issues.ListCommentsAsync(spec.ParentIssue, cancellationToken)).Any(comment => comment.Contains(marker, StringComparison.Ordinal)))
+        {
+            await issues.CommentAsync(spec.ParentIssue, IntegrationBranchReport(spec, tip, integrated, marker), cancellationToken);
+        }
+    }
+
+    private static string IntegrationBranchReportMarker(RunId specRunId) => $"<!-- webdevloop:spec-report run={specRunId} -->";
+
+    private static string IntegrationBranchReport(SpecRun spec, CommitSha tip, IReadOnlyList<TicketRun> integrated, string marker)
     {
         string tickets = integrated.Count == 0 ? "none" : string.Join(", ", integrated.Select(ticket => $"#{ticket.Issue.Number}"));
         return $"""
@@ -218,6 +233,7 @@ public sealed class SpecCompletionService(
 
             Integration branch: `{spec.IntegrationBranch}` at `{tip}`
             Resolved tickets: {tickets}
+            {marker}
             """;
     }
 

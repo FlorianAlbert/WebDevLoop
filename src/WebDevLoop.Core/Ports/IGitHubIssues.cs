@@ -22,6 +22,9 @@ public interface IGitHubIssues
 
     Task CommentAsync(IssueRef issue, string body, CancellationToken cancellationToken);
 
+    /// <summary>Bodies of all comments on the issue, oldest first (lets the app check its own markers before commenting again).</summary>
+    Task<IReadOnlyList<string>> ListCommentsAsync(IssueRef issue, CancellationToken cancellationToken);
+
     /// <summary>Idempotent: closing an already-closed issue succeeds.</summary>
     Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken);
 }

@@ -114,6 +114,8 @@ public sealed class InMemoryWorkflowStore :
 
     public void AddDependency(TicketDependency dependency) => _ticketDependencies.Add(dependency);
 
+    public void RemoveDependency(TicketDependency dependency) => _ticketDependencies.Remove(dependency);
+
     public Task<StepRun?> GetAsync(StepRunId id, CancellationToken cancellationToken) =>
         Task.FromResult(_steps.FirstOrDefault(step => step.Id == id));
 

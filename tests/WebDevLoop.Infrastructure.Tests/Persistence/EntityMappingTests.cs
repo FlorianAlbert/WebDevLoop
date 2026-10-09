@@ -123,6 +123,31 @@ public sealed class EntityMappingTests : IDisposable
     }
 
     [Fact]
+    public async Task removed_ticket_dependency_is_deleted_and_the_others_are_kept()
+    {
+        (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            write.Tickets.Add(TestData.NewTicketRun(specRunId, "t-2", 12));
+            write.Tickets.Add(TestData.NewTicketRun(specRunId, "t-3", 13));
+            write.Tickets.AddDependency(TicketDependency.Create(specRunId, ticketId, new TicketRunId("t-2"), DependencySource.GitHub));
+            write.Tickets.AddDependency(TicketDependency.Create(specRunId, ticketId, new TicketRunId("t-3"), DependencySource.GitHub));
+            await write.SaveAsync();
+        }
+
+        using (PersistenceScope remove = _harness.OpenScope())
+        {
+            IReadOnlyList<TicketDependency> loaded = await remove.Tickets.ListDependenciesAsync(specRunId, CancellationToken.None);
+            remove.Tickets.RemoveDependency(loaded.Single(dependency => dependency.BlockingTicketRunId == new TicketRunId("t-2")));
+            await remove.SaveAsync();
+        }
+
+        using PersistenceScope read = _harness.OpenScope();
+        TicketDependency kept = Assert.Single(await read.Tickets.ListDependenciesAsync(specRunId, CancellationToken.None));
+        Assert.Equal(new TicketRunId("t-3"), kept.BlockingTicketRunId);
+    }
+
+    [Fact]
     public async Task step_run_round_trips_all_state()
     {
         (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);

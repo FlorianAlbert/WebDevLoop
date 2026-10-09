@@ -145,6 +145,8 @@ internal sealed class JournalingGitHubIssues(IGitHubIssues inner, ExternalCallJo
     public Task CommentAsync(IssueRef issue, string body, CancellationToken cancellationToken) =>
         Journal($"comment:{issue}", () => inner.CommentAsync(issue, body, cancellationToken));
 
+    public Task<IReadOnlyList<string>> ListCommentsAsync(IssueRef issue, CancellationToken cancellationToken) => inner.ListCommentsAsync(issue, cancellationToken);
+
     public Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken) =>
         Journal($"close:{issue}", () => inner.CloseAsync(issue, reason, cancellationToken));
 

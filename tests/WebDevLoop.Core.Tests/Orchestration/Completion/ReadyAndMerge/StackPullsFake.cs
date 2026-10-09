@@ -40,6 +40,9 @@ internal sealed class StackPullsFake(InMemoryGitWorkspace git, GitRepositoryLoca
 
     public void OverrideStack(PullStackSnapshot stack) => _stackOverride = stack;
 
+    /// <summary>GitHub no longer lists any stack, e.g. after the lower part of a stack merged and the rest was unstacked.</summary>
+    public bool StacksDissolved { get; set; }
+
     public PullRequestSnapshot Snapshot(PullRequestNumber number) =>
         Apply(_inner.GetPullRequestAsync(location.Repo, number, CancellationToken.None).GetAwaiter().GetResult());
 
@@ -67,7 +70,8 @@ internal sealed class StackPullsFake(InMemoryGitWorkspace git, GitRepositoryLoca
     }
 
     public async Task<PullStackSnapshot?> FindStackAsync(GitHubRepoRef repo, PullRequestNumber member, CancellationToken cancellationToken) =>
-        _stackOverride is { } stack && stack.BottomToTop.Contains(member) ? stack : await _inner.FindStackAsync(repo, member, cancellationToken);
+        StacksDissolved ? null
+        : _stackOverride is { } stack && stack.BottomToTop.Contains(member) ? stack : await _inner.FindStackAsync(repo, member, cancellationToken);
 
     public Task<PullStackSnapshot> CreateStackAsync(GitHubRepoRef repo, IReadOnlyList<PullRequestNumber> bottomToTop, CancellationToken cancellationToken) =>
         _inner.CreateStackAsync(repo, bottomToTop, cancellationToken);

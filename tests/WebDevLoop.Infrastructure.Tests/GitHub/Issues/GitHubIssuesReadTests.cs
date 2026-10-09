@@ -102,4 +102,17 @@ public sealed class GitHubIssuesReadTests : GitHubIssuesTestBase
 
         Assert.Null(found);
     }
+
+    [Fact]
+    public async Task ListComments_returns_every_comment_body_across_pages_oldest_first()
+    {
+        string comments = $"{IssuePath(7)}/comments";
+        Api.Get(comments + "?per_page=100", new[] { new { id = 1, body = "first" } },
+            ("Link", $"<https://api.github.com{comments}?per_page=100&page=2>; rel=\"next\""));
+        Api.Get(comments + "?per_page=100&page=2", new[] { new { id = 2, body = "second" } });
+
+        IReadOnlyList<string> bodies = await CreateSut().ListCommentsAsync(Ref(7), CancellationToken.None);
+
+        Assert.Equal(["first", "second"], bodies);
+    }
 }

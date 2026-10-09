@@ -1,0 +1,80 @@
+@inherits ScopedComponentBase
+
+<form class="card card-body mb-3" data-testid="register-form" @onsubmit="SubmitAsync">
+    <div class="row g-2">
+        <div class="col-md-3">
+            <label class="form-label small mb-0" for="reg-owner">Owner</label>
+            <input id="reg-owner" name="owner" class="form-control form-control-sm" placeholder="acme" @bind="_owner" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small mb-0" for="reg-name">Name</label>
+            <input id="reg-name" name="name" class="form-control form-control-sm" placeholder="widgets" @bind="_name" />
+        </div>
+        <div class="col-md-6">
+            <label class="form-label small mb-0" for="reg-path">Local path</label>
+            <input id="reg-path" name="localPath" class="form-control form-control-sm" placeholder="/home/me/dev/widgets" @bind="_localPath" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small mb-0" for="reg-branch">Default base branch <span class="text-muted">(optional)</span></label>
+            <input id="reg-branch" name="defaultBaseBranch" class="form-control form-control-sm" placeholder="main" @bind="_defaultBaseBranch" />
+        </div>
+        <div class="col-md-9">
+            <label class="form-label small mb-0" for="reg-clone">Clone URL <span class="text-muted">(optional, defaults to the GitHub HTTPS URL)</span></label>
+            <input id="reg-clone" name="cloneUrl" class="form-control form-control-sm" @bind="_cloneUrl" />
+        </div>
+    </div>
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger py-1 px-2 small mt-2 mb-0" role="alert" data-testid="register-errors">@_error</div>
+    }
+    <div class="mt-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm" disabled="@_submitting">Register</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OnCancel">Cancel</button>
+    </div>
+</form>
+
+@code {
+    private string? _owner;
+    private string? _name;
+    private string? _localPath;
+    private string? _defaultBaseBranch;
+    private string? _cloneUrl;
+    private string? _error;
+    private bool _submitting;
+
+    [Parameter]
+    public EventCallback<RepositoryView> OnRegistered { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private async Task SubmitAsync()
+    {
+        _submitting = true;
+        _error = null;
+        try
+        {
+            var command = new RegisterRepositoryCommand(Clean(_owner), Clean(_name), Clean(_localPath), Clean(_defaultBaseBranch), Clean(_cloneUrl));
+            CommandResult<RepositoryView> result = await InScopeAsync(services =>
+                services.GetRequiredService<IRepositoryRegistry>().RegisterAsync(command, CancellationToken.None));
+            if (result.IsSuccess)
+            {
+                await OnRegistered.InvokeAsync(result.Value);
+            }
+            else
+            {
+                _error = result.Message;
+            }
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

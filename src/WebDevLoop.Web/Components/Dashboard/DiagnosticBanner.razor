@@ -1,0 +1,19 @@
+@using WebDevLoop.Infrastructure.Prerequisites
+@inject DiagnosticReadiness Readiness
+
+@if (Readiness.Current is { Mode: ReadinessMode.DiagnosticOnly } snapshot)
+{
+    <div class="alert alert-warning py-2 small" role="alert" data-testid="diagnostic-banner">
+        <strong>Diagnostic-only mode.</strong>
+        Queueing and other workflow actions are disabled
+        @if (snapshot.Report is null)
+        {
+            <text>until the prerequisites have been checked.</text>
+        }
+        else
+        {
+            <text>because @snapshot.FailedChecks.Count prerequisite @(snapshot.FailedChecks.Count == 1 ? "check" : "checks") failed.</text>
+        }
+        <a href="@UiRoutes.Health">View health</a>
+    </div>
+}

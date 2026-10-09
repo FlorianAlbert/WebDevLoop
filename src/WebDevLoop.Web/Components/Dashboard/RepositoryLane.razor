@@ -1,0 +1,60 @@
+@inject RepositoryContext RepositoryContext
+@inject NavigationManager Navigation
+
+<section class="card h-100 @(IsCurrent ? "border-primary" : null)" data-repo-lane="@Overview.Repository.Id">
+    <div class="card-header py-1 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <strong>@Overview.Repository.Owner/@Overview.Repository.Name</strong>
+            @if (IsCurrent)
+            {
+                <span class="badge text-bg-primary ms-1">Current</span>
+            }
+            @if (!Overview.Repository.IsEnabled)
+            {
+                <span class="badge text-bg-secondary ms-1">Disabled</span>
+            }
+        </div>
+        <div class="d-flex align-items-center gap-2 small">
+            <span class="text-muted">Slots <strong data-testid="slots">@ActiveCount@(Overview.Settings is null ? "" : $" / {Overview.Settings.MaxActiveSpecsPerRepo}")</strong></span>
+            @if (Overview.Settings is not null)
+            {
+                <span class="badge text-bg-light border" title="Dependency mode" data-testid="dependency-mode">@Overview.Settings.SpecDependencyMode</span>
+            }
+            <button type="button" class="btn btn-outline-primary btn-sm py-0" data-testid="open-queue" @onclick="OpenQueue">Open queue</button>
+        </div>
+    </div>
+    @if (OpenRuns.Count == 0)
+    {
+        <div class="card-body py-2 small text-muted">No queued or running specs.</div>
+    }
+    else
+    {
+        <SpecRunTable Runs="OpenRuns" EffectiveDependencyMode="EffectiveMode" />
+    }
+    @if (CompletedCount > 0)
+    {
+        <div class="card-footer py-1 small text-muted" data-testid="completed-count">@CompletedCount completed</div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired]
+    public RepositoryOverview Overview { get; set; } = default!;
+
+    private bool IsCurrent => RepositoryContext.CurrentRepositoryId == Overview.Repository.Id;
+
+    private int ActiveCount => Overview.Runs.Count(run => run.Status.IsActive());
+
+    private int CompletedCount => Overview.Runs.Count(run => SpecRunLanes.For(run.Status) == SpecRunLane.Completed);
+
+    private SpecDependencyMode EffectiveMode => Overview.Settings?.SpecDependencyMode ?? SpecDependencyMode.WaitForMerge;
+
+    private IReadOnlyList<SpecRunView> OpenRuns =>
+        Overview.Runs.Where(run => SpecRunLanes.For(run.Status) != SpecRunLane.Completed).OrderBy(run => run.QueuePosition).ToArray();
+
+    private void OpenQueue()
+    {
+        RepositoryContext.Select(Overview.Repository.Id);
+        Navigation.NavigateTo(UiRoutes.Queue);
+    }
+}

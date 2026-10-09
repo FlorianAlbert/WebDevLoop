@@ -1,0 +1,6 @@
+<span class="badge @SpecRunDisplay.BadgeClass(Status)">@SpecRunDisplay.Label(Status)</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public SpecRunStatus Status { get; set; }
+}

@@ -1,0 +1,33 @@
+@inherits LiveComponentBase
+
+@if (!IsLoaded || LoadError is not null)
+{
+}
+else if (_repositories.Count == 0)
+{
+    <a class="btn btn-outline-light btn-sm" href="@UiRoutes.Repositories">Register a repository</a>
+}
+else
+{
+    <select class="form-select form-select-sm" aria-label="Current repository" title="Current repository (view context only)"
+            value="@RepositoryContext.CurrentRepositoryId" @onchange="OnChanged">
+        <option value="">No repository selected</option>
+        @foreach (RepositoryView repository in _repositories)
+        {
+            <option value="@repository.Id">@repository.Owner/@repository.Name</option>
+        }
+    </select>
+}
+
+@code {
+    private IReadOnlyList<RepositoryView> _repositories = [];
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<RepositoryView> all = await InScopeAsync(services => services.GetRequiredService<IRepositoryQueries>().ListAsync(cancellationToken));
+        _repositories = all.Where(repository => repository.IsEnabled).ToArray();
+    }
+
+    private void OnChanged(ChangeEventArgs args) =>
+        RepositoryContext.Select(int.TryParse(args.Value?.ToString(), out int id) ? id : null);
+}

@@ -1,0 +1,81 @@
+@inherits ScopedComponentBase
+
+<form class="row g-2 align-items-end" data-testid="edit-form" @onsubmit="SubmitAsync">
+    <div class="col-md-2">
+        <label class="form-label small mb-0">Base branch</label>
+        <input name="defaultBaseBranch" class="form-control form-control-sm" @bind="_defaultBaseBranch" />
+    </div>
+    <div class="col-md-4">
+        <label class="form-label small mb-0">Clone URL</label>
+        <input name="cloneUrl" class="form-control form-control-sm" @bind="_cloneUrl" />
+    </div>
+    <div class="col-md-3">
+        <label class="form-label small mb-0">Local path</label>
+        <input name="localPath" class="form-control form-control-sm" @bind="_localPath" />
+    </div>
+    <div class="col-md-1">
+        <div class="form-check">
+            <input id="edit-enabled-@Repository.Id" name="isEnabled" type="checkbox" class="form-check-input" @bind="_isEnabled" />
+            <label class="form-check-label small" for="edit-enabled-@Repository.Id">Enabled</label>
+        </div>
+    </div>
+    <div class="col-md-2 d-flex gap-1">
+        <button type="submit" class="btn btn-primary btn-sm" disabled="@_submitting">Save</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OnCancel">Cancel</button>
+    </div>
+    @if (_error is not null)
+    {
+        <div class="col-12"><div class="alert alert-danger py-1 px-2 small mb-0" role="alert" data-testid="edit-errors">@_error</div></div>
+    }
+</form>
+
+@code {
+    private string? _defaultBaseBranch;
+    private string? _cloneUrl;
+    private string? _localPath;
+    private bool _isEnabled;
+    private string? _error;
+    private bool _submitting;
+
+    [Parameter, EditorRequired]
+    public RepositoryView Repository { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnSaved { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    protected override void OnInitialized()
+    {
+        (_defaultBaseBranch, _cloneUrl, _localPath, _isEnabled) = (Repository.DefaultBaseBranch, Repository.CloneUrl, Repository.LocalPath, Repository.IsEnabled);
+    }
+
+    private async Task SubmitAsync()
+    {
+        _submitting = true;
+        _error = null;
+        try
+        {
+            var command = new UpdateRepositoryCommand(_defaultBaseBranch, _cloneUrl, _localPath, _isEnabled);
+            CommandResult<RepositoryView> result = await InScopeAsync(services =>
+                services.GetRequiredService<IRepositoryRegistry>().UpdateAsync(Repository.Id, command, CancellationToken.None));
+            if (result.IsSuccess)
+            {
+                await OnSaved.InvokeAsync();
+            }
+            else
+            {
+                _error = result.Message;
+            }
+        }
+        catch (Exception exception)
+        {
+            _error = exception.Message;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

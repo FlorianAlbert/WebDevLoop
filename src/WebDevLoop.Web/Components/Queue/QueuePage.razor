@@ -1,0 +1,96 @@
+@page "/queue"
+@inherits LiveComponentBase
+
+<PageTitle>Queue</PageTitle>
+
+@if (!IsLoaded)
+{
+    <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading…</span></div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-danger" role="alert">Could not load the queue: @LoadError</div>
+}
+else if (_repository is null)
+{
+    <div class="alert alert-secondary">
+        Select a repository in the top bar to see its queue, or <a href="@UiRoutes.Repositories">register one</a>.
+    </div>
+}
+else
+{
+    <div class="d-flex flex-wrap align-items-baseline gap-3 mb-3">
+        <h1 class="h4 mb-0">Queue · @_repository.Owner/@_repository.Name</h1>
+        <span class="small text-muted" data-testid="active-slots">
+            Active slots <strong>@ActiveCount@(_settings is null ? "" : $" / {_settings.MaxActiveSpecsPerRepo}")</strong>
+        </span>
+        @if (_settings is not null)
+        {
+            <span class="badge text-bg-light border" title="Dependency mode" data-testid="dependency-mode">@_settings.SpecDependencyMode</span>
+        }
+    </div>
+
+    <div class="mb-3">
+        <EnqueueSpecForm RepositoryId="_repository.Id" OnQueued="ReloadAsync" />
+    </div>
+
+    @if (_runs.Count == 0)
+    {
+        <p class="text-muted">Nothing queued for this repository yet.</p>
+    }
+
+    @foreach (SpecRunLane lane in Enum.GetValues<SpecRunLane>())
+    {
+        IReadOnlyList<SpecRunView> laneRuns = RunsIn(lane);
+        if (laneRuns.Count == 0)
+        {
+            continue;
+        }
+
+        <section class="card mb-3" data-lane="@lane">
+            <div class="card-header py-1 d-flex justify-content-between">
+                <strong>@SpecRunLanes.Title(lane)</strong>
+                <span class="badge text-bg-light border">@laneRuns.Count</span>
+            </div>
+            <SpecRunTable Runs="laneRuns" EffectiveDependencyMode="EffectiveMode" />
+        </section>
+    }
+}
+
+@code {
+    private RepositoryView? _repository;
+    private IReadOnlyList<SpecRunView> _runs = [];
+    private EffectiveSettingsView? _settings;
+
+    private int ActiveCount => _runs.Count(run => run.Status.IsActive());
+
+    private SpecDependencyMode EffectiveMode => _settings?.SpecDependencyMode ?? SpecDependencyMode.WaitForMerge;
+
+    protected override bool ReactsTo(LiveEventView liveEvent) => SpecQueueEvents.Affects(liveEvent);
+
+    private IReadOnlyList<SpecRunView> RunsIn(SpecRunLane lane) =>
+        _runs.Where(run => SpecRunLanes.For(run.Status) == lane).OrderBy(run => run.QueuePosition).ToArray();
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        int? repositoryId = RepositoryContext.CurrentRepositoryId;
+        if (repositoryId is not { } id)
+        {
+            (_repository, _runs, _settings) = (null, [], null);
+            return;
+        }
+
+        (_repository, _runs, _settings) = await InScopeAsync<(RepositoryView?, IReadOnlyList<SpecRunView>, EffectiveSettingsView?)>(async services =>
+        {
+            RepositoryView? repository = await services.GetRequiredService<IRepositoryQueries>().GetAsync(id, cancellationToken);
+            if (repository is null)
+            {
+                return (null, [], null);
+            }
+
+            IReadOnlyList<SpecRunView> runs = await services.GetRequiredService<IRunQueries>().ListSpecRunsAsync(id, cancellationToken);
+            CommandResult<EffectiveSettingsView> settings = await services.GetRequiredService<ISettingsManager>().GetEffectiveAsync(id, cancellationToken);
+            return (repository, runs, settings.Value);
+        });
+    }
+}

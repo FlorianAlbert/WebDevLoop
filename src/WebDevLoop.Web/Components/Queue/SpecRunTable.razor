@@ -1,0 +1,33 @@
+@if (Runs.Count > 0)
+{
+    <table class="table table-sm table-hover align-middle mb-0">
+        <tbody>
+            @foreach (SpecRunView run in Runs)
+            {
+                SpecDependencyMode mode = run.DependencyModeUsed ?? EffectiveDependencyMode;
+                <tr data-run-id="@run.Id">
+                    <td class="text-muted text-nowrap">#@run.ParentIssueNumber</td>
+                    <td>@run.Title</td>
+                    <td class="text-nowrap">
+                        <SpecStatusBadge Status="run.Status" />
+                        @if (run.Status == SpecRunStatus.WaitingForDependency)
+                        {
+                            <span class="badge text-bg-light border" title="Dependency mode">@mode</span>
+                        }
+                    </td>
+                    <td class="small text-muted">@SpecRunDisplay.Note(run, EffectiveDependencyMode)</td>
+                    <td class="text-end"><a href="@UiRoutes.Run(run.Id)">Details</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<SpecRunView> Runs { get; set; } = [];
+
+    /// <summary>Used for waiting runs that have not recorded a dependency mode yet.</summary>
+    [Parameter]
+    public SpecDependencyMode EffectiveDependencyMode { get; set; } = SpecDependencyMode.WaitForMerge;
+}

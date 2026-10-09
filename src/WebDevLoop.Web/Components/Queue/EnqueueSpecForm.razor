@@ -1,0 +1,93 @@
+@using WebDevLoop.Core.Orchestration.SpecQueue
+@using WebDevLoop.Infrastructure.Prerequisites
+@inherits ScopedComponentBase
+@inject DiagnosticReadiness Readiness
+
+<form class="row g-2 align-items-center" @onsubmit="SubmitAsync">
+    <div class="col-auto">
+        <label class="col-form-label col-form-label-sm" for="enqueue-issue">Queue parent spec issue</label>
+    </div>
+    <div class="col-auto">
+        <input id="enqueue-issue" name="issueNumber" type="number" min="1" class="form-control form-control-sm" placeholder="Issue #"
+               @bind="_issueNumber" @bind:event="oninput" disabled="@IsDisabled" />
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-primary btn-sm" data-testid="enqueue-submit" disabled="@(IsDisabled || _submitting)">Queue</button>
+    </div>
+    @if (IsDisabled)
+    {
+        <div class="col-auto small text-warning-emphasis" data-testid="enqueue-disabled">
+            Workflow actions are disabled while the app is in diagnostic-only mode. <a href="@UiRoutes.Health">See health</a>.
+        </div>
+    }
+</form>
+
+@if (_result is { } result)
+{
+    <div class="alert alert-@result.Severity py-1 px-2 small mt-2 mb-0" role="status" data-testid="enqueue-result">
+        @result.Message
+        @if (result.RunId is { } runId)
+        {
+            <a href="@UiRoutes.Run(runId)">Open run @runId</a>
+        }
+    </div>
+}
+
+@code {
+    private sealed record Feedback(string Severity, string Message, string? RunId = null);
+
+    private string? _issueNumber;
+    private bool _submitting;
+    private Feedback? _result;
+
+    [Parameter, EditorRequired]
+    public int RepositoryId { get; set; }
+
+    [Parameter]
+    public EventCallback OnQueued { get; set; }
+
+    private bool IsDisabled => Readiness.Current.Mode != ReadinessMode.Operational;
+
+    private async Task SubmitAsync()
+    {
+        if (IsDisabled)
+        {
+            return;
+        }
+
+        if (!int.TryParse(_issueNumber, out int issueNumber) || issueNumber <= 0)
+        {
+            _result = new Feedback("warning", "Enter a positive issue number.");
+            return;
+        }
+
+        _submitting = true;
+        try
+        {
+            EnqueueResult result = await InScopeAsync(services =>
+                services.GetRequiredService<ISpecEnqueuer>().EnqueueAsync(RepositoryId, issueNumber, CancellationToken.None));
+            _result = Describe(issueNumber, result);
+            if (result.Outcome == EnqueueOutcome.Queued)
+            {
+                _issueNumber = null;
+                await OnQueued.InvokeAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            _result = new Feedback("danger", $"Could not queue #{issueNumber}: {exception.Message}");
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private static Feedback Describe(int issueNumber, EnqueueResult result) => result.Outcome switch
+    {
+        EnqueueOutcome.Queued => new("success", $"Queued #{issueNumber}.", result.SpecRunId?.Value),
+        EnqueueOutcome.AlreadyQueued => new("info", $"#{issueNumber} is already queued.", result.SpecRunId?.Value),
+        EnqueueOutcome.RepositoryNotFound => new("danger", "This repository no longer exists."),
+        _ => new("warning", $"The queue changed at the same time; please try again."),
+    };
+}

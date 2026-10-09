@@ -1,0 +1,98 @@
+@inherits LiveComponentBase
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1 class="h4 mb-3">Dashboard</h1>
+
+@if (!IsLoaded)
+{
+    <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading…</span></div>
+}
+else if (LoadError is not null)
+{
+    <div class="alert alert-danger" role="alert">Could not load the dashboard: @LoadError</div>
+}
+else if (_overviews.Count == 0)
+{
+    <div class="alert alert-secondary">
+        No repositories registered yet. <a href="@UiRoutes.Repositories">Register a repository</a> to start queueing specs.
+    </div>
+}
+else
+{
+    @foreach (RunAlert alert in Alerts(SpecRunLane.NeedsAttention))
+    {
+        <div class="alert alert-danger py-2 d-flex justify-content-between align-items-center" role="alert" data-alert="NeedsAttention">
+            <span>
+                <strong>Needs attention:</strong> @alert.RepositoryName #@alert.Run.ParentIssueNumber “@alert.Run.Title”
+                @if (alert.Run.FailureReason is { } reason)
+                {
+                    <span> — @reason</span>
+                }
+            </span>
+            <a class="alert-link" href="@UiRoutes.Run(alert.Run.Id)">Open</a>
+        </div>
+    }
+
+    @foreach (RunAlert alert in Alerts(SpecRunLane.AwaitingMerge))
+    {
+        <div class="alert alert-info py-2 d-flex justify-content-between align-items-center" role="status" data-alert="AwaitingMerge">
+            <span>
+                <strong>Awaiting merge:</strong> @alert.RepositoryName #@alert.Run.ParentIssueNumber “@alert.Run.Title”
+                — @SpecRunDisplay.Note(alert.Run, SpecDependencyMode.WaitForMerge)
+            </span>
+            <a class="alert-link" href="@UiRoutes.Run(alert.Run.Id)">Open</a>
+        </div>
+    }
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        @foreach (SpecRunLane lane in Enum.GetValues<SpecRunLane>())
+        {
+            <span class="badge text-bg-light border fs-6 fw-normal">
+                @SpecRunLanes.Title(lane) <strong data-testid="count-@lane">@Count(lane)</strong>
+            </span>
+        }
+    </div>
+
+    <div class="row g-3">
+        @foreach (RepositoryOverview overview in _overviews)
+        {
+            <div class="col-12 col-xl-6">
+                <RepositoryLane Overview="overview" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private sealed record RunAlert(string RepositoryName, SpecRunView Run);
+
+    private IReadOnlyList<RepositoryOverview> _overviews = [];
+
+    protected override bool ReactsTo(LiveEventView liveEvent) => SpecQueueEvents.Affects(liveEvent);
+
+    private int Count(SpecRunLane lane) =>
+        _overviews.Sum(overview => overview.Runs.Count(run => SpecRunLanes.For(run.Status) == lane));
+
+    private IEnumerable<RunAlert> Alerts(SpecRunLane lane) =>
+        _overviews.SelectMany(overview => overview.Runs
+            .Where(run => SpecRunLanes.For(run.Status) == lane)
+            .Select(run => new RunAlert($"{overview.Repository.Owner}/{overview.Repository.Name}", run)));
+
+    protected override async Task LoadAsync(CancellationToken cancellationToken) =>
+        _overviews = await InScopeAsync(async services =>
+        {
+            IReadOnlyList<RepositoryView> repositories = await services.GetRequiredService<IRepositoryQueries>().ListAsync(cancellationToken);
+            var runQueries = services.GetRequiredService<IRunQueries>();
+            var settingsManager = services.GetRequiredService<ISettingsManager>();
+            var overviews = new List<RepositoryOverview>();
+            foreach (RepositoryView repository in repositories)
+            {
+                IReadOnlyList<SpecRunView> runs = await runQueries.ListSpecRunsAsync(repository.Id, cancellationToken);
+                CommandResult<EffectiveSettingsView> settings = await settingsManager.GetEffectiveAsync(repository.Id, cancellationToken);
+                overviews.Add(new RepositoryOverview(repository, runs, settings.Value));
+            }
+
+            return (IReadOnlyList<RepositoryOverview>)overviews;
+        });
+}

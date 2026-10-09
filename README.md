@@ -34,8 +34,8 @@ listing every problem.
    - **Issues**: Read and write (spec/ticket snapshots, finding sub-issues and dependencies, comments, closing tickets)
    - **Pull requests**: Read and write (draft PR layers, stacks, mark ready, merge tracking)
    - **Metadata**: Read (mandatory)
-   - **Copilot requests**: Read and write, if the agents should run on the App's installation token (otherwise provide a
-     user token for Copilot)
+   - **Copilot requests** (only on organization-owned Apps, see [Copilot authentication](#copilot-authentication)): do not
+     look for it on a personal account, it is not offered there
 3. Generate a private key (`.pem`) and note the App's client id.
 4. Install the App on the repositories WebDevLoop should work on.
 5. Configure `WebDevLoop:GitHub:AppClientId` and either `WebDevLoop:GitHub:AppPrivateKeyPath` (path to the `.pem`) or
@@ -43,12 +43,49 @@ listing every problem.
    repository and permission set in-process, cached, and refreshed before they expire; git credentials are resolved
    fresh for every clone, fetch, and push.
 
+### Copilot authentication
+
+Agent sessions run on the GitHub Copilot SDK, which needs a Copilot-capable token:
+
+- **Personal account (no organization): use a fine-grained PAT.** A GitHub App installation token cannot be used for
+  Copilot requests on a personal account. The *Copilot requests* App permission only exists for Apps owned by an
+  organization, installed with access to **all** repositories, and requires the organization policy *Allow use of Copilot
+  CLI billed to the organization*. The app still tries to mint such an installation token first; on a personal account
+  that attempt is rejected and it falls back to the PAT.
+- **Organization:** an organization-owned App with the *Copilot requests* permission (read and write) lets agents run on
+  the installation token, billed to the organization.
+
+Copilot usage is billed to the account that owns the token. Classic `ghp_` tokens are not supported.
+
+### PAT
+
+Create a fine-grained token under Settings → Developer settings → Fine-grained personal access tokens:
+
+1. **Resource owner:** your personal account (the *Copilot requests* permission is not available for organization-owned
+   tokens). The account needs an active Copilot subscription.
+2. **Permissions → Account → Copilot requests:** add it. This is what authorizes Copilot calls.
+3. **Repository access and permissions:** only needed if the PAT should also act as the GitHub fallback (below). Select the
+   repositories and grant **Contents**, **Issues** and **Pull requests**, each read and write (**Metadata**: read is added
+   automatically).
+
+Provide it as `WebDevLoop:GitHub:UserToken`, preferably through the environment variable
+`WebDevLoop__GitHub__UserToken` or user secrets; never commit it.
+
+**Least privilege.** The same token is used for Copilot and for the GitHub fallback, and the Copilot runtime holds it.
+When the GitHub App does all the GitHub work, create a Copilot-only PAT: just *Copilot requests*, with repository access
+limited to public repositories (read-only) and no repository permissions. Keep the **PAT fallback** setting on: the
+switch also governs whether the PAT may be used for Copilot, and a Copilot-only PAT simply fails (HTTP 403/404) when the
+fallback would otherwise be used for GitHub work, so the App must be installed on every repository. If you grant the PAT repository write permissions (to use it as the
+fallback, or instead of an App), the Copilot runtime holds a token that can write to those repositories. Agent shell commands never see it: the tool policy denies reading credential
+variables, and agent sessions are not given a GitHub token of their own.
+
 ### PAT fallback
 
-A fine-grained personal access token (Contents, Issues, Pull requests: read and write on the repositories) is used only
-when the App cannot act (not configured, not installed, or minting failed) and the **PAT fallback** setting is enabled
-(global settings, default on). Provide it as `WebDevLoop:GitHub:UserToken`, preferably through the environment variable
-`WebDevLoop__GitHub__UserToken` or user secrets; never commit it. Agent sessions never receive a GitHub write token.
+The PAT is used for GitHub work (API, clone, push) only when the App cannot act (not configured, not installed, or
+minting failed) and the **PAT fallback** setting is enabled (global settings, default on). The PAT is also usable on its
+own, without any App: leave the App settings empty, grant the repository permissions above, and keep the fallback enabled;
+commits and PRs are then attributed to you instead of an App bot. Copilot sessions use the PAT the same way: whenever no
+installation token with Copilot access is available and the fallback is enabled.
 
 ## Configuration
 

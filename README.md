@@ -35,7 +35,8 @@ audited as `Control<Action>` run events.
   parent-review/test cycle created finding tickets that are still open, the spec returns to `Running` first. Active
   phases claim a free active-spec slot (`409` while all `MaxActiveSpecsPerRepo` slots are taken).
 - **Retry a ticket** implements it again, starts a fresh review round (full `MaxReviewIterations` budget), or resumes its
-  integration saga, depending on where it failed.
+  integration saga, depending on where it failed. A ticket whose saga is already past the squash (its commit may be on
+  the integration branch) always resumes the saga.
 - **Skip a ticket** (only while `Blocked`, `Ready`, or `NeedsAttention`): a skipped blocker counts as done, so its
   dependents start on an integration branch without the skipped change. Send `{"dependents":"Skip"}` to skip every
   not-yet-started dependent as well. A ticket whose squash commit is already on the integration branch must be retried.

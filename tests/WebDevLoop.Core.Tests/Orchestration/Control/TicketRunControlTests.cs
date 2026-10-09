@@ -54,6 +54,37 @@ public sealed class TicketRunControlTests : IDisposable
         Assert.Equal(TicketRunStatus.Integrating, ticket.Status);
     }
 
+    [Theory]
+    [InlineData(IntegrationSagaCheckpoint.SquashCommitCreated)]
+    [InlineData(IntegrationSagaCheckpoint.IntegrationRefUpdated)]
+    [InlineData(IntegrationSagaCheckpoint.StackBranchPushed)]
+    public async Task Retrying_a_ticket_whose_saga_is_past_the_squash_resumes_the_saga_instead_of_reimplementing(IntegrationSagaCheckpoint checkpoint)
+    {
+        // E.g. parked by recovery while reviewing, after its squash commit already reached the integration branch.
+        TicketRun ticket = _fixture.SeedFailedTicket(_spec, ToImplementing);
+        _fixture.SeedSaga(ticket, checkpoint);
+
+        ControlResult result = await _fixture.Control().RetryTicketAsync(ticket.Id, RunControlFixture.Token);
+
+        Assert.True(result.IsApplied);
+        Assert.Equal(TicketRunStatus.Integrating, ticket.Status);
+        TicketRunStatusChanged changed = Assert.Single(_fixture.Events.OfType<TicketRunStatusChanged>());
+        Assert.Equal((TicketRunStatus.NeedsAttention, TicketRunStatus.Integrating), (changed.From, changed.To));
+    }
+
+    [Theory]
+    [InlineData(IntegrationSagaCheckpoint.Started)]
+    [InlineData(IntegrationSagaCheckpoint.Completed)]
+    public async Task A_saga_that_has_not_squashed_or_already_completed_does_not_force_an_integration(IntegrationSagaCheckpoint checkpoint)
+    {
+        TicketRun ticket = _fixture.SeedFailedTicket(_spec, ToImplementing);
+        _fixture.SeedSaga(ticket, checkpoint);
+
+        await _fixture.Control().RetryTicketAsync(ticket.Id, RunControlFixture.Token);
+
+        Assert.Equal(TicketRunStatus.Ready, ticket.Status);
+    }
+
     [Fact]
     public async Task Only_a_ticket_that_needs_attention_can_be_retried()
     {

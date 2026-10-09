@@ -95,8 +95,12 @@ public sealed class TicketRun : VersionedEntity
     /// the implemented commit; a failed integration resumes its saga; anything else, or a ticket without an implemented
     /// commit, is implemented again.
     /// </summary>
+    /// <param name="integrationInProgress">
+    /// The ticket's integration saga already squashed (its commit may be on the integration branch): whatever phase failed,
+    /// the saga is resumed rather than implementing the ticket again.
+    /// </param>
     /// <returns>The status the ticket moved to.</returns>
-    public TicketRunStatus Retry(DateTimeOffset at)
+    public TicketRunStatus Retry(DateTimeOffset at, bool integrationInProgress = false)
     {
         if (Status != TicketRunStatus.NeedsAttention)
         {
@@ -105,6 +109,7 @@ public sealed class TicketRun : VersionedEntity
 
         TicketRunStatus target = (NeedsAttentionFrom, LastImplementedSha) switch
         {
+            _ when integrationInProgress => TicketRunStatus.Integrating,
             (TicketRunStatus.Reviewing or TicketRunStatus.FixingReviewFindings, not null) => TicketRunStatus.Reviewing,
             (TicketRunStatus.Integrating, not null) => TicketRunStatus.Integrating,
             _ => TicketRunStatus.Ready,

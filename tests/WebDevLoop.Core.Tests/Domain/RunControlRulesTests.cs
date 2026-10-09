@@ -143,6 +143,23 @@ public sealed class RunControlRulesTests
         Assert.Equal((1, 0), (ticket.Attempt, ticket.ReviewIteration));
     }
 
+    [Theory]
+    [InlineData(TicketRunStatus.Implementing)]
+    [InlineData(TicketRunStatus.Reviewing)]
+    public void a_ticket_whose_integration_already_squashed_resumes_the_integration_whatever_phase_failed(TicketRunStatus failedIn)
+    {
+        TicketRun ticket = TicketIn(TicketRunStatus.Ready, TicketRunStatus.Implementing);
+        if (failedIn == TicketRunStatus.Reviewing)
+        {
+            ticket.TransitionTo(TicketRunStatus.Reviewing, T0);
+        }
+
+        ticket.MarkNeedsAttention("interrupted", T0);
+
+        Assert.Equal(TicketRunStatus.Integrating, ticket.Retry(T0, integrationInProgress: true));
+        Assert.Equal((1, 0), (ticket.Attempt, ticket.ReviewIteration));
+    }
+
     [Fact]
     public void a_ticket_without_an_implemented_commit_is_reimplemented_whatever_phase_failed()
     {

@@ -14,7 +14,10 @@ public interface IRunControl
     /// <summary>Aborts a non-terminal spec: its open tickets and active steps are aborted, agent sessions and the tester app are stopped, and its slot is released.</summary>
     Task<ControlResult> AbortSpecAsync(RunId specRunId, CancellationToken cancellationToken);
 
-    /// <summary>Resumes a ticket in <c>NeedsAttention</c>: implement again, review again, or resume its integration.</summary>
+    /// <summary>
+    /// Resumes a ticket in <c>NeedsAttention</c>: implement again, review again, or resume its integration. A ticket whose
+    /// integration saga is past the squash always resumes the saga (<c>Integrating</c>).
+    /// </summary>
     Task<ControlResult> RetryTicketAsync(TicketRunId ticketRunId, CancellationToken cancellationToken);
 
     /// <summary>Gives up a ticket that is not being worked on (<c>Blocked</c>, <c>Ready</c>, <c>NeedsAttention</c>).</summary>

@@ -29,7 +29,10 @@ public sealed class TicketRunControl(
             return ControlResult.NotAllowed($"Ticket run '{ticketRunId}' is {ticket.Status}; only a ticket run that needs attention can be retried.");
         }
 
-        TicketRunStatus target = journal.RetryTicket(ticket);
+        // A saga past the squash must be resumed: implementing again would leave its commit orphaned on the integration branch.
+        bool integrationInProgress = await sagas.FindLatestForTicketAsync(ticket.Id, cancellationToken)
+            is { IsCompleted: false, Checkpoint: >= IntegrationSagaCheckpoint.SquashCommitCreated };
+        TicketRunStatus target = journal.RetryTicket(ticket, integrationInProgress);
         journal.Record(ControlAction.Retry, spec!.Id, ticket.Id, target.ToString());
         return await SaveAsync(ticketRunId, cancellationToken);
     }

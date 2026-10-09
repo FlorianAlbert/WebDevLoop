@@ -29,8 +29,8 @@ internal sealed class PullRequestsClient(GitHubApiClient api)
     /// <summary>Reconciles by exact head ref and run/ticket marker before creating; never creates a second PR for one head.</summary>
     public async Task<PullRequestDto> CreateDraftAsync(GitHubRepoRef repo, DraftPullRequest request, CancellationToken cancellationToken)
     {
-        (RunId RunId, TicketRunId TicketRunId) marker = PullRequestMarker.TryParse(request.Body)
-            ?? throw new ArgumentException("The pull request body must contain the marker from PullRequestMarker.Format.", nameof(request));
+        (RunId RunId, TicketRunId TicketRunId) marker = (request.RunId, request.TicketRunId);
+        string body = BodyWithMarker(request);
 
         PullRequestDto? existing = await FindByHeadAsync(repo, request.Head, cancellationToken);
         if (existing is not null)
@@ -42,7 +42,7 @@ internal sealed class PullRequestsClient(GitHubApiClient api)
             HttpMethod.Post,
             repo,
             "pulls",
-            new { title = request.Title, head = request.Head.Value, @base = request.Base.Value, body = request.Body, draft = true },
+            new { title = request.Title, head = request.Head.Value, @base = request.Base.Value, body, draft = true },
             cancellationToken);
 
         if (created.IsSuccess)
@@ -86,6 +86,20 @@ internal sealed class PullRequestsClient(GitHubApiClient api)
 
         string? status = JsonNode.Parse(response.EnsureSuccess().Content)?["status"]?.GetValue<string>();
         return status is "ahead" or "identical";
+    }
+
+    /// <summary>The body with this run's marker appended; a body already carrying it is kept, one carrying another marker is rejected.</summary>
+    private static string BodyWithMarker(DraftPullRequest request)
+    {
+        (RunId RunId, TicketRunId TicketRunId)? existing = PullRequestMarker.TryParse(request.Body);
+        if (existing is null)
+        {
+            return $"{request.Body}\n\n{PullRequestMarker.Format(request.RunId, request.TicketRunId)}";
+        }
+
+        return existing == (request.RunId, request.TicketRunId)
+            ? request.Body
+            : throw new ArgumentException("The pull request body carries the marker of another run or ticket.", nameof(request));
     }
 
     private static PullRequestDto ReuseIfOwned(PullRequestDto existing, BranchName head, (RunId RunId, TicketRunId TicketRunId) expected) =>

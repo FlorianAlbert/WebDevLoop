@@ -173,7 +173,7 @@ public sealed class FakeOrchestratorContractTests
             PullRequestSnapshot pull = await pulls.FindPullRequestByHeadAsync(repository.Ref, saga.StackBranchName, ct)
                 ?? await pulls.CreateDraftPullRequestAsync(
                     repository.Ref,
-                    new DraftPullRequest(saga.StackBranchName, repository.DefaultBaseBranch, ticket.Title, $"run={spec.Id} ticket={ticket.Id}"),
+                    new DraftPullRequest(saga.StackBranchName, repository.DefaultBaseBranch, ticket.Title, $"run={spec.Id} ticket={ticket.Id}", spec.Id, ticket.Id),
                     ct);
             saga.PullRequestNumber = pull.Number;
             saga.AdvanceTo(IntegrationSagaCheckpoint.PrCreated, clock.UtcNow);

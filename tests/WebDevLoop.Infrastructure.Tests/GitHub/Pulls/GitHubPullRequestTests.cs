@@ -15,7 +15,7 @@ public sealed class GitHubPullRequestTests
     private readonly PullsHarness _h = new();
 
     private static DraftPullRequest Draft(string? body = null) =>
-        new(Head, Trunk, "Ticket 1", body ?? OwnBody());
+        new(Head, Trunk, "Ticket 1", body ?? OwnBody(), Run, Ticket);
 
     [Fact]
     public async Task Create_draft_posts_exact_head_base_body_and_draft_flag_with_a_pull_request_token()
@@ -72,10 +72,25 @@ public sealed class GitHubPullRequestTests
     }
 
     [Fact]
-    public async Task Create_draft_rejects_a_body_without_the_marker_before_any_request()
+    public async Task Create_draft_appends_the_run_and_ticket_marker_to_the_body()
     {
+        _h.Handler
+            .Respond(HttpMethod.Get, ListByHead, HttpStatusCode.OK, Array.Empty<object>())
+            .Respond(HttpMethod.Post, PullsPath, HttpStatusCode.Created, PullJson(7, Head.Value, "main", OwnBody()));
+
+        await _h.Adapter.CreateDraftPullRequestAsync(Repo, Draft("Implements ticket"), CancellationToken.None);
+
+        RecordedCall post = Assert.Single(_h.Handler.CallsTo(HttpMethod.Post, PullsPath));
+        Assert.Equal(OwnBody(), post.Json["body"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Create_draft_rejects_a_body_carrying_another_runs_marker_before_any_request()
+    {
+        string foreign = $"x\n\n{PullRequestMarker.Format(new RunId("run-9"), Ticket)}";
+
         await Assert.ThrowsAsync<ArgumentException>(
-            () => _h.Adapter.CreateDraftPullRequestAsync(Repo, Draft("no marker here"), CancellationToken.None));
+            () => _h.Adapter.CreateDraftPullRequestAsync(Repo, Draft(foreign), CancellationToken.None));
 
         Assert.Empty(_h.Handler.Calls);
     }

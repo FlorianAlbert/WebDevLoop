@@ -1,6 +1,6 @@
 using WebDevLoop.Core.Domain;
 
-namespace WebDevLoop.Infrastructure.GitHub.Pulls;
+namespace WebDevLoop.Core.Orchestration.Integration;
 
 /// <summary>Chooses the base branch for a ticket's PR layer so the PRs form a valid base-to-head chain.</summary>
 public static class PullRequestBasePlanner

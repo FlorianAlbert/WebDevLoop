@@ -1,7 +1,7 @@
 using WebDevLoop.Core.Domain;
-using WebDevLoop.Infrastructure.GitHub.Pulls;
+using WebDevLoop.Core.Orchestration.Integration;
 
-namespace WebDevLoop.Infrastructure.Tests.GitHub.Pulls;
+namespace WebDevLoop.Core.Tests.Orchestration.Integration;
 
 public sealed class PullRequestBasePlannerTests
 {

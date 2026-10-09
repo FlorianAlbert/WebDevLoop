@@ -7,7 +7,7 @@ namespace WebDevLoop.Infrastructure.GitHub.Pulls;
 /// Machine-readable PR-body marker that ties a pull request to a spec run and ticket run, e.g.
 /// <c>&lt;!-- webdevloop:run=run-7 ticket=t3 --&gt;</c>. It is invisible in the rendered PR, survives edits of the
 /// surrounding text, and is what recovery (WP-16/WP-18) matches on together with the exact head ref.
-/// Callers must append <see cref="Format"/> to every <c>DraftPullRequest.Body</c>; the adapter rejects bodies without it.
+/// The adapter appends <see cref="Format"/> to every <c>DraftPullRequest.Body</c> from the request's run and ticket ids.
 /// </summary>
 public static partial class PullRequestMarker
 {

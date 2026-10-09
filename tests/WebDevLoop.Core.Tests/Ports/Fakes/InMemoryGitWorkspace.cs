@@ -41,6 +41,8 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
 
     public void SetWorktreeStatus(string path, WorktreeStatus status) => _worktrees[path] = (_worktrees[path].Worktree, status);
 
+    public IReadOnlyList<CommitSha> ParentsOf(CommitSha commit) => _commits[commit].Parents;
+
     public CommitSha? RemoteTip(BranchName branch) => _remote.TryGetValue(branch, out CommitSha sha) ? sha : null;
 
     public Task EnsureClonedAsync(GitRepositoryLocation repo, CancellationToken cancellationToken)

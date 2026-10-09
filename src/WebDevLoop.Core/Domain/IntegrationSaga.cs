@@ -64,6 +64,24 @@ public sealed class IntegrationSaga : VersionedEntity
         UpdatedAt = at;
     }
 
+    /// <summary>
+    /// Rebuilds the squash on a newer integration tip. Only allowed before the integration ref moved: until then the squash
+    /// commit is an unreferenced local object, so starting over has no external effect.
+    /// </summary>
+    public void RetargetTo(CommitSha expectedPriorIntegrationSha, DateTimeOffset at)
+    {
+        if (Checkpoint >= IntegrationSagaCheckpoint.IntegrationRefUpdated)
+        {
+            throw new InvalidStatusTransitionException(nameof(IntegrationSaga), Checkpoint, IntegrationSagaCheckpoint.Started);
+        }
+
+        ExpectedPriorIntegrationSha = expectedPriorIntegrationSha;
+        SquashCommitSha = null;
+        Checkpoint = IntegrationSagaCheckpoint.Started;
+        LastError = null;
+        UpdatedAt = at;
+    }
+
     public void RecordError(string error, DateTimeOffset at)
     {
         LastError = error;

@@ -73,6 +73,29 @@ public sealed class SettingsValidatorTests
         Assert.Equal(nameof(SettingsProfile.MaxConcurrentImplementersGlobal), error.Field);
     }
 
+    [Theory]
+    [InlineData(nameof(SettingsProfile.WorkspaceRootDirectory))]
+    [InlineData(nameof(SettingsProfile.CopilotBaseDirectory))]
+    public void repository_profile_cannot_override_startup_scoped_directories(string field)
+    {
+        SettingsProfile profile = SettingsProfile.ForRepository(RepositoryId);
+        typeof(SettingsProfile).GetProperty(field)!.SetValue(profile, "/srv/elsewhere");
+
+        SettingsValidationError error = Assert.Single(SettingsValidator.Validate(profile));
+
+        Assert.Equal(field, error.Field);
+    }
+
+    [Fact]
+    public void global_profile_may_set_startup_scoped_directories()
+    {
+        SettingsProfile profile = SettingsProfile.ForGlobal();
+        profile.WorkspaceRootDirectory = "/srv/workspaces";
+        profile.CopilotBaseDirectory = "/srv/copilot";
+
+        Assert.Empty(SettingsValidator.Validate(profile));
+    }
+
     [Fact]
     public void role_prompt_template_with_unknown_placeholder_is_rejected()
     {

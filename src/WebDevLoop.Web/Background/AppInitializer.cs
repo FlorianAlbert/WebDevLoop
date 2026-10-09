@@ -36,7 +36,13 @@ public sealed partial class AppInitializer(
     {
         // Pinned now: recovery treats steps started before the boot time as left over by a previous process.
         services.GetRequiredService<ProcessBoot>();
-        startupSettings.Resolve(await PrepareDatabaseAsync(cancellationToken) ?? embeddedDefaults);
+        EffectiveSettings? persisted = await PrepareDatabaseAsync(cancellationToken);
+        startupSettings.Resolve(persisted ?? embeddedDefaults);
+        if (persisted is not null)
+        {
+            await WarnAboutClonesOutsideWorkspaceRootAsync(persisted.WorkspaceRootDirectory, cancellationToken);
+        }
+
         ReadinessSnapshot snapshot = await services.GetRequiredService<DiagnosticReadiness>().RefreshAsync(cancellationToken);
         if (snapshot.Mode == ReadinessMode.Operational)
         {
@@ -76,6 +82,27 @@ public sealed partial class AppInitializer(
         }
     }
 
+    /// <remarks>
+    /// Clone paths are stored when a repository is registered, so a changed workspace root does not move them: the git workspace
+    /// refuses paths outside the new root and the repository's tickets need attention until the clone is moved (or the root is restored).
+    /// </remarks>
+    private async Task WarnAboutClonesOutsideWorkspaceRootAsync(string workspaceRoot, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using AsyncServiceScope scope = scopes.CreateAsyncScope();
+            IReadOnlyList<RepositoryRecord> repositories = await scope.ServiceProvider.GetRequiredService<IRepositoryRecordRepository>().ListAsync(cancellationToken);
+            foreach (RepositoryRecord repository in WorkspaceRootDrift.FindOutside(workspaceRoot, repositories))
+            {
+                LogCloneOutsideWorkspaceRoot(logger, repository.Ref.ToString(), repository.LocalPath, workspaceRoot);
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            LogWorkspaceRootCheckFailed(logger, exception);
+        }
+    }
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Prerequisites are met (data directory {DataDirectory}); the workflow starts after startup recovery.")]
     private static partial void LogOperational(ILogger logger, string dataDirectory);
 
@@ -87,6 +114,12 @@ public sealed partial class AppInitializer(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "First start: seeded the global settings with the embedded defaults and prompt templates.")]
     private static partial void LogSeeded(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Repository {Repository} is cloned at {LocalPath}, outside the workspace root {WorkspaceRoot} the app started with: its worktrees cannot be created and its tickets will need attention. Move the clone under the workspace root and update the repository's local path, or restore the previous workspace root and restart.")]
+    private static partial void LogCloneOutsideWorkspaceRoot(ILogger logger, string repository, string localPath, string workspaceRoot);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The clone locations could not be checked against the workspace root.")]
+    private static partial void LogWorkspaceRootCheckFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "The database at {DatabasePath} could not be migrated; running diagnostic-only with the embedded default settings.")]
     private static partial void LogDatabaseUnavailable(ILogger logger, Exception exception, string databasePath);

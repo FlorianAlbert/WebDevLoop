@@ -87,10 +87,13 @@ Workflow behaviour is edited in the app (Settings page or `/api/settings`) and s
 nullable per-repository overrides for models, reasoning effort, prompt templates, timeouts, the active-spec limit, the
 dependency mode (`WaitForMerge`/`StackOnTop`), implementer concurrency, review/retry/cycle limits, tester run
 instructions, the test port range, and the PAT fallback. The global settings are seeded from the embedded defaults
-(including the prompt templates) on first start. The workspace root, the Copilot home, and the PAT fallback are read once at
-startup because they configure process-wide resources, so changing them takes effect after a restart; per-repository
-overrides of the workspace root and the Copilot home are not supported and ignored. The repository selected in the UI is
-remembered across restarts (`<DataDirectory>/ui-state.json`); it is view context only and never affects scheduling.
+(including the prompt templates) on first start. The workspace root and the Copilot home are global-only and startup-scoped:
+they configure process-wide resources (the git workspace confines every clone and worktree path to the root it started
+with), so they cannot be overridden per repository (the API rejects it) and a change of the global value takes effect after
+a restart. Existing clones are not moved: after changing the workspace root, move them under the new root and update each
+repository's local path (`PATCH /api/repos/{id}`); the startup log warns about every repository whose clone lies outside the
+current root, and until fixed its tickets need attention. The PAT fallback is likewise read once at startup. The repository
+selected in the UI is remembered across restarts (`<DataDirectory>/ui-state.json`); it is view context only and never affects scheduling.
 
 ## Running
 

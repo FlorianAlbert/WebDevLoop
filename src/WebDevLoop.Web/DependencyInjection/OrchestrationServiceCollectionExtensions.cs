@@ -74,7 +74,9 @@ public static class OrchestrationServiceCollectionExtensions
     {
         services.TryAddSingleton<PromptRenderer>();
         services.TryAddSingleton(provider => new SettingsResolver(provider.GetRequiredService<EffectiveSettings>()));
-        services.TryAddScoped<IEffectiveSettingsProvider, PersistedEffectiveSettingsProvider>();
+        services.TryAddScoped<PersistedEffectiveSettingsProvider>();
+        services.TryAddScoped<IEffectiveSettingsProvider>(provider => new StartupPinnedSettingsProvider(
+            provider.GetRequiredService<PersistedEffectiveSettingsProvider>(), provider.GetRequiredService<StartupSettings>()));
     }
 
     private static void AddOrchestrationOptions(this IServiceCollection services, WorkflowWorkerOptions workflow, string skillsRoot)

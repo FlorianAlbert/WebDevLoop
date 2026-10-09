@@ -73,6 +73,13 @@ public sealed class SettingsEditModel
         return model;
     }
 
+    /// <summary>Repository layers cannot override the startup-scoped directories; a value saved by an older version is dropped on the next save.</summary>
+    public void DiscardStartupScopedDirectories()
+    {
+        WorkspaceRootDirectory = null;
+        CopilotBaseDirectory = null;
+    }
+
     public SettingsProfileData ToData() => new()
     {
         WorkspaceRootDirectory = NullIfBlank(WorkspaceRootDirectory),

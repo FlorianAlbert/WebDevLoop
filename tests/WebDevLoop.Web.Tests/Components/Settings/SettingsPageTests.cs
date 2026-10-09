@@ -63,6 +63,33 @@ public sealed class SettingsPageTests : BunitContext
     }
 
     [Fact]
+    public async Task the_repository_editor_offers_no_startup_scoped_directories_and_drops_a_legacy_override_on_save()
+    {
+        _manager.Repository = new SettingsProfileData { WorkspaceRootDirectory = "/legacy", CopilotBaseDirectory = "/legacy-copilot" };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
+
+        Assert.Empty(page.FindAll("[data-field='WorkspaceRootDirectory']"));
+        Assert.Empty(page.FindAll("[data-field='CopilotBaseDirectory']"));
+
+        await SaveAsync(page);
+
+        SettingsProfileData saved = Assert.Single(_manager.SavedRepository).Data;
+        Assert.Null(saved.WorkspaceRootDirectory);
+        Assert.Null(saved.CopilotBaseDirectory);
+    }
+
+    [Fact]
+    public async Task the_global_editor_explains_that_the_directories_take_effect_after_a_restart()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        Assert.NotNull(Field(page, "WorkspaceRootDirectory"));
+        string note = page.Find("[data-testid=startup-directories-note]").TextContent;
+        Assert.Contains("restart", note, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("clones must be moved", note, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task an_overridden_repo_value_is_marked_and_reset_to_inherited_saves_null()
     {
         _manager.Global = new SettingsProfileData { MaxRetries = 7 };

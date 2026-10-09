@@ -33,10 +33,17 @@ else if (_model is not null)
         <ChoiceOverride Field="@nameof(SettingsProfileData.PatFallbackEnabled)" Label="Personal access token fallback" Options="BooleanOptions"
                         Value="@_model.PatFallbackEnabled?.ToString().ToLowerInvariant()" ValueChanged="SetPatFallback"
                         Inherited="@(_inherited.PatFallbackEnabled ? "Enabled" : "Disabled")" Errors="@ErrorsFor(nameof(SettingsProfileData.PatFallbackEnabled))" />
-        <TextOverride Field="@nameof(SettingsProfileData.WorkspaceRootDirectory)" Label="Workspace root directory" @bind-Value="_model.WorkspaceRootDirectory"
-                      Inherited="@_inherited.WorkspaceRootDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.WorkspaceRootDirectory))" />
-        <TextOverride Field="@nameof(SettingsProfileData.CopilotBaseDirectory)" Label="Copilot base directory" @bind-Value="_model.CopilotBaseDirectory"
-                      Inherited="@_inherited.CopilotBaseDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.CopilotBaseDirectory))" />
+        @if (IsGlobal)
+        {
+            <p class="form-text mb-1" data-testid="startup-directories-note">
+                The workspace root and the Copilot base directory are read once at startup and shared by all repositories: a change takes effect
+                after a restart, and existing clones must be moved under the new workspace root (then update each repository's local path).
+            </p>
+            <TextOverride Field="@nameof(SettingsProfileData.WorkspaceRootDirectory)" Label="Workspace root directory" @bind-Value="_model.WorkspaceRootDirectory"
+                          Inherited="@_inherited.WorkspaceRootDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.WorkspaceRootDirectory))" />
+            <TextOverride Field="@nameof(SettingsProfileData.CopilotBaseDirectory)" Label="Copilot base directory" @bind-Value="_model.CopilotBaseDirectory"
+                          Inherited="@_inherited.CopilotBaseDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.CopilotBaseDirectory))" />
+        }
 
         <h3 class="h5 mt-4">Concurrency, review and retries</h3>
         <NumberOverride Field="@nameof(SettingsProfileData.MaxActiveSpecsPerRepo)" Label="Max active specs per repository" @bind-Value="_model.MaxActiveSpecsPerRepo"
@@ -172,6 +179,11 @@ else
     private void ShowLayer(SettingsProfileData layer)
     {
         _model = SettingsEditModel.FromData(layer);
+        if (!IsGlobal)
+        {
+            _model.DiscardStartupScopedDirectories();
+        }
+
         _model.ShowInheritedPrompts(_inherited);
     }
 

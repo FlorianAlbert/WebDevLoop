@@ -17,6 +17,8 @@ public static class SettingsValidator
 
         RequireAtLeast(errors, nameof(profile.MaxActiveSpecsPerRepo), profile.MaxActiveSpecsPerRepo, MinimumPositiveValue);
         ValidateGlobalImplementerLimit(errors, profile);
+        RequireGlobalOnly(errors, profile, nameof(profile.WorkspaceRootDirectory), profile.WorkspaceRootDirectory);
+        RequireGlobalOnly(errors, profile, nameof(profile.CopilotBaseDirectory), profile.CopilotBaseDirectory);
         RequireAtLeast(errors, nameof(profile.MaxConcurrentImplementersPerRepo), profile.MaxConcurrentImplementersPerRepo, MinimumPositiveValue);
         RequireAtLeast(errors, nameof(profile.MaxReviewIterations), profile.MaxReviewIterations, MinimumPositiveValue);
         RequireAtLeast(errors, nameof(profile.MaxRetries), profile.MaxRetries, MinimumRetries);
@@ -52,6 +54,15 @@ public static class SettingsValidator
         }
 
         RequireAtLeast(errors, field, profile.MaxConcurrentImplementersGlobal, MinimumPositiveValue);
+    }
+
+    /// <summary>The workspace root and the Copilot home configure process-wide resources built once at startup, so only the global layer may set them.</summary>
+    private static void RequireGlobalOnly(List<SettingsValidationError> errors, SettingsProfile profile, string field, string? value)
+    {
+        if (!profile.IsGlobal && value is not null)
+        {
+            errors.Add(new SettingsValidationError(field, "Can only be set in global settings; it is read once at startup and shared by all repositories."));
+        }
     }
 
     private static void ValidatePortRange(List<SettingsValidationError> errors, TestPortRange? range)

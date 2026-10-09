@@ -31,6 +31,8 @@ public sealed class WebDevLoopDbContext(DbContextOptions<WebDevLoopDbContext> op
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
+    public DbSet<AgentLogRecord> AgentLogEntries => Set<AgentLogRecord>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) =>
         ValueConverterConventions.Apply(configurationBuilder);
 

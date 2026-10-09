@@ -48,17 +48,29 @@ public sealed class RepositoryEndpointTests
     }
 
     [Fact]
+    public async Task registering_without_a_local_path_forwards_a_command_the_server_completes()
+    {
+        await using var factory = new ApiFactory();
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage response = await client.PostJsonAsync("/api/repos", new { owner = "acme", name = "widgets" });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(new RegisterRepositoryCommand("acme", "widgets", null), Assert.Single(factory.Registry.Registered));
+    }
+
+    [Fact]
     public async Task registering_an_invalid_repository_returns_a_validation_problem_with_field_errors()
     {
         await using var factory = new ApiFactory();
-        factory.Registry.RegisterResult = CommandResult<WebDevLoop.Core.Queries.RepositoryView>.Invalid([new SettingsValidationError("LocalPath", "A value is required.")]);
+        factory.Registry.RegisterResult = CommandResult<WebDevLoop.Core.Queries.RepositoryView>.Invalid([new SettingsValidationError("Owner", "A value is required.")]);
         using HttpClient client = factory.CreateClient();
 
         using HttpResponseMessage response = await client.PostJsonAsync("/api/repos", new { owner = "acme", name = "widgets" });
         JsonElement body = await response.ReadJsonAsync();
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("A value is required.", body.GetProperty("errors").GetProperty("LocalPath")[0].GetString());
+        Assert.Equal("A value is required.", body.GetProperty("errors").GetProperty("Owner")[0].GetString());
     }
 
     [Fact]

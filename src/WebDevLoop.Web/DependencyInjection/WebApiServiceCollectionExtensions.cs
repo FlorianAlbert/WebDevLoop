@@ -19,10 +19,11 @@ public static class WebApiServiceCollectionExtensions
     /// <summary>
     /// Registers the Core application services behind the endpoints. Their dependencies come from the persistence, eventing,
     /// settings and spec-queue registrations: the repository/settings/spec-run ports, <c>IUnitOfWork</c>, <c>IClock</c>,
-    /// <c>IEffectiveSettingsProvider</c> and <c>SpecQueueService</c>.
+    /// <c>IEffectiveSettingsProvider</c>, <c>SettingsResolver</c> and <c>SpecQueueService</c>.
     /// </summary>
     public static IServiceCollection AddWebDevLoopApplicationServices(this IServiceCollection services)
     {
+        services.TryAddScoped<IWorkspaceRootProvider, GlobalWorkspaceRootProvider>();
         services.TryAddScoped<IRepositoryRegistry, RepositoryRegistry>();
         services.TryAddScoped<ISettingsManager, SettingsManager>();
         services.TryAddScoped<ISpecEnqueuer, SpecEnqueuer>();

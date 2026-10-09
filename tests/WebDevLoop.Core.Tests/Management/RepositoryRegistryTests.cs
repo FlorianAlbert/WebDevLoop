@@ -9,13 +9,14 @@ public sealed class RepositoryRegistryTests
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
     private const int FirstRepositoryId = 0;
+    private static readonly string WorkspaceRoot = Path.GetFullPath("/srv/webdevloop/workspaces");
 
     private readonly InMemoryWorkflowStore _store = new();
     private readonly FakeClock _clock = new(Start);
     private readonly CurrentRepositorySelection _selection = new();
     private readonly RepositoryRegistry _registry;
 
-    public RepositoryRegistryTests() => _registry = new RepositoryRegistry(_store, _store, _store, _selection, _clock);
+    public RepositoryRegistryTests() => _registry = new RepositoryRegistry(_store, _store, _store, _selection, _clock, new FixedWorkspaceRoot(WorkspaceRoot));
 
     [Fact]
     public async Task register_persists_an_enabled_repository_with_default_branch_and_clone_url()
@@ -31,6 +32,48 @@ public sealed class RepositoryRegistryTests
     }
 
     [Fact]
+    public async Task register_without_a_local_path_derives_the_clone_path_from_the_workspace_root()
+    {
+        CommandResult<RepositoryView> result = await _registry.RegisterAsync(new RegisterRepositoryCommand("acme", "widgets", null), CancellationToken.None);
+
+        Assert.Equal(CommandStatus.Succeeded, result.Status);
+        Assert.Equal(Path.Combine(WorkspaceRoot, "repos", "acme", "widgets"), result.Value!.LocalPath);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task register_treats_a_blank_local_path_as_not_provided(string? localPath)
+    {
+        CommandResult<RepositoryView> result = await _registry.RegisterAsync(new RegisterRepositoryCommand("acme", "widgets", localPath), CancellationToken.None);
+
+        Assert.Equal(Path.Combine(WorkspaceRoot, "repos", "acme", "widgets"), result.Value!.LocalPath);
+    }
+
+    [Fact]
+    public async Task register_accepts_a_repository_with_only_owner_and_name()
+    {
+        CommandResult<RepositoryView> result = await _registry.RegisterAsync(new RegisterRepositoryCommand("acme", "widgets"), CancellationToken.None);
+
+        Assert.Equal(CommandStatus.Succeeded, result.Status);
+    }
+
+    [Theory]
+    [InlineData("..", "widgets", "Owner")]
+    [InlineData("acme", "../../etc", "Name")]
+    [InlineData("a/b", "widgets", "Owner")]
+    [InlineData("acme", "wid\\gets", "Name")]
+    public async Task register_rejects_owner_and_name_that_cannot_form_a_safe_clone_path(string owner, string name, string expectedField)
+    {
+        CommandResult<RepositoryView> result = await _registry.RegisterAsync(new RegisterRepositoryCommand(owner, name), CancellationToken.None);
+
+        Assert.Equal(CommandStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors!, error => error.Field == expectedField);
+        Assert.Equal(0, _store.SaveCount);
+    }
+
+    [Fact]
     public async Task register_uses_explicit_branch_and_clone_url()
     {
         CommandResult<RepositoryView> result = await _registry.RegisterAsync(
@@ -42,7 +85,6 @@ public sealed class RepositoryRegistryTests
     [Theory]
     [InlineData(null, "widgets", "/work/w", "Owner")]
     [InlineData("acme", " ", "/work/w", "Name")]
-    [InlineData("acme", "widgets", "", "LocalPath")]
     public async Task register_rejects_missing_required_fields(string? owner, string? name, string? localPath, string expectedField)
     {
         CommandResult<RepositoryView> result = await _registry.RegisterAsync(new RegisterRepositoryCommand(owner, name, localPath), CancellationToken.None);
@@ -157,4 +199,9 @@ public sealed class RepositoryRegistryTests
 
         Assert.Equal(CommandStatus.NotFound, result.Status);
     }
+}
+
+internal sealed class FixedWorkspaceRoot(string root) : IWorkspaceRootProvider
+{
+    public Task<string> GetAsync(CancellationToken cancellationToken) => Task.FromResult(root);
 }

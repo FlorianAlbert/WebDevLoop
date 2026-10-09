@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Orchestration.Preparation;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Queries;
 using WebDevLoop.Core.Settings;
@@ -10,17 +11,13 @@ public sealed class RepositoryRegistry(
     ISpecRunRepository specRuns,
     IUnitOfWork unitOfWork,
     ICurrentRepositorySelection selection,
-    IClock clock) : IRepositoryRegistry
+    IClock clock,
+    IWorkspaceRootProvider workspaceRoot) : IRepositoryRegistry
 {
     public async Task<CommandResult<RepositoryView>> RegisterAsync(RegisterRepositoryCommand command, CancellationToken cancellationToken)
     {
         var errors = new List<SettingsValidationError>();
         GitHubRepoRef? repo = RequireRepoRef(command, errors);
-        if (string.IsNullOrWhiteSpace(command.LocalPath))
-        {
-            errors.Add(Required(nameof(command.LocalPath)));
-        }
-
         BranchName? baseBranch = ParseBranch(command.DefaultBaseBranch ?? DefaultSettings.BaseBranch.Value, nameof(command.DefaultBaseBranch), errors);
         if (errors.Count > 0)
         {
@@ -32,9 +29,12 @@ public sealed class RepositoryRegistry(
             return CommandResult<RepositoryView>.Conflict($"Repository '{repo}' is already registered.");
         }
 
+        string localPath = string.IsNullOrWhiteSpace(command.LocalPath)
+            ? RepositoryCloneLayout.PathFor(await workspaceRoot.GetAsync(cancellationToken), repo.Value)
+            : command.LocalPath;
         DateTimeOffset now = clock.UtcNow;
         string cloneUrl = string.IsNullOrWhiteSpace(command.CloneUrl) ? GitHubCloneUrl(repo.Value) : command.CloneUrl;
-        var repository = RepositoryRecord.Register(repo.Value, baseBranch!.Value, cloneUrl, command.LocalPath!, now);
+        var repository = RepositoryRecord.Register(repo.Value, baseBranch!.Value, cloneUrl, localPath, now);
         repository.SetEnabled(true, now);
         repositories.Add(repository);
 
@@ -118,7 +118,18 @@ public sealed class RepositoryRegistry(
             errors.Add(Required(nameof(command.Name)));
         }
 
+        RequireSafePathSegment(command.Owner, nameof(command.Owner), errors);
+        RequireSafePathSegment(command.Name, nameof(command.Name), errors);
+
         return errors.Count == 0 ? new GitHubRepoRef(command.Owner!, command.Name!) : null;
+    }
+
+    private static void RequireSafePathSegment(string? value, string field, List<SettingsValidationError> errors)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && !RepositoryCloneLayout.IsSafeSegment(value))
+        {
+            errors.Add(new SettingsValidationError(field, $"'{value}' is not a valid GitHub owner or repository name."));
+        }
     }
 
     private static BranchName? ParseBranch(string value, string field, List<SettingsValidationError> errors)

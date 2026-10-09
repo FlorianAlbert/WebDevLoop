@@ -9,7 +9,7 @@ namespace WebDevLoop.Infrastructure.Tests.Queries;
 public sealed class QueryRegistrationTests
 {
     [Fact]
-    public void queries_and_the_shared_agent_log_store_resolve()
+    public void queries_and_the_shared_persistent_agent_log_store_resolve()
     {
         ServiceProvider provider = new ServiceCollection()
             .AddPersistence("Data Source=:memory:")
@@ -19,6 +19,7 @@ public sealed class QueryRegistrationTests
 
         Assert.IsType<EfRunQueries>(scope.ServiceProvider.GetRequiredService<IRunQueries>());
         Assert.IsType<EfRepositoryQueries>(scope.ServiceProvider.GetRequiredService<IRepositoryQueries>());
+        Assert.IsType<PersistentAgentLogStore>(provider.GetRequiredService<IAgentLogSink>());
         Assert.Same(provider.GetRequiredService<IAgentLogSink>(), provider.GetRequiredService<IAgentLogReader>());
     }
 }

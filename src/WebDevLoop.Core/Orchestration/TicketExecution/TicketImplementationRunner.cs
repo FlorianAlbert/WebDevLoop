@@ -17,7 +17,9 @@ namespace WebDevLoop.Core.Orchestration.TicketExecution;
 /// unique active implement step, creates/resets the run-scoped worktree on the integration tip and verifies its ancestry,
 /// runs the implementer, and validates the report (branch head SHA, integration tip merged) before moving the ticket to
 /// review. Failed agent turns are retried in a fresh session up to <c>MaxRetries</c>; the ticket keeps its implementer
-/// slot meanwhile because it stays <c>Implementing</c>.
+/// slot meanwhile because it stays <c>Implementing</c>. An assignment from restart recovery
+/// (<see cref="ImplementationAssignment.ResumeSessionId"/>) first resumes the interrupted session in its preserved worktree;
+/// a missing session or worktree restarts the attempt from the integration tip in a fresh session on the same branch.
 /// </summary>
 public sealed class TicketImplementationRunner(
     IRepositoryRecordRepository repositories,
@@ -35,6 +37,10 @@ public sealed class TicketImplementationRunner(
     TicketExecutionOptions options)
 {
     private const AgentRole Role = AgentRole.Implementer;
+
+    private const string ResumePreamble =
+        "WebDevLoop restarted while you were working on this ticket. Your worktree is preserved: inspect what you already did, "
+        + "continue where you left off, and finish with the report below.";
 
     private readonly TicketBranchVerifier _verifier = new(git);
 
@@ -61,10 +67,14 @@ public sealed class TicketImplementationRunner(
         int firstAttempt = steps.Count(step => step.Kind == StepKind.Implement) + 1;
         int attempts = context.Settings.MaxRetries + 1;
         string? lastFailure = null;
+        AgentSessionId? resume = assignment.ResumeSessionId is { } interrupted && await IsResumableWorktreeAsync(context, cancellationToken)
+            ? interrupted
+            : null;
         for (int attempt = firstAttempt; attempt < firstAttempt + attempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            AttemptResult result = await RunAttemptAsync(context, attempt, cancellationToken);
+            AttemptResult result = await RunAttemptAsync(context, attempt, resume, cancellationToken);
+            resume = null;
             if (result.Final is { } final)
             {
                 return final;
@@ -96,7 +106,15 @@ public sealed class TicketImplementationRunner(
             RunWorkspaceLayout.For(effective.WorkspaceRootDirectory, spec.Id));
     }
 
-    private async Task<AttemptResult> RunAttemptAsync(ImplementationContext context, int attempt, CancellationToken cancellationToken)
+    /// <summary>The interrupted implementer's worktree still exists on the ticket branch (uncommitted work is kept).</summary>
+    private async Task<bool> IsResumableWorktreeAsync(ImplementationContext context, CancellationToken cancellationToken)
+    {
+        WorktreeInspection worktree = await git.InspectWorktreeAsync(context.Location, context.WorktreePath, cancellationToken);
+        return worktree.Status is WorktreeStatus.Clean or WorktreeStatus.Dirty && worktree.Branch == context.Ticket.BranchName;
+    }
+
+    /// <param name="resume">The interrupted session to continue instead of starting from the integration tip.</param>
+    private async Task<AttemptResult> RunAttemptAsync(ImplementationContext context, int attempt, AgentSessionId? resume, CancellationToken cancellationToken)
     {
         TicketRun ticket = context.Ticket;
         if (await CurrentIntegrationTipAsync(context, cancellationToken) is not { } integrationTip)
@@ -116,7 +134,7 @@ public sealed class TicketImplementationRunner(
                 ticket, ImplementationOutcome.Failed, $"The implementer prompt cannot be rendered: {exception.Message}", cancellationToken));
         }
 
-        StepRun step = StartStep(context, attempt, prompt);
+        StepRun step = StartStep(context, attempt, prompt, resume);
         if (!await SaveAsync(cancellationToken))
         {
             return AttemptResult.Finished(ImplementationResult.ConcurrencyConflict);
@@ -125,7 +143,7 @@ public sealed class TicketImplementationRunner(
         Verdict verdict;
         try
         {
-            verdict = await RunStartedStepAsync(context, step, prompt, integrationTip, cancellationToken);
+            verdict = await RunStartedStepAsync(context, step, prompt, integrationTip, resume is not null, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -144,14 +162,30 @@ public sealed class TicketImplementationRunner(
         return AttemptResult.Finished(await FinishAsync(context, step, verdict, cancellationToken));
     }
 
-    /// <summary>Resets the worktree onto <paramref name="integrationTip"/>, runs the implementer, and judges its report.</summary>
+    /// <summary>
+    /// Resumes the step's interrupted session, or resets the worktree onto <paramref name="integrationTip"/> and starts a
+    /// fresh session (also when the resumed session no longer exists), then judges the implementer's report.
+    /// </summary>
     private async Task<Verdict> RunStartedStepAsync(
         ImplementationContext context,
         StepRun step,
         string prompt,
         CommitSha integrationTip,
+        bool resumeSession,
         CancellationToken cancellationToken)
     {
+        if (resumeSession)
+        {
+            string resumePrompt = $"{ResumePreamble}{Environment.NewLine}{Environment.NewLine}{prompt}";
+            AgentRunResult resumed = await agents.ResumeAsync(BuildRequest(context, step, resumePrompt), cancellationToken);
+            if (resumed.Outcome != AgentRunOutcome.SessionNotFound)
+            {
+                return await JudgeAsync(context, resumed, integrationTip, cancellationToken);
+            }
+
+            step.CopilotSessionId = ids.NewAgentSessionId(step.Id).Value;
+        }
+
         BranchName branch = context.Ticket.BranchName;
         await git.PrepareWorktreeAsync(context.Location, new WorktreeSpec(branch, integrationTip, context.WorktreePath), cancellationToken);
         if (await _verifier.VerifyWorktreeBaseAsync(context.Location, context.WorktreePath, branch, integrationTip, cancellationToken) is { } problem)
@@ -178,10 +212,10 @@ public sealed class TicketImplementationRunner(
     }
 
     /// <summary>Adds the attempt's step as running; the filtered unique index rejects a second active implement step.</summary>
-    private StepRun StartStep(ImplementationContext context, int attempt, string prompt)
+    private StepRun StartStep(ImplementationContext context, int attempt, string prompt, AgentSessionId? resume)
     {
         StepRun step = StepRun.Create(ids.NewStepRunId(), context.Spec.Id, context.Ticket.Id, StepKind.Implement, Role, attempt, Hash(prompt));
-        step.CopilotSessionId = ids.NewAgentSessionId(step.Id).Value;
+        step.CopilotSessionId = (resume ?? ids.NewAgentSessionId(step.Id)).Value;
         RoleSettings role = context.Settings.For(Role);
         step.RecordLaunchSettings(role.Model, role.ReasoningEffort);
         step.WorktreePath = context.WorktreePath;

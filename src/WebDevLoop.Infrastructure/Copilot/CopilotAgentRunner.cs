@@ -116,6 +116,11 @@ internal sealed class CopilotAgentRunner(
             {
                 return new Attempt.AuthenticationRejected(handle.Lease.Key, exception.Message, SessionOpened: session is not null);
             }
+            catch (CopilotSessionNotFoundException exception)
+            {
+                setup.Log.Append(AgentLogKind.Error, exception.Message);
+                return Finish(AgentRunOutcome.SessionNotFound, exception.Message);
+            }
             catch (TimeoutException)
             {
                 await AbortTurnAsync(session, setup.Log);

@@ -13,4 +13,10 @@ public interface ICopilotRuntimePool
 
     /// <summary>Replaces every runtime whose token expires within the refresh skew; returns the replaced keys.</summary>
     Task<IReadOnlyList<CopilotRuntimeKey>> RefreshExpiringAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Stops runtimes no session has leased for the idle timeout (e.g. the per-port runtime of a finished tester); the next
+    /// session needing one starts it again. Returns the stopped keys.
+    /// </summary>
+    Task<IReadOnlyList<CopilotRuntimeKey>> EvictIdleAsync(CancellationToken cancellationToken);
 }

@@ -14,5 +14,9 @@ public enum AgentRunOutcome
     TimedOut,
     Cancelled,
     AuthenticationFailed,
+
+    /// <summary>A resume found no persisted session with the requested id; the caller restarts in a fresh session.</summary>
+    SessionNotFound,
+
     Failed,
 }

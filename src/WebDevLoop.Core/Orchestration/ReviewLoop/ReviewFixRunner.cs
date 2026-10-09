@@ -15,7 +15,8 @@ namespace WebDevLoop.Core.Orchestration.ReviewLoop;
 /// Workflow step 6 for one ticket: sends the review findings to the implementer and validates the fix. The fix turn takes
 /// an implementer slot exactly like an initial implementation (same <see cref="ImplementerCapacityGate"/> and
 /// <see cref="ImplementerCapacity"/> check, then a compare-and-swap claim <c>Reviewing → FixingReviewFindings</c>). The first
-/// turn resumes the original implementer session; failed turns are retried in a fresh session up to <c>MaxRetries</c>.
+/// turn resumes the original implementer session (or, if that session no longer exists, starts a fresh one in the same
+/// turn); failed turns are retried in a fresh session up to <c>MaxRetries</c>.
 /// </summary>
 public sealed class ReviewFixRunner(
     ITicketRunRepository ticketRuns,
@@ -39,14 +40,37 @@ public sealed class ReviewFixRunner(
     /// <param name="context">The ticket must be <c>Reviewing</c> with a validated <see cref="TicketRun.LastImplementedSha"/>.</param>
     internal async Task<FixResult> RunAsync(ImplementationContext context, IReadOnlyList<Finding> findings, CancellationToken cancellationToken)
     {
-        TicketRun ticket = context.Ticket;
-        IReadOnlyList<StepRun> steps = await stepRuns.ListByTicketRunAsync(ticket.Id, cancellationToken);
+        IReadOnlyList<StepRun> steps = await stepRuns.ListByTicketRunAsync(context.Ticket.Id, cancellationToken);
         if (await ClaimSlotAsync(context, cancellationToken) is { } notClaimed)
         {
             return notClaimed;
         }
 
-        AgentSessionId? originalSession = OriginalImplementerSession(steps);
+        return await RunTurnsAsync(context, steps, findings, OriginalImplementerSession(steps), cancellationToken);
+    }
+
+    /// <summary>
+    /// Continues an interrupted fix of a ticket that still holds its slot (<c>FixingReviewFindings</c>): the first turn
+    /// resumes <paramref name="interruptedSession"/>, or the original implementer session when none is given.
+    /// </summary>
+    internal async Task<FixResult> ResumeAsync(
+        ImplementationContext context,
+        IReadOnlyList<Finding> findings,
+        AgentSessionId? interruptedSession,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<StepRun> steps = await stepRuns.ListByTicketRunAsync(context.Ticket.Id, cancellationToken);
+        return await RunTurnsAsync(context, steps, findings, interruptedSession ?? OriginalImplementerSession(steps), cancellationToken);
+    }
+
+    private async Task<FixResult> RunTurnsAsync(
+        ImplementationContext context,
+        IReadOnlyList<StepRun> steps,
+        IReadOnlyList<Finding> findings,
+        AgentSessionId? originalSession,
+        CancellationToken cancellationToken)
+    {
+        TicketRun ticket = context.Ticket;
         string findingsJson = ReviewFindingsJson.Render(findings);
         int firstAttempt = steps.Count(step => step.Kind == StepKind.Fix) + 1;
         int attempts = context.Settings.MaxRetries + 1;
@@ -156,6 +180,13 @@ public sealed class ReviewFixRunner(
         AgentRunResult run = resumable is null
             ? await agents.StartAsync(request, cancellationToken)
             : await agents.ResumeAsync(request, cancellationToken);
+        if (run.Outcome == AgentRunOutcome.SessionNotFound)
+        {
+            // The resumed session's state is gone; the findings prompt is self-contained, so a fresh session can fix them.
+            step.CopilotSessionId = ids.NewAgentSessionId(step.Id).Value;
+            run = await agents.StartAsync(BuildRequest(context, step, prompt), cancellationToken);
+        }
+
         return await JudgeAsync(context, run, integrationTip, cancellationToken);
     }
 

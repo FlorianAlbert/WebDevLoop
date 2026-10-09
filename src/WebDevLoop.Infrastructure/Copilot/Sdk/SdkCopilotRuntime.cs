@@ -11,10 +11,17 @@ internal sealed class SdkCopilotRuntime(CopilotClient client) : ICopilotRuntime
         return new SdkCopilotSession(await SdkCalls.RunAsync(() => client.CreateSessionAsync(config, cancellationToken)));
     }
 
+    /// <exception cref="CopilotSessionNotFoundException">No persisted session has the requested id.</exception>
     public async Task<ICopilotAgentSession> ResumeSessionAsync(CopilotSessionSpec spec, CancellationToken cancellationToken)
     {
+        string sessionId = spec.SessionId.Value;
+        if (await SdkCalls.RunAsync(() => client.GetSessionMetadataAsync(sessionId, cancellationToken)) is null)
+        {
+            throw new CopilotSessionNotFoundException(sessionId);
+        }
+
         ResumeSessionConfig config = SdkSessionConfigFactory.CreateResume(spec);
-        return new SdkCopilotSession(await SdkCalls.RunAsync(() => client.ResumeSessionAsync(spec.SessionId.Value, config, cancellationToken)));
+        return new SdkCopilotSession(await SdkCalls.RunAsync(() => client.ResumeSessionAsync(sessionId, config, cancellationToken)));
     }
 
     public async ValueTask DisposeAsync()

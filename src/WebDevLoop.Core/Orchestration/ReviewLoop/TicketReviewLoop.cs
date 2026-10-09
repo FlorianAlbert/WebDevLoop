@@ -1,3 +1,4 @@
+using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Preparation;
@@ -14,7 +15,9 @@ namespace WebDevLoop.Core.Orchestration.ReviewLoop;
 /// independent review axes against the implementer's branch; if either finds issues, the original implementer fixes them
 /// and both axes review the updated branch again, until both are clean (→ <c>Integrating</c>) or <c>MaxReviewIterations</c>
 /// rounds are used up (→ <c>NeedsAttention</c>). Round results are persisted with the review steps, so the loop resumes
-/// where it stopped, e.g. after waiting for an implementer slot for the fix turn.
+/// where it stopped, e.g. after waiting for an implementer slot for the fix turn. A ticket left in
+/// <c>FixingReviewFindings</c> without an active step (its fix turn was interrupted) keeps its slot and review iteration:
+/// the fix is resumed with the findings of the round that requested it.
 /// </summary>
 public sealed class TicketReviewLoop(
     IRepositoryRecordRepository repositories,
@@ -38,7 +41,7 @@ public sealed class TicketReviewLoop(
         {
             cancellationToken.ThrowIfCancellationRequested();
             TicketRun? ticket = await ticketRuns.GetAsync(assignment.TicketRunId, cancellationToken);
-            if (ticket is not { Status: TicketRunStatus.Reviewing })
+            if (ticket is not { Status: TicketRunStatus.Reviewing or TicketRunStatus.FixingReviewFindings })
             {
                 return ReviewLoopResult.NotReviewing;
             }
@@ -52,6 +55,16 @@ public sealed class TicketReviewLoop(
             if (await LoadContextAsync(ticket, cancellationToken) is not { } context || ticket.LastImplementedSha is not { } head)
             {
                 return await NeedsAttentionAsync(ticket, ReviewLoopOutcome.Failed, $"Spec run, repository, or implemented commit of ticket '{ticket.Id}' is missing.", cancellationToken);
+            }
+
+            if (ticket.Status == TicketRunStatus.FixingReviewFindings)
+            {
+                if (await ResumeInterruptedFixAsync(context, head, steps, assignment.ResumeFixSessionId, cancellationToken) is { } stopped)
+                {
+                    return stopped;
+                }
+
+                continue;
             }
 
             var reports = new Dictionary<FindingAxis, ReviewReport>(ReviewStepResults.ReadCurrentRound(ticket, steps));
@@ -163,16 +176,38 @@ public sealed class TicketReviewLoop(
                 cancellationToken);
         }
 
-        FixResult fix = await fixes.RunAsync(context, findings, cancellationToken);
-        return fix.Outcome switch
-        {
-            FixOutcome.Fixed => null,
-            FixOutcome.NoImplementerCapacity => ReviewLoopResult.AwaitingImplementerCapacity,
-            FixOutcome.Failed => new ReviewLoopResult(ReviewLoopOutcome.Failed, fix.Reason),
-            FixOutcome.Cancelled => new ReviewLoopResult(ReviewLoopOutcome.Cancelled, fix.Reason),
-            _ => ReviewLoopResult.ConcurrencyConflict,
-        };
+        return AfterFix(await fixes.RunAsync(context, findings, cancellationToken));
     }
+
+    /// <summary>The fix was claimed (and counted as a review iteration) for the findings of the previous round.</summary>
+    /// <returns>The final result, or null when the fix was applied and both axes must review again.</returns>
+    private async Task<ReviewLoopResult?> ResumeInterruptedFixAsync(
+        ImplementationContext context,
+        CommitSha head,
+        IReadOnlyList<StepRun> steps,
+        AgentSessionId? interruptedSession,
+        CancellationToken cancellationToken)
+    {
+        TicketRun ticket = context.Ticket;
+        var requestingRound = new ReviewRound(ticket.Attempt, ticket.ReviewIteration - 1);
+        Finding[] findings = ReviewStepResults.Read(steps, StepKind.Review, requestingRound, head).Values.SelectMany(report => report.Findings).ToArray();
+        if (findings.Length == 0)
+        {
+            return await NeedsAttentionAsync(
+                ticket, ReviewLoopOutcome.Failed, $"The interrupted fix of ticket '{ticket.Id}' has no persisted review findings to resume with.", cancellationToken);
+        }
+
+        return AfterFix(await fixes.ResumeAsync(context, findings, interruptedSession, cancellationToken));
+    }
+
+    private static ReviewLoopResult? AfterFix(FixResult fix) => fix.Outcome switch
+    {
+        FixOutcome.Fixed => null,
+        FixOutcome.NoImplementerCapacity => ReviewLoopResult.AwaitingImplementerCapacity,
+        FixOutcome.Failed => new ReviewLoopResult(ReviewLoopOutcome.Failed, fix.Reason),
+        FixOutcome.Cancelled => new ReviewLoopResult(ReviewLoopOutcome.Cancelled, fix.Reason),
+        _ => ReviewLoopResult.ConcurrencyConflict,
+    };
 
     private async Task<ReviewLoopResult> NeedsAttentionAsync(TicketRun ticket, ReviewLoopOutcome outcome, string reason, CancellationToken cancellationToken)
     {

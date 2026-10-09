@@ -13,6 +13,11 @@ internal sealed class ImplementerAgentStub : IAgentRunner
 
     public List<AgentRunRequest> Started { get; } = [];
 
+    public List<AgentRunRequest> Resumed { get; } = [];
+
+    /// <summary>Sessions whose persisted state is gone: resuming them reports <see cref="AgentRunOutcome.SessionNotFound"/>.</summary>
+    public HashSet<AgentSessionId> MissingSessions { get; } = [];
+
     /// <summary>When set, every started turn finishes immediately with this result.</summary>
     public Func<AgentRunRequest, AgentRunResult>? AutoReply { get; set; }
 
@@ -21,18 +26,17 @@ internal sealed class ImplementerAgentStub : IAgentRunner
     public Task<AgentRunResult> StartAsync(AgentRunRequest request, CancellationToken cancellationToken)
     {
         Started.Add(request);
-        if (AutoReply is not null)
-        {
-            return Task.FromResult(AutoReply(request));
-        }
-
-        var reply = new TaskCompletionSource<AgentRunResult>();
-        _inFlight[request.SessionId] = (request, reply);
-        return reply.Task;
+        return Run(request);
     }
 
-    public Task<AgentRunResult> ResumeAsync(AgentRunRequest request, CancellationToken cancellationToken) =>
-        throw new NotSupportedException("Implementation dispatch never resumes sessions.");
+    /// <summary>A resumed turn behaves like a started one unless its session is missing.</summary>
+    public Task<AgentRunResult> ResumeAsync(AgentRunRequest request, CancellationToken cancellationToken)
+    {
+        Resumed.Add(request);
+        return MissingSessions.Contains(request.SessionId)
+            ? Task.FromResult(AgentRunResult.NotReported(AgentRunOutcome.SessionNotFound, $"Session {request.SessionId} does not exist."))
+            : Run(request);
+    }
 
     public Task AbortAsync(AgentSessionId sessionId, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -44,5 +48,17 @@ internal sealed class ImplementerAgentStub : IAgentRunner
         TaskCompletionSource<AgentRunResult> reply = _inFlight[request.SessionId].Reply;
         _inFlight.Remove(request.SessionId);
         reply.SetResult(result);
+    }
+
+    private Task<AgentRunResult> Run(AgentRunRequest request)
+    {
+        if (AutoReply is not null)
+        {
+            return Task.FromResult(AutoReply(request));
+        }
+
+        var reply = new TaskCompletionSource<AgentRunResult>();
+        _inFlight[request.SessionId] = (request, reply);
+        return reply.Task;
     }
 }

@@ -19,6 +19,9 @@ public sealed class ScriptedAgentRunner : IAgentRunner
 
     public List<AgentSessionId> Aborted { get; } = [];
 
+    /// <summary>Sessions whose persisted state is gone: resuming them reports <see cref="AgentRunOutcome.SessionNotFound"/>.</summary>
+    public HashSet<AgentSessionId> MissingSessions { get; } = [];
+
     public ScriptedAgentRunner Script(AgentRole role, Func<AgentRunRequest, AgentReport> turn)
     {
         if (!_scripts.TryGetValue(role, out Queue<Func<AgentRunRequest, AgentReport>>? turns))
@@ -39,7 +42,9 @@ public sealed class ScriptedAgentRunner : IAgentRunner
     public Task<AgentRunResult> ResumeAsync(AgentRunRequest request, CancellationToken cancellationToken)
     {
         Resumed.Add(request);
-        return Task.FromResult(Play(request));
+        return Task.FromResult(MissingSessions.Contains(request.SessionId)
+            ? AgentRunResult.NotReported(AgentRunOutcome.SessionNotFound, $"Session {request.SessionId} does not exist.")
+            : Play(request));
     }
 
     public Task AbortAsync(AgentSessionId sessionId, CancellationToken cancellationToken)

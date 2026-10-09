@@ -231,6 +231,18 @@ public sealed class CopilotAgentRunnerTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task resuming_a_session_that_no_longer_exists_reports_session_not_found()
+    {
+        _factory.OnOpenSession = _ => new CopilotSessionNotFoundException(Session.Value);
+
+        AgentRunResult result = await _runner.ResumeAsync(Request(AgentRole.Implementer, prompt: "Continue."), Ct);
+
+        Assert.Equal(AgentRunOutcome.SessionNotFound, result.Outcome);
+        Assert.Contains(Session.Value, result.FailureReason);
+        Assert.Single(_factory.Runtimes);
+    }
+
+    [Fact]
     public async Task crossing_app_token_expiry_drains_the_old_runtime_and_resumes_the_persisted_session_on_a_new_runtime()
     {
         _factory.OnSend = turn =>

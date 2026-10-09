@@ -11,6 +11,9 @@ public sealed class CopilotRuntimeOptions
     /// <summary>Runtimes whose App installation token expires within this window are drained and replaced.</summary>
     public TimeSpan TokenRefreshSkew { get; init; } = TimeSpan.FromMinutes(5);
 
+    /// <summary>Runtimes no session has leased for this long are stopped by <c>EvictIdleAsync</c>.</summary>
+    public TimeSpan IdleTimeout { get; init; } = TimeSpan.FromMinutes(10);
+
     /// <summary>Environment the agent shell environment is derived from (scrubbed by the role policy); defaults to this process.</summary>
     public Func<IReadOnlyDictionary<string, string>> InheritedEnvironment { get; init; } = ReadProcessEnvironment;
 

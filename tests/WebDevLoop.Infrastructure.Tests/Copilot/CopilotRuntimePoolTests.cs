@@ -11,6 +11,7 @@ namespace WebDevLoop.Infrastructure.Tests.Copilot;
 public sealed class CopilotRuntimePoolTests : IAsyncDisposable
 {
     private static readonly GitHubRepoRef Repo = new("octo", "app");
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(10);
     private static readonly IReadOnlyDictionary<string, string> ShellEnvironment = new Dictionary<string, string>
     {
         ["PATH"] = "/usr/bin",
@@ -142,6 +143,35 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task runtimes_idle_for_the_idle_timeout_are_evicted_and_restarted_on_demand()
+    {
+        var testerEnvironment = new Dictionary<string, string>(ShellEnvironment) { ["WEBDEVLOOP_TEST_PORT"] = "41003" };
+        await (await _pool.AcquireAsync(Repo, testerEnvironment, Ct)).DisposeAsync();
+        await using CopilotRuntimeHandle busy = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
+        _clock.Advance(IdleTimeout);
+
+        IReadOnlyList<CopilotRuntimeKey> evicted = await _pool.EvictIdleAsync(Ct);
+
+        Assert.Equal([_factory.Runtimes[0].Launch.Key], evicted);
+        Assert.True(_factory.Runtimes[0].IsDisposed);
+        Assert.False(_factory.Runtimes[1].IsDisposed);
+        await using CopilotRuntimeHandle again = await _pool.AcquireAsync(Repo, testerEnvironment, Ct);
+        Assert.Same(_factory.Runtimes[2], again.Runtime);
+    }
+
+    [Fact]
+    public async Task idle_time_counts_from_the_last_released_session()
+    {
+        CopilotRuntimeHandle longSession = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
+        _clock.Advance(IdleTimeout * 2);
+        await longSession.DisposeAsync();
+        _clock.Advance(IdleTimeout - TimeSpan.FromSeconds(1));
+
+        Assert.Empty(await _pool.EvictIdleAsync(Ct));
+        Assert.False(_factory.Runtimes[0].IsDisposed);
+    }
+
+    [Fact]
     public async Task user_token_runtimes_carry_no_token_and_never_expire()
     {
         var tokens = new CopilotTokenProviderFake(_clock, GitHubTokenKind.UserToken);
@@ -171,5 +201,11 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
         _factory,
         tokens,
         _clock,
-        new CopilotRuntimeOptions { BaseDirectory = "/data/copilot", CliPath = "/opt/copilot/copilot", TokenRefreshSkew = TimeSpan.FromMinutes(5) });
+        new CopilotRuntimeOptions
+        {
+            BaseDirectory = "/data/copilot",
+            CliPath = "/opt/copilot/copilot",
+            TokenRefreshSkew = TimeSpan.FromMinutes(5),
+            IdleTimeout = IdleTimeout,
+        });
 }

@@ -13,7 +13,8 @@ namespace WebDevLoop.Infrastructure.Copilot;
 /// Copilot runtimes keyed by auth identity and token generation (and the agent shell environment they hand to tools).
 /// App installation tokens can only be given to a runtime through its environment, so a token nearing expiry is rotated
 /// by starting a new runtime and draining the old one once its last session lease is released. All runtimes share one
-/// base directory, so persisted sessions resume on the replacement.
+/// base directory, so persisted sessions resume on the replacement. Runtimes without sessions for the idle timeout (e.g.
+/// one per tester port) are stopped by <see cref="EvictIdleAsync"/> and restarted on demand.
 /// </summary>
 internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenProvider tokens, IClock clock, CopilotRuntimeOptions options)
     : ICopilotRuntimePool, IAsyncDisposable
@@ -119,6 +120,33 @@ internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenP
         return replaced;
     }
 
+    public async Task<IReadOnlyList<CopilotRuntimeKey>> EvictIdleAsync(CancellationToken cancellationToken)
+    {
+        DateTimeOffset idleSince = clock.UtcNow - options.IdleTimeout;
+        KeyValuePair<SlotKey, RuntimeSlot>[] idle;
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            // Leases are only handed out under the gate, so a slot found idle here cannot gain a session before it is removed.
+            idle = _current.Where(entry => entry.Value.IsIdleSince(idleSince)).ToArray();
+            foreach ((SlotKey slotKey, _) in idle)
+            {
+                _current.Remove(slotKey);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        foreach ((_, RuntimeSlot slot) in idle)
+        {
+            await slot.RetireAsync();
+        }
+
+        return idle.Select(entry => entry.Value.Key).ToArray();
+    }
+
     public async ValueTask DisposeAsync()
     {
         RuntimeSlot[] slots;
@@ -189,7 +217,7 @@ internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenP
         var launch = new CopilotRuntimeLaunch(key, options.BaseDirectory, options.CliPath, RuntimeEnvironment(shellEnvironment, token, isAppToken));
         ICopilotRuntime runtime = await factory.StartAsync(launch, cancellationToken);
 
-        var slot = new RuntimeSlot(key, runtime, token, shellEnvironment, retired => _draining.TryRemove(retired, out _));
+        var slot = new RuntimeSlot(key, runtime, token, shellEnvironment, clock, retired => _draining.TryRemove(retired, out _));
         if (_current.Remove(slotKey, out RuntimeSlot? previous))
         {
             _draining.TryAdd(previous, 0);
@@ -248,17 +276,23 @@ internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenP
         ICopilotRuntime runtime,
         GitHubAccessToken token,
         IReadOnlyDictionary<string, string> shellEnvironment,
+        IClock clock,
         Action<RuntimeSlot> disposed)
     {
         private int _leases;
         private int _retired;
         private int _disposed;
+        private long _idleSinceUtcTicks = clock.UtcNow.UtcTicks;
 
         public CopilotRuntimeKey Key { get; } = key;
 
         public ICopilotRuntime Runtime { get; } = runtime;
 
         public IReadOnlyDictionary<string, string> ShellEnvironment { get; } = shellEnvironment;
+
+        /// <summary>No session holds a lease, and none was released after <paramref name="cutoff"/>.</summary>
+        public bool IsIdleSince(DateTimeOffset cutoff) =>
+            Volatile.Read(ref _leases) == 0 && Interlocked.Read(ref _idleSinceUtcTicks) <= cutoff.UtcTicks;
 
         public bool Holds(GitHubAccessToken candidate) =>
             candidate.Generation == token.Generation && string.Equals(candidate.Value, token.Value, StringComparison.Ordinal);
@@ -287,7 +321,15 @@ internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenP
             return Runtime.DisposeAsync();
         }
 
-        private ValueTask ReleaseAsync() =>
-            Interlocked.Decrement(ref _leases) == 0 && Volatile.Read(ref _retired) == 1 ? DisposeRuntimeAsync() : ValueTask.CompletedTask;
+        private ValueTask ReleaseAsync()
+        {
+            if (Interlocked.Decrement(ref _leases) != 0)
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            Interlocked.Exchange(ref _idleSinceUtcTicks, clock.UtcNow.UtcTicks);
+            return Volatile.Read(ref _retired) == 1 ? DisposeRuntimeAsync() : ValueTask.CompletedTask;
+        }
     }
 }

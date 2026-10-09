@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Completion.Testing;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Queries;
 
@@ -83,6 +84,14 @@ public sealed class LiveEventViewMapperTests
     {
         Assert.Equal(new LiveEventView(9, nameof(SpecRunQueued), "run-1", null, null, null, At), new EventEnvelope(9, new SpecRunQueued(Run, 3, At)).ToView());
         Assert.Equal(new LiveEventView(10, nameof(FrontierReconciliationRequested), "run-1", null, null, null, At), new EventEnvelope(10, new FrontierReconciliationRequested(Run, At)).ToView());
+    }
+
+    [Fact]
+    public void testing_pass_exposes_the_run_and_its_verdict()
+    {
+        var envelope = new EventEnvelope(12, new SpecTestingPassed(Run, 3, 2, At));
+
+        Assert.Equal(new LiveEventView(12, nameof(SpecTestingPassed), "run-1", null, null, "Passed", At), envelope.ToView());
     }
 
     [Fact]

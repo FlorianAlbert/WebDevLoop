@@ -1,0 +1,94 @@
+@page "/health"
+@rendermode InteractiveServer
+@using WebDevLoop.Core.Ports
+@using WebDevLoop.Infrastructure.Prerequisites
+@inject DiagnosticReadiness Readiness
+
+<PageTitle>Health</PageTitle>
+
+<h1>Health</h1>
+
+<div class="d-flex align-items-center gap-3 mb-3">
+    <span>Readiness mode:</span>
+    <span class="badge @ModeBadgeClass" data-testid="readiness-mode">@ModeText</span>
+    @if (_snapshot.EvaluatedAt is { } evaluatedAt)
+    {
+        <small class="text-muted" data-testid="evaluated-at">Checked @evaluatedAt.ToString("u")</small>
+    }
+    <button type="button" class="btn btn-outline-primary btn-sm" data-testid="recheck" disabled="@_isChecking" @onclick="RecheckAsync">
+        @(_isChecking ? "Checking…" : "Re-check")
+    </button>
+</div>
+
+@if (_snapshot.Mode == ReadinessMode.DiagnosticOnly)
+{
+    <div class="alert alert-warning" role="alert" data-testid="workflow-disabled">
+        <strong>Mutating workflow is disabled.</strong>
+        Mutating workflow endpoints return a prerequisite error and no orchestrator service is running until every prerequisite
+        below passes. This page, the API health endpoints and the settings stay available.
+    </div>
+}
+
+@if (_snapshot.Report is null)
+{
+    <p class="text-muted" data-testid="not-evaluated">The prerequisites have not been evaluated yet. Use Re-check to run them now.</p>
+}
+else
+{
+    <table class="table table-sm align-middle" data-testid="checks">
+        <thead>
+            <tr>
+                <th>Check</th>
+                <th>Status</th>
+                <th>Details</th>
+                <th>Remediation</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (PrerequisiteCheck check in OrderedChecks)
+            {
+                <tr data-testid="check" data-status="@check.Status">
+                    <td>@check.Name</td>
+                    <td><span class="badge @StatusBadgeClass(check.Status)">@check.Status</span></td>
+                    <td>@check.Message</td>
+                    <td>@check.Remediation</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private ReadinessSnapshot _snapshot = ReadinessSnapshot.NotEvaluated;
+    private bool _isChecking;
+
+    private string ModeText => _snapshot.Mode == ReadinessMode.Operational ? "Operational" : "Diagnostic-only";
+
+    private string ModeBadgeClass => _snapshot.Mode == ReadinessMode.Operational ? "text-bg-success" : "text-bg-danger";
+
+    // Failures first so the actionable items are never below the fold.
+    private IEnumerable<PrerequisiteCheck> OrderedChecks =>
+        (_snapshot.Report?.Checks ?? []).OrderByDescending(check => check.Status);
+
+    protected override void OnInitialized() => _snapshot = Readiness.Current;
+
+    private async Task RecheckAsync()
+    {
+        _isChecking = true;
+        try
+        {
+            _snapshot = await Readiness.RefreshAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _isChecking = false;
+        }
+    }
+
+    private static string StatusBadgeClass(PrerequisiteStatus status) => status switch
+    {
+        PrerequisiteStatus.Passed => "text-bg-success",
+        PrerequisiteStatus.Warning => "text-bg-warning",
+        _ => "text-bg-danger",
+    };
+}

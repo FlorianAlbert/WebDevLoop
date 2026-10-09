@@ -1,0 +1,31 @@
+<OverrideFieldFrame Field="@Field" Label="@Label" IsOverridden="@(!string.IsNullOrEmpty(Value))" Inherited="@Inherited"
+                    Errors="@Errors" OnReset="@Reset">
+    <select id="@OverrideFieldFrame.InputIdFor(Field)" class="form-select" @onchange="Changed">
+        <option value="" selected="@string.IsNullOrEmpty(Value)">(inherit)</option>
+        @foreach ((string value, string label) in Options)
+        {
+            <option value="@value" selected="@(value == Value)">@label</option>
+        }
+    </select>
+</OverrideFieldFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public IReadOnlyList<(string Value, string Label)> Options { get; set; } = [];
+
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter] public string? Inherited { get; set; }
+
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    private Task Changed(ChangeEventArgs args) =>
+        ValueChanged.InvokeAsync(string.IsNullOrEmpty(args.Value?.ToString()) ? null : args.Value!.ToString());
+
+    private Task Reset() => ValueChanged.InvokeAsync(null);
+}

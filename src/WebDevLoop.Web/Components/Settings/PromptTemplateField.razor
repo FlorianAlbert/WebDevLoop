@@ -1,0 +1,55 @@
+@using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Settings
+
+<OverrideFieldFrame Field="@Field" Label="Prompt template" IsOverridden="@IsOverridden" ShowReset="@ShowReset" Errors="@Errors"
+                    OnReset="@ResetToInherited">
+    <ExtraActions>
+        @if (Value != DefaultTemplate)
+        {
+            <button type="button" class="btn btn-link btn-sm p-0" data-testid="reset-default" @onclick="ResetToDefault">Reset to default template</button>
+        }
+    </ExtraActions>
+    <ChildContent>
+        <textarea id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control font-monospace" rows="14" value="@Value" @oninput="Changed"></textarea>
+        <div class="form-text" data-testid="placeholders">
+            Available placeholders:
+            @foreach (string name in Placeholders)
+            {
+                <code class="me-2" title="@PromptPlaceholders.Descriptions[name]">{@name}</code>
+            }
+        </div>
+    </ChildContent>
+</OverrideFieldFrame>
+
+@code {
+    [Parameter, EditorRequired] public AgentRole Role { get; set; }
+
+    /// <summary>The template text currently in the editor (the inherited template until edited).</summary>
+    [Parameter] public string Value { get; set; } = string.Empty;
+
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired] public string InheritedTemplate { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string DefaultTemplate { get; set; } = string.Empty;
+
+    /// <summary>Only repository scope offers "reset to inherited"; globally the inherited template is the default one.</summary>
+    [Parameter] public bool ShowReset { get; set; }
+
+    [Parameter] public IReadOnlyList<string> ServerErrors { get; set; } = [];
+
+    private string Field => PromptTemplateValidator.FieldName(Role);
+
+    private bool IsOverridden => Value != InheritedTemplate;
+
+    private IEnumerable<string> Placeholders => PromptPlaceholders.AvailableFor(Role).Order(StringComparer.Ordinal);
+
+    private IReadOnlyList<string> Errors =>
+        PromptTemplateValidator.Validate(Role, Value).Select(error => error.Message).Concat(ServerErrors).Distinct().ToArray();
+
+    private Task Changed(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
+
+    private Task ResetToInherited() => ValueChanged.InvokeAsync(InheritedTemplate);
+
+    private Task ResetToDefault() => ValueChanged.InvokeAsync(DefaultTemplate);
+}

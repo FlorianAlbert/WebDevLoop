@@ -1,0 +1,40 @@
+@page "/settings"
+@rendermode InteractiveServer
+@using WebDevLoop.Core.Queries
+@inject IRepositoryQueries Repositories
+
+<PageTitle>Settings</PageTitle>
+
+<h1>Settings</h1>
+
+<div class="row mb-3">
+    <div class="col-md-6">
+        <label class="form-label fw-semibold" for="settings-scope">Edit settings for</label>
+        <select id="settings-scope" class="form-select" data-testid="scope" @onchange="ScopeChanged">
+            <option value="" selected="@(_repositoryId is null)">Global (all repositories)</option>
+            @foreach (RepositoryView repository in _repositories)
+            {
+                <option value="@repository.Id" selected="@(repository.Id == _repositoryId)">@repository.Owner/@repository.Name (override)</option>
+            }
+        </select>
+        <div class="form-text">Repository settings only override what you fill in; everything else is inherited from the global settings.</div>
+    </div>
+</div>
+
+<h2 class="h4" data-testid="scope-title">@ScopeTitle</h2>
+
+<SettingsEditor RepositoryId="_repositoryId" />
+
+@code {
+    private IReadOnlyList<RepositoryView> _repositories = [];
+    private int? _repositoryId;
+
+    private string ScopeTitle => _repositories.FirstOrDefault(repository => repository.Id == _repositoryId) is { } repository
+        ? $"Overrides for {repository.Owner}/{repository.Name}"
+        : "Global settings";
+
+    protected override async Task OnInitializedAsync() => _repositories = await Repositories.ListAsync(CancellationToken.None);
+
+    private void ScopeChanged(ChangeEventArgs args) =>
+        _repositoryId = int.TryParse(args.Value?.ToString(), out int id) ? id : null;
+}

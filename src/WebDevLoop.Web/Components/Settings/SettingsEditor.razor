@@ -1,0 +1,242 @@
+@using WebDevLoop.Core.Domain
+@using WebDevLoop.Core.Management
+@using WebDevLoop.Core.Settings
+@inject ISettingsManager Manager
+@inject EffectiveSettings EmbeddedDefaults
+
+@if (_loadError is not null)
+{
+    <div class="alert alert-danger" role="alert" data-testid="load-error">@_loadError</div>
+}
+else if (_model is not null)
+{
+    <form @onsubmit="SaveAsync" @onsubmit:preventDefault>
+        @if (_errors.Count > 0)
+        {
+            <div class="alert alert-danger" role="alert" data-testid="error-summary">
+                <strong>The settings cannot be saved yet:</strong>
+                <ul class="mb-0">
+                    @foreach (SettingsValidationError error in _errors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <h3 class="h5">General</h3>
+        <TextOverride Field="@nameof(SettingsProfileData.BaseBranch)" Label="Base (trunk) branch" @bind-Value="_model.BaseBranch"
+                      Inherited="@_inherited.BaseBranch" Errors="@ErrorsFor(nameof(SettingsProfileData.BaseBranch))" />
+        <ChoiceOverride Field="@nameof(SettingsProfileData.SpecDependencyMode)" Label="Spec dependency mode" Options="DependencyModes"
+                        Value="@_model.SpecDependencyMode?.ToString()" ValueChanged="SetDependencyMode"
+                        Inherited="@_inherited.SpecDependencyMode.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.SpecDependencyMode))" />
+        <ChoiceOverride Field="@nameof(SettingsProfileData.PatFallbackEnabled)" Label="Personal access token fallback" Options="BooleanOptions"
+                        Value="@_model.PatFallbackEnabled?.ToString().ToLowerInvariant()" ValueChanged="SetPatFallback"
+                        Inherited="@(_inherited.PatFallbackEnabled ? "Enabled" : "Disabled")" Errors="@ErrorsFor(nameof(SettingsProfileData.PatFallbackEnabled))" />
+        <TextOverride Field="@nameof(SettingsProfileData.WorkspaceRootDirectory)" Label="Workspace root directory" @bind-Value="_model.WorkspaceRootDirectory"
+                      Inherited="@_inherited.WorkspaceRootDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.WorkspaceRootDirectory))" />
+        <TextOverride Field="@nameof(SettingsProfileData.CopilotBaseDirectory)" Label="Copilot base directory" @bind-Value="_model.CopilotBaseDirectory"
+                      Inherited="@_inherited.CopilotBaseDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.CopilotBaseDirectory))" />
+
+        <h3 class="h5 mt-4">Concurrency, review and retries</h3>
+        <NumberOverride Field="@nameof(SettingsProfileData.MaxActiveSpecsPerRepo)" Label="Max active specs per repository" @bind-Value="_model.MaxActiveSpecsPerRepo"
+                        Inherited="@_inherited.MaxActiveSpecsPerRepo.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxActiveSpecsPerRepo))" />
+        @if (IsGlobal)
+        {
+            <NumberOverride Field="@nameof(SettingsProfileData.MaxConcurrentImplementersGlobal)" Label="Max concurrent implementers (all repositories)"
+                            @bind-Value="_model.MaxConcurrentImplementersGlobal" Inherited="@_inherited.MaxConcurrentImplementersGlobal.ToString()"
+                            Errors="@ErrorsFor(nameof(SettingsProfileData.MaxConcurrentImplementersGlobal))" />
+        }
+        <NumberOverride Field="@nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo)" Label="Max concurrent implementers per repository"
+                        @bind-Value="_model.MaxConcurrentImplementersPerRepo" Inherited="@_inherited.MaxConcurrentImplementersPerRepo.ToString()"
+                        Errors="@ErrorsFor(nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo))" />
+        <NumberOverride Field="@nameof(SettingsProfileData.MaxReviewIterations)" Label="Max review iterations per ticket" @bind-Value="_model.MaxReviewIterations"
+                        Inherited="@_inherited.MaxReviewIterations.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxReviewIterations))" />
+        <NumberOverride Field="@nameof(SettingsProfileData.MaxRetries)" Label="Max retries" @bind-Value="_model.MaxRetries"
+                        Inherited="@_inherited.MaxRetries.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxRetries))" />
+        <NumberOverride Field="@nameof(SettingsProfileData.ParentReviewCycleLimit)" Label="Parent review cycle limit" @bind-Value="_model.ParentReviewCycleLimit"
+                        Inherited="@_inherited.ParentReviewCycleLimit.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.ParentReviewCycleLimit))" />
+        <NumberOverride Field="@nameof(SettingsProfileData.TesterCycleLimit)" Label="Tester cycle limit" @bind-Value="_model.TesterCycleLimit"
+                        Inherited="@_inherited.TesterCycleLimit.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.TesterCycleLimit))" />
+
+        <h3 class="h5 mt-4">Tester</h3>
+        <TextOverride Field="@nameof(SettingsProfileData.TesterRunInstructions)" Label="Run instructions" Multiline="true" Rows="5"
+                      @bind-Value="_model.TesterRunInstructions" Inherited="@_inherited.TesterRunInstructions"
+                      Errors="@ErrorsFor(nameof(SettingsProfileData.TesterRunInstructions))" />
+        <OverrideFieldFrame Field="@nameof(SettingsProfileData.TestPortRange)" Label="Test port range" IsOverridden="@(_model.PortStart is not null || _model.PortEnd is not null)"
+                            Inherited="@($"{_inherited.TestPortRange.Start}–{_inherited.TestPortRange.End}")" Errors="@ErrorsFor(nameof(SettingsProfileData.TestPortRange))"
+                            OnReset="ResetPortRange">
+            <div class="input-group">
+                <input type="number" class="form-control" aria-label="First port" data-testid="port-start" value="@_model.PortStart" @onchange="args => _model.PortStart = ParseInt(args)" />
+                <span class="input-group-text">to</span>
+                <input type="number" class="form-control" aria-label="Last port" data-testid="port-end" value="@_model.PortEnd" @onchange="args => _model.PortEnd = ParseInt(args)" />
+            </div>
+        </OverrideFieldFrame>
+
+        <h3 class="h5 mt-4">Agent roles</h3>
+        @foreach (AgentRole role in Enum.GetValues<AgentRole>())
+        {
+            RoleEditModel roleModel = _model.Roles[role];
+            EffectiveRoleSettingsView inheritedRole = _inherited.Roles[role];
+            string prefix = $"Roles.{role}.";
+            <details class="card card-body mb-2" data-role="@role">
+                <summary class="fw-semibold">@role</summary>
+                <div class="pt-3">
+                    <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.Model))" Label="Model" @bind-Value="roleModel.Model"
+                                  Inherited="@inheritedRole.Model" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
+                    <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Label="Reasoning effort" @bind-Value="roleModel.ReasoningEffort"
+                                  Inherited="@inheritedRole.ReasoningEffort" Suggestions="ReasoningEfforts"
+                                  Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
+                    <NumberOverride Field="@(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" Label="Session timeout (seconds)" @bind-Value="roleModel.TimeoutSeconds"
+                                    Inherited="@($"{inheritedRole.TimeoutSeconds} s")" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" />
+                    <PromptTemplateField Role="role" Value="@(roleModel.PromptTemplate ?? string.Empty)" ValueChanged="text => roleModel.PromptTemplate = text"
+                                         InheritedTemplate="@inheritedRole.PromptTemplate" DefaultTemplate="@_defaults.Roles[role].PromptTemplate"
+                                         ShowReset="@(!IsGlobal)" ServerErrors="@ErrorsFor(PromptTemplateValidator.FieldName(role))" />
+                </div>
+            </details>
+        }
+
+        <div class="d-flex align-items-center gap-3 mt-3">
+            <button type="submit" class="btn btn-primary" data-testid="save" disabled="@_isSaving">Save settings</button>
+            <span class="@(_statusIsError ? "text-danger" : "text-success")" role="status" data-testid="save-status">@_status</span>
+        </div>
+    </form>
+}
+else
+{
+    <p class="text-muted">Loading settings…</p>
+}
+
+@code {
+    private static readonly IReadOnlyList<(string Value, string Label)> DependencyModes =
+        Enum.GetValues<SpecDependencyMode>().Select(mode => (mode.ToString(), mode.ToString())).ToArray();
+
+    private static readonly IReadOnlyList<(string Value, string Label)> BooleanOptions = [("true", "Enabled"), ("false", "Disabled")];
+
+    private static readonly IReadOnlyList<string> ReasoningEfforts = ["low", "medium", "high", "xhigh"];
+
+    private SettingsEditModel? _model;
+    private EffectiveSettingsView _inherited = default!;
+    private EffectiveSettingsView _defaults = default!;
+    private IReadOnlyList<SettingsValidationError> _errors = [];
+    private string? _loadError;
+    private string? _status;
+    private bool _statusIsError;
+    private bool _isSaving;
+    private bool _initialized;
+    private int? _loadedRepositoryId;
+
+    [Parameter] public int? RepositoryId { get; set; }
+
+    private bool IsGlobal => RepositoryId is null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_initialized && _loadedRepositoryId == RepositoryId)
+        {
+            return;
+        }
+
+        _initialized = true;
+        _loadedRepositoryId = RepositoryId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _model = null;
+        _loadError = null;
+        _status = null;
+        _errors = [];
+        _defaults = InheritedSettings.FromDefaults(EmbeddedDefaults);
+
+        SettingsProfileData global = await Manager.GetGlobalAsync(CancellationToken.None);
+        SettingsProfileData layer = global;
+        _inherited = _defaults;
+        if (RepositoryId is { } repositoryId)
+        {
+            CommandResult<SettingsProfileData> repository = await Manager.GetRepositoryAsync(repositoryId, CancellationToken.None);
+            if (!repository.IsSuccess)
+            {
+                _loadError = repository.Message ?? "The repository settings could not be loaded.";
+                return;
+            }
+
+            layer = repository.Value!;
+            _inherited = InheritedSettings.UnderRepository(global, EmbeddedDefaults);
+        }
+
+        ShowLayer(layer);
+    }
+
+    private void ShowLayer(SettingsProfileData layer)
+    {
+        _model = SettingsEditModel.FromData(layer);
+        _model.ShowInheritedPrompts(_inherited);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_model is null || _isSaving)
+        {
+            return;
+        }
+
+        _status = null;
+        _errors = [.. _model.LocalErrors(), .. PromptErrors()];
+        if (_errors.Count > 0)
+        {
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            SettingsProfileData data = _model.ToPersistedData(_inherited);
+            CommandResult<SettingsProfileData> result = RepositoryId is { } repositoryId
+                ? await Manager.SaveRepositoryAsync(repositoryId, data, CancellationToken.None)
+                : await Manager.SaveGlobalAsync(data, CancellationToken.None);
+            ShowResult(result);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void ShowResult(CommandResult<SettingsProfileData> result)
+    {
+        _statusIsError = !result.IsSuccess;
+        switch (result.Status)
+        {
+            case CommandStatus.Succeeded:
+                ShowLayer(result.Value!);
+                _status = "Settings saved.";
+                break;
+            case CommandStatus.Invalid:
+                _errors = result.Errors ?? [];
+                _status = "Fix the errors above to continue.";
+                break;
+            default:
+                _status = result.Message ?? "The settings could not be saved.";
+                break;
+        }
+    }
+
+    private IEnumerable<SettingsValidationError> PromptErrors() =>
+        _model!.Roles
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Value.PromptTemplate))
+            .SelectMany(entry => PromptTemplateValidator.Validate(entry.Key, entry.Value.PromptTemplate!));
+
+    private IReadOnlyList<string> ErrorsFor(string field) =>
+        _errors.Where(error => error.Field == field).Select(error => error.Message).Distinct().ToArray();
+
+    private void SetDependencyMode(string? value) =>
+        _model!.SpecDependencyMode = Enum.TryParse(value, out SpecDependencyMode mode) ? mode : null;
+
+    private void SetPatFallback(string? value) => _model!.PatFallbackEnabled = bool.TryParse(value, out bool enabled) ? enabled : null;
+
+    private void ResetPortRange() => (_model!.PortStart, _model.PortEnd) = (null, null);
+
+    private static int? ParseInt(ChangeEventArgs args) => int.TryParse(args.Value?.ToString(), out int value) ? value : null;
+}

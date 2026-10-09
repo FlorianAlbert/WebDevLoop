@@ -1,0 +1,46 @@
+<OverrideFieldFrame Field="@Field" Label="@Label" IsOverridden="@(!string.IsNullOrWhiteSpace(Value))" Inherited="@Inherited"
+                    Errors="@Errors" OnReset="@Reset">
+    @if (Multiline)
+    {
+        <textarea id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control" rows="@Rows" value="@Value" @onchange="Changed"></textarea>
+    }
+    else
+    {
+        <input id="@OverrideFieldFrame.InputIdFor(Field)" type="text" class="form-control" value="@Value" list="@(Suggestions.Count > 0 ? ListId : null)" @onchange="Changed" />
+        @if (Suggestions.Count > 0)
+        {
+            <datalist id="@ListId">
+                @foreach (string suggestion in Suggestions)
+                {
+                    <option value="@suggestion"></option>
+                }
+            </datalist>
+        }
+    }
+</OverrideFieldFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter] public string? Inherited { get; set; }
+
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    [Parameter] public bool Multiline { get; set; }
+
+    [Parameter] public int Rows { get; set; } = 3;
+
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
+
+    private string ListId => "l-" + Field.Replace('.', '-');
+
+    private Task Changed(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString());
+
+    private Task Reset() => ValueChanged.InvokeAsync(null);
+}

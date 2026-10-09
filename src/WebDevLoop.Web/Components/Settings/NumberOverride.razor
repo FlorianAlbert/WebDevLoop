@@ -1,0 +1,25 @@
+@using System.Globalization
+
+<OverrideFieldFrame Field="@Field" Label="@Label" IsOverridden="@(Value is not null)" Inherited="@Inherited"
+                    Errors="@Errors" OnReset="@Reset">
+    <input id="@OverrideFieldFrame.InputIdFor(Field)" type="number" class="form-control" value="@Value?.ToString(CultureInfo.InvariantCulture)" @onchange="Changed" />
+</OverrideFieldFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public int? Value { get; set; }
+
+    [Parameter] public EventCallback<int?> ValueChanged { get; set; }
+
+    [Parameter] public string? Inherited { get; set; }
+
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    private Task Changed(ChangeEventArgs args) =>
+        ValueChanged.InvokeAsync(int.TryParse(args.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? parsed : null);
+
+    private Task Reset() => ValueChanged.InvokeAsync(null);
+}

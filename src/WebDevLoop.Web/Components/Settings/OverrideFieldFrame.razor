@@ -1,0 +1,42 @@
+<div class="mb-3" data-field="@Field">
+    <div class="d-flex align-items-center gap-2 mb-1">
+        <label class="form-label fw-semibold mb-0" for="@InputIdFor(Field)">@Label</label>
+        <span class="badge @(IsOverridden ? "text-bg-primary" : "text-bg-secondary")" data-testid="origin">@(IsOverridden ? "Overridden" : "Inherited")</span>
+        @if (IsOverridden && ShowReset)
+        {
+            <button type="button" class="btn btn-link btn-sm p-0" data-testid="reset" @onclick="OnReset">Reset to inherited</button>
+        }
+        @ExtraActions
+    </div>
+    @ChildContent
+    @if (Inherited is not null)
+    {
+        <div class="form-text" data-testid="inherited-value">Inherited: @Inherited</div>
+    }
+    @foreach (string error in Errors)
+    {
+        <div class="text-danger small" role="alert" data-testid="error">@error</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public bool IsOverridden { get; set; }
+
+    [Parameter] public bool ShowReset { get; set; } = true;
+
+    [Parameter] public string? Inherited { get; set; }
+
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    [Parameter] public EventCallback OnReset { get; set; }
+
+    [Parameter] public RenderFragment? ExtraActions { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    public static string InputIdFor(string field) => "f-" + field.Replace('.', '-');
+}

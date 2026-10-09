@@ -48,8 +48,7 @@ internal sealed partial class GitHubRestClient(HttpClient http, ITokenProvider t
     private async Task<(JsonElement? Content, Uri? Next)> SendForPageAsync(
         HttpMethod method, GitHubRepoRef repo, Uri uri, object? body, CancellationToken cancellationToken)
     {
-        GitHubTokenResult token = await tokens.GetTokenAsync(
-            new GitHubTokenRequest(repo, GitHubPermissionSet.IssuesWrite, AllowUserTokenFallback: true), cancellationToken);
+        GitHubTokenResult token = await tokens.GetTokenAsync(cancellationToken);
         if (!token.IsAvailable)
         {
             throw new GitHubApiException(GitHubApiErrorKind.Unauthorized, $"No GitHub token available for {repo}: {token.UnavailableReason}");

@@ -5,8 +5,8 @@ namespace WebDevLoop.Core.Tests.Orchestration.Recovery.AgentSteps;
 
 public sealed class CopilotRuntimeRecoveryTests
 {
-    private static readonly CopilotAuthIdentity Idle = new(CopilotAuthKind.GitHubAppInstallation, "idle-tester-runtime");
-    private static readonly CopilotAuthIdentity Busy = new(CopilotAuthKind.GitHubAppInstallation, "busy-runtime");
+    private static readonly CopilotAuthIdentity Idle = new("idle-tester-runtime");
+    private static readonly CopilotAuthIdentity Busy = new("busy-runtime");
 
     private readonly AgentStepRecoveryFixture _fixture = new();
 

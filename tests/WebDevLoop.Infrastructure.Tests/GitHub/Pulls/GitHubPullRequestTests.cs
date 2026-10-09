@@ -33,12 +33,7 @@ public sealed class GitHubPullRequestTests
         Assert.Equal(OwnBody(), post.Json["body"]!.GetValue<string>());
         Assert.True(post.Json["draft"]!.GetValue<bool>());
         Assert.Equal($"Bearer {Token}", post.Authorization);
-        Assert.All(_h.Tokens.Requests, request =>
-        {
-            Assert.Equal(GitHubPermissionSet.PullRequestsWrite, request.Permissions);
-            Assert.Equal(Repo, request.Repo);
-        });
-        Assert.Equal(2, _h.Tokens.Requests.Count);
+        Assert.Equal(2, _h.Tokens.Requests);
         Assert.Equal(7, snapshot.Number.Value);
         Assert.True(snapshot.IsDraft);
         Assert.Equal(PullRequestState.Open, snapshot.State);

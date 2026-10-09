@@ -28,7 +28,6 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
             global.TesterCycleLimit = 6;
             global.TesterRunInstructions = "dotnet run";
             global.TestPortRange = new TestPortRange(5000, 5100);
-            global.PatFallbackEnabled = false;
             global.SetRole(AgentRole.Implementer, new RoleSettingsOverride("gpt-x", "high", "Do {ticket_title}", 900));
             global.SetRole(AgentRole.Tester, new RoleSettingsOverride(Model: "m2"));
             write.Settings.Add(global);
@@ -52,7 +51,6 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
         Assert.Equal(6, loaded.TesterCycleLimit);
         Assert.Equal("dotnet run", loaded.TesterRunInstructions);
         Assert.Equal(new TestPortRange(5000, 5100), loaded.TestPortRange);
-        Assert.False(loaded.PatFallbackEnabled);
         Assert.Equal(new RoleSettingsOverride("gpt-x", "high", "Do {ticket_title}", 900), loaded.Roles[AgentRole.Implementer]);
         Assert.Equal(new RoleSettingsOverride(Model: "m2"), loaded.Roles[AgentRole.Tester]);
         Assert.Equal(2, loaded.Roles.Count);
@@ -86,7 +84,6 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
         Assert.Null(loaded.SpecDependencyMode);
         Assert.Null(loaded.MaxReviewIterations);
         Assert.Null(loaded.TestPortRange);
-        Assert.Null(loaded.PatFallbackEnabled);
         Assert.Equal(new RoleSettingsOverride(TimeoutSeconds: 60), loaded.Roles[AgentRole.Explorer]);
         Assert.Null((await read.Settings.GetGlobalAsync(CancellationToken.None))!.MaxRetries);
     }

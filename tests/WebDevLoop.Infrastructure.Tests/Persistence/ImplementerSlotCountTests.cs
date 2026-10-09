@@ -123,7 +123,6 @@ public sealed class ImplementerSlotCountTests : IDisposable
         TesterCycleLimit = 3,
         TesterRunInstructions = "run",
         TestPortRange = new TestPortRange(41000, 41999),
-        PatFallbackEnabled = false,
         Roles = new Dictionary<AgentRole, RoleSettings>(),
     };
 }

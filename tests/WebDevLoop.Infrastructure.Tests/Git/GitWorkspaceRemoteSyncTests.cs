@@ -32,25 +32,6 @@ public sealed class GitWorkspaceRemoteSyncTests : IDisposable
         Assert.Equal(newer, await _workspace.GetBranchTipAsync(_sandbox.Location, GitSandbox.Main, GitRefScope.Remote, CancellationToken.None));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task clone_fetch_and_push_pass_the_configured_user_token_fallback_to_the_credential_source(bool allowFallback)
-    {
-        GitWorkspace workspace = _sandbox.CreateWorkspace(
-            new GitWorkspaceOptions { WorkspaceRoot = _sandbox.WorkspaceRoot, AllowUserTokenFallback = allowFallback });
-
-        await workspace.EnsureClonedAsync(_sandbox.Location, CancellationToken.None);
-        await workspace.FetchAsync(_sandbox.Location, CancellationToken.None);
-        await workspace.PushAsync(_sandbox.Location, new RefPush(new BranchName("feature/x"), _sandbox.InitialCommit, ExpectedRemoteTip: null), CancellationToken.None);
-
-        Assert.Equal([allowFallback, allowFallback, allowFallback], _sandbox.Credentials.UserTokenFallbacks);
-    }
-
-    [Fact]
-    public void user_token_fallback_is_allowed_by_default_like_the_other_github_clients() =>
-        Assert.True(new GitWorkspaceOptions { WorkspaceRoot = _sandbox.WorkspaceRoot }.AllowUserTokenFallback);
-
     [Fact]
     public async Task fetch_updates_remote_tracking_refs_without_moving_local_branches()
     {

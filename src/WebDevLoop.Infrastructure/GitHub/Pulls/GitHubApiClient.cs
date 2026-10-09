@@ -32,7 +32,7 @@ internal sealed record GitHubApiResponse(HttpStatusCode Status, string Content)
     }
 }
 
-/// <summary>Sends REST/GraphQL calls with a freshly requested, permission-scoped token; the token is never stored or logged.</summary>
+/// <summary>Sends REST/GraphQL calls with a freshly requested token; the token is never stored or logged.</summary>
 internal sealed class GitHubApiClient(HttpClient http, ITokenProvider tokens, GitHubPullsOptions options)
 {
     private const string ApiVersion = "2026-03-10";
@@ -43,15 +43,9 @@ internal sealed class GitHubApiClient(HttpClient http, ITokenProvider tokens, Gi
         DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
     };
 
-    public Task<GitHubAccessToken> AcquireTokenAsync(GitHubRepoRef repo, CancellationToken cancellationToken) =>
-        AcquireTokenAsync(repo, GitHubPermissionSet.PullRequestsWrite, cancellationToken);
-
-    public async Task<GitHubAccessToken> AcquireTokenAsync(GitHubRepoRef repo, GitHubPermissionSet permissions, CancellationToken cancellationToken)
+    public async Task<GitHubAccessToken> AcquireTokenAsync(GitHubRepoRef repo, CancellationToken cancellationToken)
     {
-        GitHubTokenResult result = await tokens.GetTokenAsync(
-            new GitHubTokenRequest(repo, permissions, options.AllowUserTokenFallback),
-            cancellationToken);
-
+        GitHubTokenResult result = await tokens.GetTokenAsync(cancellationToken);
         return result.IsAvailable ? result.Token : throw new GitHubTokenUnavailableException(result.UnavailableReason);
     }
 
@@ -60,20 +54,13 @@ internal sealed class GitHubApiClient(HttpClient http, ITokenProvider tokens, Gi
         GitHubRepoRef repo,
         string path,
         object? body,
-        CancellationToken cancellationToken,
-        GitHubPermissionSet? permissions = null) =>
-        SendAsync(
-            method,
-            new Uri(new Uri(options.ApiBaseUrl), $"repos/{repo.Owner}/{repo.Name}/{path}"),
-            repo,
-            body,
-            permissions ?? GitHubPermissionSet.PullRequestsWrite,
-            cancellationToken);
+        CancellationToken cancellationToken) =>
+        SendAsync(method, new Uri(new Uri(options.ApiBaseUrl), $"repos/{repo.Owner}/{repo.Name}/{path}"), repo, body, cancellationToken);
 
     /// <summary>Runs a GraphQL operation; HTTP 200 with an <c>errors</c> array is treated as failure.</summary>
     public async Task<JsonNode> GraphQlAsync(GitHubRepoRef repo, string query, object variables, CancellationToken cancellationToken)
     {
-        GitHubApiResponse response = (await SendAsync(HttpMethod.Post, new Uri(options.GraphQlUrl), repo, new { query, variables }, GitHubPermissionSet.PullRequestsWrite, cancellationToken))
+        GitHubApiResponse response = (await SendAsync(HttpMethod.Post, new Uri(options.GraphQlUrl), repo, new { query, variables }, cancellationToken))
             .EnsureSuccess();
         JsonNode root = JsonNode.Parse(response.Content) ?? throw new GitHubApiException(response.Status, "GitHub returned an empty GraphQL response.");
 
@@ -91,10 +78,9 @@ internal sealed class GitHubApiClient(HttpClient http, ITokenProvider tokens, Gi
         Uri uri,
         GitHubRepoRef repo,
         object? body,
-        GitHubPermissionSet permissions,
         CancellationToken cancellationToken)
     {
-        GitHubAccessToken token = await AcquireTokenAsync(repo, permissions, cancellationToken);
+        GitHubAccessToken token = await AcquireTokenAsync(repo, cancellationToken);
         using var request = new HttpRequestMessage(method, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Value);
         request.Headers.Accept.ParseAdd("application/vnd.github+json");

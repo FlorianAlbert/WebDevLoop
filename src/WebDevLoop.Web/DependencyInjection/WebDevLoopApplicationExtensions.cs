@@ -1,6 +1,7 @@
 using WebDevLoop.Web.Api;
 using WebDevLoop.Web.Background;
 using WebDevLoop.Web.Components;
+using WebDevLoop.Web.GitHubAuth;
 
 namespace WebDevLoop.Web.DependencyInjection;
 
@@ -10,7 +11,7 @@ public static class WebDevLoopApplicationExtensions
     public static Task InitializeWebDevLoopAsync(this WebApplication app, CancellationToken cancellationToken = default) =>
         app.Services.GetRequiredService<IAppInitializer>().InitializeAsync(cancellationToken);
 
-    /// <summary>The HTTP pipeline: error pages, static assets, antiforgery, the REST API with OpenAPI, and the Blazor UI.</summary>
+    /// <summary>The HTTP pipeline: error pages, static assets, antiforgery, the REST API with OpenAPI, GitHub sign-in, and the Blazor UI.</summary>
     public static WebApplication UseWebDevLoop(this WebApplication app)
     {
         if (!app.Environment.IsDevelopment())
@@ -24,6 +25,7 @@ public static class WebDevLoopApplicationExtensions
         app.UseAntiforgery();
         app.MapStaticAssets();
         app.MapWebDevLoopApi();
+        app.MapGitHubSignIn();
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
         return app;
     }

@@ -30,9 +30,6 @@ else if (_model is not null)
         <ChoiceOverride Field="@nameof(SettingsProfileData.SpecDependencyMode)" Label="Spec dependency mode" Options="DependencyModes"
                         Value="@_model.SpecDependencyMode?.ToString()" ValueChanged="SetDependencyMode"
                         Inherited="@_inherited.SpecDependencyMode.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.SpecDependencyMode))" />
-        <ChoiceOverride Field="@nameof(SettingsProfileData.PatFallbackEnabled)" Label="Personal access token fallback" Options="BooleanOptions"
-                        Value="@_model.PatFallbackEnabled?.ToString().ToLowerInvariant()" ValueChanged="SetPatFallback"
-                        Inherited="@(_inherited.PatFallbackEnabled ? "Enabled" : "Disabled")" Errors="@ErrorsFor(nameof(SettingsProfileData.PatFallbackEnabled))" />
         @if (IsGlobal)
         {
             <p class="form-text mb-1" data-testid="startup-directories-note">
@@ -117,8 +114,6 @@ else
 @code {
     private static readonly IReadOnlyList<(string Value, string Label)> DependencyModes =
         Enum.GetValues<SpecDependencyMode>().Select(mode => (mode.ToString(), mode.ToString())).ToArray();
-
-    private static readonly IReadOnlyList<(string Value, string Label)> BooleanOptions = [("true", "Enabled"), ("false", "Disabled")];
 
     private static readonly IReadOnlyList<string> ReasoningEfforts = ["low", "medium", "high", "xhigh"];
 
@@ -245,8 +240,6 @@ else
 
     private void SetDependencyMode(string? value) =>
         _model!.SpecDependencyMode = Enum.TryParse(value, out SpecDependencyMode mode) ? mode : null;
-
-    private void SetPatFallback(string? value) => _model!.PatFallbackEnabled = bool.TryParse(value, out bool enabled) ? enabled : null;
 
     private void ResetPortRange() => (_model!.PortStart, _model.PortEnd) = (null, null);
 

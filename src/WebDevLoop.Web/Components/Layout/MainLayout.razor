@@ -1,9 +1,11 @@
 @inherits LayoutComponentBase
 @using WebDevLoop.Web.Components.Dashboard
+@using WebDevLoop.Web.Components.GitHub
 
 <NavMenu />
 
 <main class="container-xl py-3">
+    <GitHubSignInBanner />
     <DiagnosticBanner />
     @Body
 </main>

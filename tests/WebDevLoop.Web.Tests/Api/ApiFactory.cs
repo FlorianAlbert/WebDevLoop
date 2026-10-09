@@ -11,6 +11,7 @@ using WebDevLoop.Core.Queries;
 using WebDevLoop.Infrastructure.Events;
 using WebDevLoop.Infrastructure.Prerequisites;
 using WebDevLoop.Web.Background;
+using WebDevLoop.Web.Tests.GitHubAuth;
 
 namespace WebDevLoop.Web.Tests.Api;
 
@@ -43,6 +44,11 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
     public FakePrerequisiteValidator Validator { get; } = new();
 
     public DiagnosticReadiness Readiness { get; }
+
+    /// <summary>GitHub as seen by the sign-in; the session starts signed out and talks only to this stub.</summary>
+    public StubGitHub GitHub { get; } = new();
+
+    public MemoryCredentialStore GitHubCredentials { get; } = new();
 
     public ApiFactory() => Readiness = new DiagnosticReadiness(Validator, new FakeClock());
 
@@ -84,6 +90,7 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
             services.AddSingleton<ICurrentRepositorySelection>(Selection);
             services.AddSingleton<IRunEventBus>(EventBus);
             services.AddSingleton(Readiness);
+            services.AddSingleton(_ => GitHub.CreateSession(GitHubCredentials));
         });
     }
 

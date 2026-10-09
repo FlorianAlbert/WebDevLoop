@@ -1,0 +1,55 @@
+@implements IDisposable
+@inject IGitHubSignInState SignIn
+@inject NavigationManager Navigation
+
+@if (IsOnGitHubPage)
+{
+    return;
+}
+
+@if (!_status.IsConfigured)
+{
+    <div class="alert alert-warning py-2 small" role="alert" data-testid="github-signin-not-configured">
+        <strong>GitHub sign-in is not configured.</strong>
+        Set the GitHub App's client id and client secret, then restart.
+        <a href="@UiRoutes.GitHub">Details</a>
+    </div>
+}
+else if (!_status.IsSignedIn)
+{
+    <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2 py-2 small" role="alert" data-testid="github-signin-banner">
+        <span>
+            <strong>You are not signed in to GitHub.</strong>
+            WebDevLoop works on your repositories and runs Copilot as you; sign in to start the workflow.
+        </span>
+        <button type="button" class="btn btn-dark btn-sm" data-testid="github-signin" @onclick="Navigation.SignInWithGitHub">Sign in with GitHub</button>
+    </div>
+}
+
+@code {
+    private GitHubSignInStatus _status = default!;
+
+    private bool IsOnGitHubPage =>
+        string.Equals("/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0], UiRoutes.GitHub, StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        _status = SignIn.Status;
+        SignIn.Changed += OnSignInChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    public void Dispose()
+    {
+        SignIn.Changed -= OnSignInChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private void OnSignInChanged() => _ = InvokeAsync(() =>
+    {
+        _status = SignIn.Status;
+        StateHasChanged();
+    });
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args) => _ = InvokeAsync(StateHasChanged);
+}

@@ -44,8 +44,6 @@ public sealed class SettingsProfile : VersionedEntity
 
     public TestPortRange? TestPortRange { get; set; }
 
-    public bool? PatFallbackEnabled { get; set; }
-
     public IReadOnlyDictionary<AgentRole, RoleSettingsOverride> Roles => _roles;
 
     public static SettingsProfile ForGlobal() => new();

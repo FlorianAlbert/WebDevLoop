@@ -36,7 +36,6 @@ public sealed class SettingsResolver(EffectiveSettings embeddedDefaults)
             TesterCycleLimit = repository?.TesterCycleLimit ?? global.TesterCycleLimit ?? embeddedDefaults.TesterCycleLimit,
             TesterRunInstructions = FirstText(repository?.TesterRunInstructions, global.TesterRunInstructions, embeddedDefaults.TesterRunInstructions),
             TestPortRange = repository?.TestPortRange ?? global.TestPortRange ?? embeddedDefaults.TestPortRange,
-            PatFallbackEnabled = repository?.PatFallbackEnabled ?? global.PatFallbackEnabled ?? embeddedDefaults.PatFallbackEnabled,
             Roles = Enum.GetValues<AgentRole>().ToDictionary(role => role, role => ResolveRole(role, global, repository)),
         };
     }

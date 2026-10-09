@@ -69,6 +69,17 @@ internal sealed class FixedClock(DateTimeOffset now) : IClock
     public DateTimeOffset UtcNow => now;
 }
 
+internal sealed class FakeGitHubSignInState(string? login) : IGitHubSignInState
+{
+    public GitHubSignInStatus Status { get; } = new(true, login, null, null);
+
+    public event Action? Changed
+    {
+        add { }
+        remove { }
+    }
+}
+
 internal static class TestPrerequisiteOptions
 {
     public const string WorkspaceRoot = "/work/space";
@@ -78,10 +89,12 @@ internal static class TestPrerequisiteOptions
         GitHubAuthOptions? gitHubAuth = null,
         string? copilotCliPath = null,
         TestPortRange? portRange = null,
-        GhStackMode ghStackMode = GhStackMode.RestWithOptionalFallback) => new()
+        GhStackMode ghStackMode = GhStackMode.RestWithOptionalFallback,
+        IGitHubSignInState? gitHubSignIn = null) => new()
         {
             WorkspaceRoot = WorkspaceRoot,
-            GitHubAuth = gitHubAuth ?? new GitHubAuthOptions { AppClientId = "Iv1.abc", AppPrivateKeyPem = "pem" },
+            GitHubAuth = gitHubAuth ?? new GitHubAuthOptions { AppClientId = "Iv23.abc", AppClientSecret = "secret" },
+            GitHubSignIn = gitHubSignIn ?? new FakeGitHubSignInState("octocat"),
             CopilotCliPath = copilotCliPath,
             BundledCopilotCliPath = BundledCopilotCli,
             TestPortRange = portRange ?? new TestPortRange(41000, 41099),

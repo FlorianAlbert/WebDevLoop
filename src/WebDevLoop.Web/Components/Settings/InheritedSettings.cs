@@ -25,7 +25,6 @@ public static class InheritedSettings
             defaults.TesterCycleLimit,
             defaults.TesterRunInstructions,
             new PortRangeData(defaults.TestPortRange.Start, defaults.TestPortRange.End),
-            defaults.PatFallbackEnabled,
             defaults.Roles.ToDictionary(
                 entry => entry.Key,
                 entry => new EffectiveRoleSettingsView(
@@ -55,7 +54,6 @@ public static class InheritedSettings
             TesterCycleLimit = global.TesterCycleLimit ?? baseline.TesterCycleLimit,
             TesterRunInstructions = Text(global.TesterRunInstructions, baseline.TesterRunInstructions),
             TestPortRange = global.TestPortRange ?? baseline.TestPortRange,
-            PatFallbackEnabled = global.PatFallbackEnabled ?? baseline.PatFallbackEnabled,
             Roles = baseline.Roles.ToDictionary(entry => entry.Key, entry => Role(global.Roles?.GetValueOrDefault(entry.Key), entry.Value)),
         };
     }

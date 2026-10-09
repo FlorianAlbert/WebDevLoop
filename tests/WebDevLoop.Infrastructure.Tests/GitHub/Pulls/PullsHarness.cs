@@ -20,7 +20,7 @@ internal sealed class PullsHarness
     public PullsHarness(GitHubTokenResult? tokenResult = null, IGhCommandRunner? gh = null)
     {
         Tokens = new RecordingTokenProvider(tokenResult ?? GitHubTokenResult.Available(
-            new GitHubAccessToken(Token, GitHubTokenKind.AppInstallation, "42", 1, null)));
+            new GitHubAccessToken(Token, "octocat", 1, null)));
         Adapter = new GitHubPullsAndStacks(new HttpClient(Handler), Tokens, new GitHubPullsOptions(), gh);
     }
 

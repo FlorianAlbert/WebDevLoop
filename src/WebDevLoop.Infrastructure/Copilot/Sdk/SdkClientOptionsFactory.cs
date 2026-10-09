@@ -6,8 +6,8 @@ namespace WebDevLoop.Infrastructure.Copilot.Sdk;
 internal static class SdkClientOptionsFactory
 {
     /// <summary>
-    /// A child-process runtime with an app-owned Copilot home and an explicit environment. Installation tokens reach the
-    /// runtime only through that environment (<c>COPILOT_GITHUB_TOKEN</c>); stored or logged-in user credentials are never used.
+    /// A child-process runtime with an app-owned Copilot home and an explicit environment. Sessions authenticate with the
+    /// signed-in user's token; stored or logged-in CLI credentials are never used.
     /// </summary>
     public static CopilotClientOptions Create(CopilotRuntimeLaunch launch) => new()
     {

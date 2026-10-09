@@ -58,20 +58,6 @@ public sealed class StackMergeStatusTests
         Assert.Equal(StackMergeStatus.Open, await _h.Adapter.GetStackMergeStatusAsync(Repo, Layers, Trunk, CancellationToken.None));
     }
 
-    [Fact]
-    public async Task The_trunk_comparison_requests_contents_read_in_addition_to_pull_request_write()
-    {
-        PullState(11, "closed", merged: true, mergeSha: Sha('b'));
-        PullState(12, "closed", merged: true, mergeSha: TopMergeSha);
-        TrunkCompare(TopMergeSha, "ahead");
-
-        await _h.Adapter.GetStackMergeStatusAsync(Repo, Layers, Trunk, CancellationToken.None);
-
-        GitHubPermissionSet expected = GitHubPermissionSet.PullRequestsWrite.With("contents", GitHubPermissionLevel.Read);
-        Assert.Equal(expected, _h.Tokens.Requests[^1].Permissions);
-        Assert.Contains(_h.Tokens.Requests, request => request.Permissions.Equals(GitHubPermissionSet.PullRequestsWrite));
-    }
-
     [Theory]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.Forbidden)]

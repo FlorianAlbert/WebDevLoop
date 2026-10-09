@@ -69,63 +69,49 @@ public sealed class ConfigurationChecksTests : IDisposable
     }
 
     [Fact]
-    public async Task configured_github_app_passes()
+    public async Task configured_and_signed_in_passes_naming_the_user()
     {
-        PrerequisiteCheck result = await AuthCheck(new GitHubAuthOptions { AppClientId = "Iv1.abc", AppPrivateKeyPem = "pem" });
+        PrerequisiteCheck result = await AuthCheck(Configured, "octocat");
 
         Assert.Equal(PrerequisiteStatus.Passed, result.Status);
+        Assert.Contains("octocat", result.Message);
+    }
+
+    [Fact]
+    public async Task configured_but_signed_out_fails_with_a_sign_in_remediation()
+    {
+        PrerequisiteCheck result = await AuthCheck(Configured, login: null);
+
+        Assert.Equal(PrerequisiteStatus.Failed, result.Status);
+        Assert.Contains("Sign in with GitHub", result.Remediation);
     }
 
     [Theory]
-    [InlineData("Iv1.abc", null, "private key")]
-    [InlineData(null, "pem", "client id")]
-    public async Task half_configured_github_app_fails_naming_the_missing_setting(string? clientId, string? pem, string missing)
+    [InlineData("Iv23.abc", null, "client secret")]
+    [InlineData(null, "secret", "client id")]
+    public async Task half_configured_github_app_fails_naming_the_missing_setting(string? clientId, string? secret, string missing)
     {
-        PrerequisiteCheck result = await AuthCheck(new GitHubAuthOptions { AppClientId = clientId, AppPrivateKeyPem = pem });
+        PrerequisiteCheck result = await AuthCheck(new GitHubAuthOptions { AppClientId = clientId, AppClientSecret = secret }, "octocat");
 
         Assert.Equal(PrerequisiteStatus.Failed, result.Status);
         Assert.Contains(missing, result.Message);
     }
 
     [Fact]
-    public async Task no_github_credentials_fail()
+    public async Task unconfigured_sign_in_fails_naming_both_settings()
     {
-        PrerequisiteCheck result = await AuthCheck(new GitHubAuthOptions());
+        PrerequisiteCheck result = await AuthCheck(new GitHubAuthOptions(), login: null);
 
         Assert.Equal(PrerequisiteStatus.Failed, result.Status);
+        Assert.Contains("AppClientId", result.Message);
+        Assert.Contains("AppClientSecret", result.Message);
         Assert.False(string.IsNullOrWhiteSpace(result.Remediation));
     }
 
-    [Fact]
-    public async Task pat_only_with_fallback_enabled_is_a_warning()
-    {
-        PrerequisiteCheck result = await AuthCheck(new GitHubAuthOptions { PatFallbackEnabled = true, UserToken = "ghp_secret" });
+    private static GitHubAuthOptions Configured => new() { AppClientId = "Iv23.abc", AppClientSecret = "very-secret-value" };
 
-        Assert.Equal(PrerequisiteStatus.Warning, result.Status);
-        Assert.DoesNotContain("ghp_secret", result.Message);
-    }
-
-    [Theory]
-    [InlineData(true, null)]
-    [InlineData(false, "ghp_secret")]
-    public async Task pat_without_usable_fallback_fails(bool fallbackEnabled, string? token)
-    {
-        PrerequisiteCheck result = await AuthCheck(new GitHubAuthOptions { PatFallbackEnabled = fallbackEnabled, UserToken = token });
-
-        Assert.Equal(PrerequisiteStatus.Failed, result.Status);
-    }
-
-    [Fact]
-    public async Task github_app_with_pat_fallback_enabled_but_no_token_warns()
-    {
-        PrerequisiteCheck result = await AuthCheck(
-            new GitHubAuthOptions { AppClientId = "Iv1.abc", AppPrivateKeyPem = "pem", PatFallbackEnabled = true });
-
-        Assert.Equal(PrerequisiteStatus.Warning, result.Status);
-    }
-
-    private static Task<PrerequisiteCheck> AuthCheck(GitHubAuthOptions auth) =>
-        new GitHubAuthCheck(TestPrerequisiteOptions.Create(gitHubAuth: auth)).RunAsync(CancellationToken.None);
+    private static Task<PrerequisiteCheck> AuthCheck(GitHubAuthOptions auth, string? login) =>
+        new GitHubAuthCheck(TestPrerequisiteOptions.Create(gitHubAuth: auth, gitHubSignIn: new FakeGitHubSignInState(login))).RunAsync(CancellationToken.None);
 
     private BundledSkillsCheck SkillsCheck() =>
         new(new BundledSkillsCatalog(new BundledSkillsOptions { Root = _skillsDirectory.Path }));

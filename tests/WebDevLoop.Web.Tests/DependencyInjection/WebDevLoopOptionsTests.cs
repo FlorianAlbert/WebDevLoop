@@ -35,26 +35,25 @@ public sealed class WebDevLoopOptionsTests
         Assert.Equal(root, options.ResolvedDataDirectory);
         Assert.Equal(Path.Combine(root, "db", "custom.db"), options.ResolvedDatabasePath);
         Assert.Equal(Path.Combine(root, "ui-state.json"), options.UiStatePath);
+        Assert.Equal(Path.Combine(root, "github-credentials.dat"), options.GitHubCredentialsPath);
+        Assert.Equal(Path.Combine(root, "keys"), options.DataProtectionKeysDirectory);
         Assert.Equal(TimeSpan.FromSeconds(30), options.Workflow.RecoveryInterval);
         Assert.Equal(Infrastructure.Prerequisites.GhStackMode.FallbackRequired, options.GitHub.GhStackMode);
         Assert.Equal(250, options.AgentLogs.MaxEntriesPerStep);
     }
 
     [Fact]
-    public void the_app_private_key_can_be_read_from_a_pem_file()
+    public void the_github_app_sign_in_is_configurable()
     {
-        string keyPath = Path.Combine(AppContext.BaseDirectory, $"app-key-{Guid.NewGuid():N}.pem");
-        File.WriteAllText(keyPath, "-----BEGIN RSA PRIVATE KEY-----\nkey\n-----END RSA PRIVATE KEY-----\n");
-        try
-        {
-            WebDevLoopOptions options = WebDevLoopOptions.Load(Configuration(("WebDevLoop:GitHub:AppPrivateKeyPath", keyPath)));
+        WebDevLoopOptions options = WebDevLoopOptions.Load(Configuration(
+            ("WebDevLoop:GitHub:AppClientId", "Iv23.client"),
+            ("WebDevLoop:GitHub:AppClientSecret", "client-secret"),
+            ("WebDevLoop:GitHub:AppSlug", "webdevloop"),
+            ("WebDevLoop:GitHub:WebBaseUrl", "https://github.example/")));
 
-            Assert.StartsWith("-----BEGIN RSA PRIVATE KEY-----", options.GitHub.ResolvePrivateKeyPem());
-        }
-        finally
-        {
-            File.Delete(keyPath);
-        }
+        Assert.Equal(
+            ("Iv23.client", "client-secret", "webdevloop", "https://github.example/"),
+            (options.GitHub.AppClientId, options.GitHub.AppClientSecret, options.GitHub.AppSlug, options.GitHub.WebBaseUrl));
     }
 
     [Fact]
@@ -62,12 +61,12 @@ public sealed class WebDevLoopOptionsTests
     {
         var exception = Assert.Throws<WebDevLoopConfigurationException>(() => WebDevLoopOptions.Load(Configuration(
             ("WebDevLoop:Workflow:RecoveryInterval", "00:00:00"),
-            ("WebDevLoop:GitHub:AppPrivateKeyPath", "/no/such/key.pem"),
+            ("WebDevLoop:GitHub:WebBaseUrl", "github.com"),
             ("WebDevLoop:GitHub:ApiBaseUrl", "not a url"))));
 
         Assert.Equal(3, exception.Errors.Count);
         Assert.Contains("WebDevLoop:Workflow:RecoveryInterval", exception.Message);
-        Assert.Contains("/no/such/key.pem", exception.Message);
+        Assert.Contains("WebDevLoop:GitHub:WebBaseUrl", exception.Message);
         Assert.Contains("WebDevLoop:GitHub:ApiBaseUrl", exception.Message);
     }
 

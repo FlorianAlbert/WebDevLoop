@@ -24,7 +24,6 @@ public sealed class SettingsEditModelTests
             MaxRetries = 4,
             SpecDependencyMode = SpecDependencyMode.StackOnTop,
             TestPortRange = new PortRangeData(42000, 42100),
-            PatFallbackEnabled = false,
             TesterRunInstructions = "dotnet run",
             Roles = new Dictionary<AgentRole, RoleSettingsOverride>
             {

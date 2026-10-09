@@ -39,7 +39,6 @@ public sealed class GlobalSettingsSeederTests
         Assert.Equal(_defaults.TesterCycleLimit, global.TesterCycleLimit);
         Assert.Equal(_defaults.TesterRunInstructions, global.TesterRunInstructions);
         Assert.Equal(_defaults.TestPortRange, global.TestPortRange);
-        Assert.Equal(_defaults.PatFallbackEnabled, global.PatFallbackEnabled);
         Assert.All(Enum.GetValues<AgentRole>(), role => Assert.Equal(
             new RoleSettingsOverride($"{role}-model", "high", $"{role} prompt", 420),
             global.Roles[role]));

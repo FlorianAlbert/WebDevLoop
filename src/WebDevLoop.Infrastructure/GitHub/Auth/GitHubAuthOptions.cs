@@ -1,23 +1,25 @@
 namespace WebDevLoop.Infrastructure.GitHub.Auth;
 
+/// <summary>The GitHub App users sign in with (its client id and a client secret) and the GitHub endpoints.</summary>
 public sealed class GitHubAuthOptions
 {
     public const string DefaultApiBaseUrl = "https://api.github.com/";
+    public const string DefaultWebBaseUrl = "https://github.com/";
 
     public string ApiBaseUrl { get; init; } = DefaultApiBaseUrl;
 
-    /// <summary>GitHub App client id (preferred) or app id; used as the JWT issuer.</summary>
+    /// <summary>Where users authorize the App (<c>login/oauth/authorize</c>) and codes are exchanged for tokens.</summary>
+    public string WebBaseUrl { get; init; } = DefaultWebBaseUrl;
+
     public string? AppClientId { get; init; }
 
-    public string? AppPrivateKeyPem { get; init; }
+    public string? AppClientSecret { get; init; }
 
-    /// <summary>Fine-grained PAT or user token, only handed out when <see cref="PatFallbackEnabled"/> and the caller allows it.</summary>
-    public string? UserToken { get; init; }
+    /// <summary>The App's URL name (<c>github.com/apps/&lt;slug&gt;</c>); optional, enables the "Install the App" link.</summary>
+    public string? AppSlug { get; init; }
 
-    public bool PatFallbackEnabled { get; init; }
-
-    /// <summary>Cached installation tokens are refreshed once they expire within this window.</summary>
+    /// <summary>The user's access token is refreshed once it expires within this window.</summary>
     public TimeSpan ExpirySkew { get; init; } = TimeSpan.FromMinutes(5);
 
-    public bool IsAppConfigured => !string.IsNullOrWhiteSpace(AppClientId) && !string.IsNullOrWhiteSpace(AppPrivateKeyPem);
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(AppClientId) && !string.IsNullOrWhiteSpace(AppClientSecret);
 }

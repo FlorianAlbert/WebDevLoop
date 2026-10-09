@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using WebDevLoop.Infrastructure.GitHub.Auth;
 using WebDevLoop.Infrastructure.Prerequisites;
 using WebDevLoop.Infrastructure.Queries;
 
@@ -7,13 +8,15 @@ namespace WebDevLoop.Web.DependencyInjection;
 /// <summary>
 /// App configuration (section <c>WebDevLoop</c>; override any key with environment variables such as
 /// <c>WebDevLoop__GitHub__AppClientId</c>). Workflow behaviour that users tune at runtime (limits, prompts, workspace root,
-/// test port range, PAT fallback) lives in the persisted settings instead; secrets never go into appsettings.json.
+/// test port range) lives in the persisted settings instead; secrets never go into appsettings.json.
 /// </summary>
 public sealed class WebDevLoopOptions
 {
     public const string SectionName = "WebDevLoop";
     public const string DatabaseFileName = "webdevloop.db";
     public const string UiStateFileName = "ui-state.json";
+    public const string GitHubCredentialsFileName = "github-credentials.dat";
+    public const string DataProtectionKeysDirectoryName = "keys";
     private const string AppDirectoryName = "WebDevLoop";
 
     /// <summary>App data root: database, default workspace root and Copilot home. Defaults to the user's local app data.</summary>
@@ -41,6 +44,11 @@ public sealed class WebDevLoopOptions
 
     public string UiStatePath => Path.Combine(ResolvedDataDirectory, UiStateFileName);
 
+    /// <summary>The signed-in user's GitHub tokens, encrypted with the data-protection keys in <see cref="DataProtectionKeysDirectory"/>.</summary>
+    public string GitHubCredentialsPath => Path.Combine(ResolvedDataDirectory, GitHubCredentialsFileName);
+
+    public string DataProtectionKeysDirectory => Path.Combine(ResolvedDataDirectory, DataProtectionKeysDirectoryName);
+
     /// <summary>Binds and validates the section.</summary>
     /// <exception cref="WebDevLoopConfigurationException">The configuration is invalid; the message lists every problem.</exception>
     public static WebDevLoopOptions Load(IConfiguration configuration)
@@ -61,18 +69,7 @@ public sealed class WebDevLoopOptions
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(GitHub.AppPrivateKeyPem) && !string.IsNullOrWhiteSpace(GitHub.AppPrivateKeyPath))
-        {
-            yield return $"Configure either {SectionName}:GitHub:AppPrivateKeyPem or {SectionName}:GitHub:AppPrivateKeyPath, not both.";
-        }
-
-        if (!string.IsNullOrWhiteSpace(GitHub.AppPrivateKeyPath) && !File.Exists(GitHub.AppPrivateKeyPath))
-        {
-            yield return $"{SectionName}:GitHub:AppPrivateKeyPath points to '{GitHub.AppPrivateKeyPath}', which does not exist. "
-                + "Download the GitHub App's private key (.pem) and point the setting at it.";
-        }
-
-        foreach ((string name, string? url) in new[] { ("ApiBaseUrl", GitHub.ApiBaseUrl), ("GraphQlUrl", GitHub.GraphQlUrl) })
+        foreach ((string name, string? url) in new[] { ("ApiBaseUrl", GitHub.ApiBaseUrl), ("GraphQlUrl", GitHub.GraphQlUrl), ("WebBaseUrl", GitHub.WebBaseUrl) })
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out _))
             {
@@ -142,31 +139,28 @@ public sealed class WorkflowWorkerOptions
     ];
 }
 
-/// <summary>GitHub App (preferred) and PAT fallback credentials (section <c>WebDevLoop:GitHub</c>).</summary>
+/// <summary>GitHub endpoints and the GitHub App users sign in with (section <c>WebDevLoop:GitHub</c>).</summary>
 public sealed class GitHubConnectionOptions
 {
-    public string ApiBaseUrl { get; set; } = "https://api.github.com/";
+    public string ApiBaseUrl { get; set; } = GitHubAuthOptions.DefaultApiBaseUrl;
 
     public string GraphQlUrl { get; set; } = "https://api.github.com/graphql";
 
-    /// <summary>The GitHub App's client id (or app id), used as JWT issuer.</summary>
+    /// <summary>GitHub's web origin, where users authorize the App.</summary>
+    public string WebBaseUrl { get; set; } = GitHubAuthOptions.DefaultWebBaseUrl;
+
+    /// <summary>The GitHub App's client id (<c>Iv23…</c>).</summary>
     public string? AppClientId { get; set; }
 
-    /// <summary>The App's private key PEM itself (e.g. from an environment variable or a secret store).</summary>
-    public string? AppPrivateKeyPem { get; set; }
+    /// <summary>A client secret of the GitHub App (secret: user secrets or environment variables only).</summary>
+    public string? AppClientSecret { get; set; }
 
-    /// <summary>Path to the App's private key PEM file (alternative to <see cref="AppPrivateKeyPem"/>).</summary>
-    public string? AppPrivateKeyPath { get; set; }
-
-    /// <summary>Fine-grained PAT used only when the App cannot act and the PAT fallback setting is enabled.</summary>
-    public string? UserToken { get; set; }
+    /// <summary>The App's URL name (<c>github.com/apps/&lt;slug&gt;</c>); optional, enables the "Install the App" link before the first installation.</summary>
+    public string? AppSlug { get; set; }
 
     public GhStackMode GhStackMode { get; set; } = GhStackMode.RestWithOptionalFallback;
 
     public string GhExecutable { get; set; } = PrerequisiteOptions.DefaultGhExecutable;
-
-    public string? ResolvePrivateKeyPem() =>
-        string.IsNullOrWhiteSpace(AppPrivateKeyPath) ? AppPrivateKeyPem : File.ReadAllText(AppPrivateKeyPath);
 }
 
 /// <summary>Copilot runtime (section <c>WebDevLoop:Copilot</c>).</summary>
@@ -174,8 +168,6 @@ public sealed class CopilotConnectionOptions
 {
     /// <summary>Copilot CLI to launch; empty uses the runtime bundled into the published app.</summary>
     public string? CliPath { get; set; }
-
-    public TimeSpan TokenRefreshSkew { get; set; } = TimeSpan.FromMinutes(5);
 
     public TimeSpan IdleTimeout { get; set; } = TimeSpan.FromMinutes(10);
 }

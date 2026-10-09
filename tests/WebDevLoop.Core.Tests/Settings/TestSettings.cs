@@ -22,7 +22,6 @@ internal static class TestSettings
         TesterCycleLimit = 3,
         TesterRunInstructions = "default run instructions",
         TestPortRange = new TestPortRange(41000, 41999),
-        PatFallbackEnabled = true,
         Roles = Enum.GetValues<AgentRole>().ToDictionary(
             role => role,
             role => new RoleSettings("default-model", "medium", $"default {role} template", DefaultTimeout)),

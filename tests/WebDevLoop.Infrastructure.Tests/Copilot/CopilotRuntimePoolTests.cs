@@ -34,24 +34,24 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [Fact]
-    public async Task app_runtime_receives_the_copilot_only_installation_token_through_its_environment()
+    public async Task runtime_starts_without_any_github_token_in_its_environment()
     {
-        await using CopilotRuntimeHandle handle = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
+        var environment = new Dictionary<string, string>(ShellEnvironment) { ["COPILOT_GITHUB_TOKEN"] = "ghp_from_the_host" };
 
-        GitHubTokenRequest request = Assert.Single(_tokens.Requests);
-        Assert.Equal(Repo, request.Repo);
-        Assert.Equal(GitHubPermissionSet.CopilotRequests, request.Permissions);
-        Assert.True(request.AllowUserTokenFallback);
+        await using CopilotRuntimeHandle handle = await _pool.AcquireAsync(Repo, environment, Ct);
+
+        Assert.Equal(1, _tokens.Requests);
         CopilotRuntimeLaunch launch = Assert.Single(_factory.Runtimes).Launch;
-        Assert.Equal("ghs_gen1", launch.Environment["COPILOT_GITHUB_TOKEN"]);
+        Assert.DoesNotContain("COPILOT_GITHUB_TOKEN", launch.Environment.Keys);
         Assert.Equal("/usr/bin", launch.Environment["PATH"]);
         Assert.Equal("/data/copilot", launch.BaseDirectory);
         Assert.Equal("/opt/copilot/copilot", launch.CliPath);
-        Assert.Equal(new CopilotRuntimeKey(new CopilotAuthIdentity(CopilotAuthKind.GitHubAppInstallation, "4242"), 1, _clock.UtcNow + CopilotTokenProviderFake.Lifetime), handle.Lease.Key);
+        Assert.Equal(new CopilotRuntimeKey(new CopilotAuthIdentity(CopilotTokenProviderFake.Login), 1, null), handle.Lease.Key);
+        Assert.Equal("ghu_gen1", handle.Token.Value);
     }
 
     [Fact]
-    public async Task sessions_of_one_identity_share_a_runtime()
+    public async Task sessions_of_one_user_share_a_runtime()
     {
         await using CopilotRuntimeHandle first = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
         await using CopilotRuntimeHandle second = await _pool.AcquireAsync(new GitHubRepoRef("octo", "other"), ShellEnvironment, Ct);
@@ -61,50 +61,17 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task refreshing_across_app_token_expiry_drains_the_old_runtime_after_its_last_session()
+    public async Task a_refreshed_user_token_keeps_the_runtime_and_is_handed_to_new_sessions()
     {
-        CopilotRuntimeHandle active = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
-        CopilotRuntimeKey stale = active.Lease.Key;
+        await using CopilotRuntimeHandle first = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
 
-        _clock.Advance(TimeSpan.FromMinutes(56));
-        IReadOnlyList<CopilotRuntimeKey> replaced = await _pool.RefreshExpiringAsync(Ct);
+        _clock.Advance(CopilotTokenProviderFake.Lifetime);
+        await using CopilotRuntimeHandle second = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
 
-        Assert.Equal([stale], replaced);
-        Assert.Equal(2, _factory.Runtimes.Count);
-        Assert.Equal("ghs_gen2", _factory.Runtimes[1].Launch.Environment["COPILOT_GITHUB_TOKEN"]);
-        Assert.Equal(_factory.Runtimes[0].Launch.BaseDirectory, _factory.Runtimes[1].Launch.BaseDirectory);
-        Assert.False(_factory.Runtimes[0].IsDisposed);
-
-        await active.DisposeAsync();
-
-        Assert.True(_factory.Runtimes[0].IsDisposed);
-        await using CopilotRuntimeHandle next = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
-        Assert.Same(_factory.Runtimes[1], next.Runtime);
-        Assert.Equal(2, next.Lease.Key.TokenGeneration);
-    }
-
-    [Fact]
-    public async Task refresh_leaves_runtimes_that_are_not_close_to_expiry()
-    {
-        await using CopilotRuntimeHandle handle = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
-
-        _clock.Advance(TimeSpan.FromMinutes(30));
-
-        Assert.Empty(await _pool.RefreshExpiringAsync(Ct));
         Assert.Single(_factory.Runtimes);
-    }
-
-    [Fact]
-    public async Task acquiring_after_token_expiry_starts_a_runtime_with_the_refreshed_token()
-    {
-        await (await _pool.AcquireAsync(Repo, ShellEnvironment, Ct)).DisposeAsync();
-
-        _clock.Advance(TimeSpan.FromMinutes(58));
-        await using CopilotRuntimeHandle handle = await _pool.AcquireAsync(Repo, ShellEnvironment, Ct);
-
-        Assert.Same(_factory.Runtimes[1], handle.Runtime);
-        Assert.Equal("ghs_gen2", _factory.Runtimes[1].Launch.Environment["COPILOT_GITHUB_TOKEN"]);
-        Assert.True(_factory.Runtimes[0].IsDisposed);
+        Assert.Same(first.Runtime, second.Runtime);
+        Assert.Equal("ghu_gen2", second.Token.Value);
+        Assert.Empty(await _pool.RefreshExpiringAsync(Ct));
     }
 
     [Fact]
@@ -139,7 +106,7 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
         Assert.Equal(identity, lease.Key.Identity);
         Assert.Single(_factory.Runtimes);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _pool.AcquireAsync(new CopilotAuthIdentity(CopilotAuthKind.GitHubAppInstallation, "unknown"), Ct));
+            _pool.AcquireAsync(new CopilotAuthIdentity("unknown"), Ct));
     }
 
     [Fact]
@@ -172,28 +139,14 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task user_token_runtimes_carry_no_token_and_never_expire()
-    {
-        var tokens = new CopilotTokenProviderFake(_clock, GitHubTokenKind.UserToken);
-        await using CopilotRuntimePool pool = CreatePool(tokens);
-
-        await using CopilotRuntimeHandle handle = await pool.AcquireAsync(Repo, ShellEnvironment, Ct);
-        _clock.Advance(TimeSpan.FromHours(5));
-
-        Assert.DoesNotContain("COPILOT_GITHUB_TOKEN", _factory.Runtimes[0].Launch.Environment.Keys);
-        Assert.Null(handle.Lease.Key.ExpiresAt);
-        Assert.Empty(await pool.RefreshExpiringAsync(Ct));
-    }
-
-    [Fact]
     public async Task unavailable_copilot_credentials_fail_as_authentication_errors()
     {
-        _tokens.UnavailableReason = "The GitHub App is not installed on octo/app.";
+        _tokens.UnavailableReason = "Nobody is signed in to GitHub.";
 
         CopilotAuthenticationException exception = await Assert.ThrowsAsync<CopilotAuthenticationException>(() =>
             _pool.AcquireAsync(Repo, ShellEnvironment, Ct));
 
-        Assert.Contains("not installed", exception.Message);
+        Assert.Contains("octo/app: Nobody is signed in to GitHub.", exception.Message);
         Assert.Empty(_factory.Runtimes);
     }
 
@@ -205,7 +158,6 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
         {
             BaseDirectory = "/data/copilot",
             CliPath = "/opt/copilot/copilot",
-            TokenRefreshSkew = TimeSpan.FromMinutes(5),
             IdleTimeout = IdleTimeout,
         });
 }

@@ -68,18 +68,18 @@ public sealed class GitHubIssuesErrorTests : GitHubIssuesTestBase
     [Fact]
     public async Task Unavailable_token_fails_without_calling_the_api_and_is_not_retryable()
     {
-        var tokens = new RecordingTokenProvider(GitHubTokenResult.Unavailable("PAT fallback disabled"));
+        var tokens = new RecordingTokenProvider(GitHubTokenResult.Unavailable("Nobody is signed in to GitHub."));
 
         GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut(tokens).GetIssueAsync(Ref(7), CancellationToken.None));
 
         Assert.Equal(GitHubApiErrorKind.Unauthorized, error.Kind);
         Assert.False(error.IsRetryable);
-        Assert.Contains("PAT fallback disabled", error.Message);
+        Assert.Contains("Nobody is signed in to GitHub.", error.Message);
         Assert.Empty(Api.Requests);
     }
 
     [Fact]
-    public async Task Every_request_asks_for_a_fresh_issues_write_token_for_the_target_repo_and_sends_it_as_bearer()
+    public async Task Every_request_asks_for_a_fresh_token_and_sends_it_as_bearer()
     {
         Api.Get(IssuePath(7), Issue(7, 700));
         Api.Get(BlockedByPath(7), Array.Empty<object>());
@@ -88,12 +88,7 @@ public sealed class GitHubIssuesErrorTests : GitHubIssuesTestBase
         await sut.GetIssueAsync(Ref(7), CancellationToken.None);
         await sut.GetIssueAsync(Ref(7), CancellationToken.None);
 
-        Assert.Equal(4, Tokens.Requests.Count);
-        Assert.All(Tokens.Requests, request =>
-        {
-            Assert.Equal(new GitHubRepoRef("acme", "widgets"), request.Repo);
-            Assert.Equal(GitHubPermissionSet.IssuesWrite, request.Permissions);
-        });
+        Assert.Equal(4, Tokens.Requests);
         Assert.All(Api.Requests, request => Assert.Equal($"Bearer {TokenValue}", request.Authorization));
     }
 }

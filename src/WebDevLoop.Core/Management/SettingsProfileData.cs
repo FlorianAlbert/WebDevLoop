@@ -34,7 +34,5 @@ public sealed record SettingsProfileData
 
     public PortRangeData? TestPortRange { get; init; }
 
-    public bool? PatFallbackEnabled { get; init; }
-
     public IReadOnlyDictionary<AgentRole, RoleSettingsOverride>? Roles { get; init; }
 }

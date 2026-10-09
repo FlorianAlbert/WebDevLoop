@@ -16,76 +16,70 @@ explore, implement, review, resolve conflicts, and test locally.
 - `playwright-cli` on the `PATH` for the tester agent (see the bundled `playwright-cli` skill).
 - Optional: `gh` with the `gh stack` extension, only used when the stack REST API is unavailable
   (`WebDevLoop:GitHub:GhStackMode`).
-- A GitHub App installed on the repositories (recommended), or a fine-grained PAT as fallback.
+- A GitHub App installed on the repositories, which you sign in with from the web UI (see [GitHub sign-in](#github-sign-in)).
 
 Every prerequisite is checked at startup and on demand (Health page, `GET /api/prerequisites`). When one fails, the app
 still starts, in **diagnostic-only mode**: the UI, `/api/health` (`503`), `/api/prerequisites`, the read endpoints, and the
 OpenAPI document are served, mutating workflow endpoints answer `503` with the failing checks, and no workflow worker runs.
 Fix the problem and press **Re-check** on the Health page; the workflow starts as soon as the checks pass. An invalid
-configuration value (e.g. a non-positive interval or a missing private key file) fails fast at startup with a message
+configuration value (e.g. a non-positive interval or a malformed URL) fails fast at startup with a message
 listing every problem.
 
-## GitHub App setup
+## GitHub sign-in
 
-1. Create a GitHub App (Settings → Developer settings → GitHub Apps → New GitHub App). No webhook or callback URL is
-   needed; WebDevLoop polls.
-2. Repository permissions:
+WebDevLoop works on GitHub as **you**: you sign in from the web UI with a GitHub App (the
+[web application flow](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)),
+and the resulting user access token is used for everything: the GitHub API (issues, pull requests, stacks), clone, fetch
+and push, and the Copilot agent sessions. This is the
+[GitHub OAuth setup of the Copilot SDK](https://docs.github.com/en/copilot/how-tos/copilot-sdk/setup/github-oauth) and
+works for personal accounts, organization members, and enterprise (EMU) identities. Copilot usage is billed to your own
+Copilot subscription; commits and pull requests are attributed to you ("via" the App).
+
+What the token may do is the intersection of the App's permissions and your own access, limited to the repositories the
+App is installed on, so the installation's repository selection controls which repositories WebDevLoop reaches.
+
+### Create the GitHub App
+
+1. Settings → Developer settings → GitHub Apps → New GitHub App (for an organization: the organization's Developer settings).
+2. **Callback URL:** `http://localhost:5240/auth/github/callback` (add one per address you open WebDevLoop on, e.g. the
+   `https` profile's `https://localhost:7233/auth/github/callback`). Keep **Expire user authorization tokens** checked:
+   tokens then live 8 hours and WebDevLoop refreshes them automatically. **Webhook:** off (WebDevLoop polls).
+3. Repository permissions:
    - **Contents**: Read and write (clone, push integration and stack branches)
    - **Issues**: Read and write (spec/ticket snapshots, finding sub-issues and dependencies, comments, closing tickets)
    - **Pull requests**: Read and write (draft PR layers, stacks, mark ready, merge tracking)
    - **Metadata**: Read (mandatory)
-   - **Copilot requests** (only on organization-owned Apps, see [Copilot authentication](#copilot-authentication)): do not
-     look for it on a personal account, it is not offered there
-3. Generate a private key (`.pem`) and note the App's client id.
-4. Install the App on the repositories WebDevLoop should work on.
-5. Configure `WebDevLoop:GitHub:AppClientId` and either `WebDevLoop:GitHub:AppPrivateKeyPath` (path to the `.pem`) or
-   `WebDevLoop:GitHub:AppPrivateKeyPem` (the key itself, e.g. from a secret store). Installation tokens are minted per
-   repository and permission set in-process, cached, and refreshed before they expire; git credentials are resolved
-   fresh for every clone, fetch, and push.
 
-### Copilot authentication
+   No Copilot permission is needed: Copilot runs on the signed-in user's own subscription.
+4. Note the **Client ID** and generate a **client secret**. No private key is needed.
+5. **Install** the App on your account (and organizations) and select the repositories WebDevLoop may work on.
 
-Agent sessions run on the GitHub Copilot SDK, which needs a Copilot-capable token:
+### Configure and sign in
 
-- **Personal account (no organization): use a fine-grained PAT.** A GitHub App installation token cannot be used for
-  Copilot requests on a personal account. The *Copilot requests* App permission only exists for Apps owned by an
-  organization, installed with access to **all** repositories, and requires the organization policy *Allow use of Copilot
-  CLI billed to the organization*. The app still tries to mint such an installation token first; on a personal account
-  that attempt is rejected and it falls back to the PAT.
-- **Organization:** an organization-owned App with the *Copilot requests* permission (read and write) lets agents run on
-  the installation token, billed to the organization.
+```bash
+cd src/WebDevLoop.Web
+dotnet user-secrets set "WebDevLoop:GitHub:AppClientId" "Iv23..."
+dotnet user-secrets set "WebDevLoop:GitHub:AppClientSecret" "<client secret>"
+dotnet user-secrets set "WebDevLoop:GitHub:AppSlug" "<app-name-from-the-app-url>"   # optional, for the install link
+```
 
-Copilot usage is billed to the account that owns the token. Classic `ghp_` tokens are not supported.
+(or the environment variables `WebDevLoop__GitHub__AppClientId` / `WebDevLoop__GitHub__AppClientSecret`; never commit
+the secret). Start WebDevLoop: until you sign in, every page shows **Sign in with GitHub** and the app stays
+diagnostic-only (the *GitHub authentication* check fails). The button sends you to GitHub to authorize the App and back
+to the page you came from; the workflow starts as soon as the prerequisites pass. Signing out again stops new GitHub
+work immediately.
 
-### PAT
+The **GitHub** page shows who is signed in, which repositories the App's installations give WebDevLoop access to, and
+which registered repositories it cannot reach. **Manage repository access** opens the installation's settings on GitHub,
+where you add or remove repositories; the change applies right away. **Install the GitHub App on another account or
+organization** adds an installation.
 
-Create a fine-grained token under Settings → Developer settings → Fine-grained personal access tokens:
-
-1. **Resource owner:** your personal account (the *Copilot requests* permission is not available for organization-owned
-   tokens). The account needs an active Copilot subscription.
-2. **Permissions → Account → Copilot requests:** add it. This is what authorizes Copilot calls.
-3. **Repository access and permissions:** only needed if the PAT should also act as the GitHub fallback (below). Select the
-   repositories and grant **Contents**, **Issues** and **Pull requests**, each read and write (**Metadata**: read is added
-   automatically).
-
-Provide it as `WebDevLoop:GitHub:UserToken`, preferably through the environment variable
-`WebDevLoop__GitHub__UserToken` or user secrets; never commit it.
-
-**Least privilege.** The same token is used for Copilot and for the GitHub fallback, and the Copilot runtime holds it.
-When the GitHub App does all the GitHub work, create a Copilot-only PAT: just *Copilot requests*, with repository access
-limited to public repositories (read-only) and no repository permissions. Keep the **PAT fallback** setting on: the
-switch also governs whether the PAT may be used for Copilot, and a Copilot-only PAT simply fails (HTTP 403/404) when the
-fallback would otherwise be used for GitHub work, so the App must be installed on every repository. If you grant the PAT repository write permissions (to use it as the
-fallback, or instead of an App), the Copilot runtime holds a token that can write to those repositories. Agent shell commands never see it: the tool policy denies reading credential
-variables, and agent sessions are not given a GitHub token of their own.
-
-### PAT fallback
-
-The PAT is used for GitHub work (API, clone, push) only when the App cannot act (not configured, not installed, or
-minting failed) and the **PAT fallback** setting is enabled (global settings, default on). The PAT is also usable on its
-own, without any App: leave the App settings empty, grant the repository permissions above, and keep the fallback enabled;
-commits and PRs are then attributed to you instead of an App bot. Copilot sessions use the PAT the same way: whenever no
-installation token with Copilot access is available and the fallback is enabled.
+The sign-in survives restarts: the tokens are stored in `<DataDirectory>/github-credentials.dat`, encrypted with ASP.NET
+Core data protection (keys in `<DataDirectory>/keys`; on Linux and macOS both are readable by your user only, and the keys
+themselves are not encrypted at rest). The refresh token is valid for six months and is renewed with every refresh, so
+you only sign in again after a long pause, after signing out, or when the App's authorization was revoked. Agent shell
+commands never see the token: the tool policy denies reading credential variables, and the Copilot runtime receives the
+token per session instead of through its environment.
 
 ## Configuration
 
@@ -95,16 +89,16 @@ section; `src/WebDevLoop.Web/appsettings.json` lists them with their defaults.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `DataDirectory` | `<LocalApplicationData>/WebDevLoop` | Database, default workspace root (`workspaces/`), Copilot home (`copilot/`), UI state |
+| `DataDirectory` | `<LocalApplicationData>/WebDevLoop` | Database, default workspace root (`workspaces/`), Copilot home (`copilot/`), UI state, encrypted GitHub sign-in (`github-credentials.dat`, `keys/`) |
 | `DatabasePath` | `<DataDirectory>/webdevloop.db` | SQLite database (migrated automatically at startup) |
-| `GitHub:ApiBaseUrl`, `GitHub:GraphQlUrl` | `https://api.github.com/`, `…/graphql` | GitHub API endpoints |
-| `GitHub:AppClientId` | – | GitHub App client id |
-| `GitHub:AppPrivateKeyPath` / `GitHub:AppPrivateKeyPem` | – | App private key (file path or PEM text, not both) |
-| `GitHub:UserToken` | – | Fine-grained PAT for the fallback (secret) |
+| `GitHub:ApiBaseUrl`, `GitHub:GraphQlUrl`, `GitHub:WebBaseUrl` | `https://api.github.com/`, `…/graphql`, `https://github.com/` | GitHub API and sign-in endpoints |
+| `GitHub:AppClientId` | – | Client id of the GitHub App users sign in with |
+| `GitHub:AppClientSecret` | – | A client secret of that App (secret) |
+| `GitHub:AppSlug` | – | Optional: the App's URL name, for the "Install the GitHub App" link |
 | `GitHub:GhStackMode` | `RestWithOptionalFallback` | `FallbackRequired` when the stack REST API is unavailable and `gh stack` must be installed |
 | `GitHub:GhExecutable` | `gh` | `gh` CLI used for the stack fallback |
 | `Copilot:CliPath` | – (bundled CLI) | Copilot CLI to launch |
-| `Copilot:TokenRefreshSkew`, `Copilot:IdleTimeout` | `00:05:00`, `00:10:00` | Runtime replacement before token expiry; idle runtime eviction |
+| `Copilot:IdleTimeout` | `00:10:00` | Idle runtime eviction |
 | `Tools:GitExecutable`, `Tools:PlaywrightCliExecutable` | `git`, `playwright-cli` | External tools checked at startup |
 | `Workflow:Enabled` | `true` | `false` serves the UI/API only (no workers, e.g. a read-only dashboard) |
 | `Workflow:ExplorationEnabled` | `true` | Run the explorer agent before tickets are dispatched |
@@ -123,13 +117,13 @@ section; `src/WebDevLoop.Web/appsettings.json` lists them with their defaults.
 Workflow behaviour is edited in the app (Settings page or `/api/settings`) and stored in the database: global values with
 nullable per-repository overrides for models, reasoning effort, prompt templates, timeouts, the active-spec limit, the
 dependency mode (`WaitForMerge`/`StackOnTop`), implementer concurrency, review/retry/cycle limits, tester run
-instructions, the test port range, and the PAT fallback. The global settings are seeded from the embedded defaults
+instructions, and the test port range. The global settings are seeded from the embedded defaults
 (including the prompt templates) on first start. The workspace root and the Copilot home are global-only and startup-scoped:
 they configure process-wide resources (the git workspace confines every clone and worktree path to the root it started
 with), so they cannot be overridden per repository (the API rejects it) and a change of the global value takes effect after
 a restart. Existing clones are not moved: after changing the workspace root, move them under the new root and update each
 repository's local path (`PATCH /api/repos/{id}`); the startup log warns about every repository whose clone lies outside the
-current root, and until fixed its tickets need attention. The PAT fallback is likewise read once at startup. The repository
+current root, and until fixed its tickets need attention. The repository
 selected in the UI is remembered across restarts (`<DataDirectory>/ui-state.json`); it is view context only and never affects scheduling.
 
 ## Running

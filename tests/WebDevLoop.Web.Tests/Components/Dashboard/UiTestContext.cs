@@ -49,12 +49,12 @@ public abstract class UiTestContext : BunitContext
 
     internal async Task EnterDiagnosticModeAsync()
     {
-        Validator.Checks = [new PrerequisiteCheck("GitHub auth", PrerequisiteStatus.Failed, "No GitHub App configured", "Configure a GitHub App or PAT")];
+        Validator.Checks = [new PrerequisiteCheck("GitHub auth", PrerequisiteStatus.Failed, "Nobody is signed in to GitHub.", "Sign in with GitHub on the GitHub page.")];
         await Readiness.RefreshAsync(CancellationToken.None);
     }
 
     internal static EffectiveSettingsView Effective(int maxActiveSpecs = 2, SpecDependencyMode mode = SpecDependencyMode.WaitForMerge) =>
-        new("/ws", "/copilot", "main", maxActiveSpecs, mode, 4, 2, 3, 2, 3, 3, "run it", new PortRangeData(5000, 5100), false, new Dictionary<AgentRole, EffectiveRoleSettingsView>());
+        new("/ws", "/copilot", "main", maxActiveSpecs, mode, 4, 2, 3, 2, 3, 3, "run it", new PortRangeData(5000, 5100), new Dictionary<AgentRole, EffectiveRoleSettingsView>());
 
     internal static EventEnvelope SpecStatusChanged(string specRunId, int repositoryId, SpecRunStatus to, long messageId = 1) =>
         new(messageId, new SpecRunStatusChanged(new RunId(specRunId), repositoryId, SpecRunStatus.Queued, to, ApiData.Now));

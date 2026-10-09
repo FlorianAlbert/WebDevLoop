@@ -8,9 +8,6 @@ public sealed class CopilotRuntimeOptions
     /// <summary>Copilot CLI to launch; null uses the runtime bundled into the app output by the SDK package.</summary>
     public string? CliPath { get; init; }
 
-    /// <summary>Runtimes whose App installation token expires within this window are drained and replaced.</summary>
-    public TimeSpan TokenRefreshSkew { get; init; } = TimeSpan.FromMinutes(5);
-
     /// <summary>Runtimes no session has leased for this long are stopped by <c>EvictIdleAsync</c>.</summary>
     public TimeSpan IdleTimeout { get; init; } = TimeSpan.FromMinutes(10);
 

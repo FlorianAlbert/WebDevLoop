@@ -1,0 +1,245 @@
+@page "/github"
+@inherits ScopedComponentBase
+@implements IDisposable
+@using WebDevLoop.Core.Queries
+@inject GitHubUserSession Session
+@inject GitHubAppAccess AppAccess
+@inject NavigationManager Navigation
+
+<PageTitle>GitHub</PageTitle>
+
+<h1 class="h4 mb-3">GitHub</h1>
+
+@if (Error is not null)
+{
+    <div class="alert alert-danger" role="alert" data-testid="github-error">@Error</div>
+}
+
+@if (!_status.IsConfigured)
+{
+    <div class="alert alert-warning" role="alert" data-testid="github-not-configured">
+        <strong>GitHub sign-in is not configured.</strong>
+        Set <code>WebDevLoop:GitHub:AppClientId</code> and <code>WebDevLoop:GitHub:AppClientSecret</code> (the GitHub App's client
+        id and a client secret, e.g. as user secrets) and restart WebDevLoop. The README explains how to set up the GitHub App.
+    </div>
+}
+else if (!_status.IsSignedIn)
+{
+    <div class="card mb-3" data-testid="github-signed-out">
+        <div class="card-body">
+            <h2 class="h5 card-title">Not signed in</h2>
+            <p class="card-text">
+                WebDevLoop works on GitHub as you: it reads spec issues, pushes branches, opens pull requests, and runs Copilot
+                agents on your Copilot subscription. GitHub asks you to authorize the GitHub App, and WebDevLoop can then reach
+                exactly the repositories the App is installed on.
+            </p>
+            <button type="button" class="btn btn-dark" data-testid="github-signin" @onclick="Navigation.SignInWithGitHub">Sign in with GitHub</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card mb-3" data-testid="github-signed-in">
+        <div class="card-body d-flex flex-wrap align-items-center gap-3">
+            @if (_status.AvatarUrl is not null)
+            {
+                <img src="@_status.AvatarUrl" alt="" width="48" height="48" class="rounded-circle" />
+            }
+            <div class="me-auto">
+                <div>Signed in as <strong data-testid="github-login">@_status.Login</strong></div>
+                <small class="text-muted" data-testid="github-signin-expiry">
+                    @if (_status.SignInExpiresAt is { } expiresAt)
+                    {
+                        <text>Renewed automatically while WebDevLoop runs; if it stays unused until @expiresAt.ToLocalTime().ToString("g"), sign in again.</text>
+                    }
+                    else
+                    {
+                        <text>The sign-in does not expire.</text>
+                    }
+                </small>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="github-switch" @onclick="Navigation.SignInWithGitHub">Sign in again</button>
+            @if (_confirmSignOut)
+            {
+                <button type="button" class="btn btn-danger btn-sm" data-testid="github-confirm-signout" disabled="@_signingOut" @onclick="SignOutAsync">Confirm sign out</button>
+                <button type="button" class="btn btn-link btn-sm" @onclick="() => _confirmSignOut = false">Cancel</button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-outline-danger btn-sm" data-testid="github-signout" @onclick="() => _confirmSignOut = true">Sign out</button>
+            }
+        </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-3 mb-2">
+        <h2 class="h5 mb-0">Repository access</h2>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-testid="github-refresh-access" disabled="@_loadingAccess" @onclick="LoadAccessAsync">
+            @(_loadingAccess ? "Loading…" : "Refresh")
+        </button>
+    </div>
+    <p class="text-muted small">
+        WebDevLoop reaches the repositories the GitHub App is installed on (and that you can access yourself). Add or remove
+        repositories on GitHub with <em>Manage repository access</em>; the change applies right away, use Refresh to see it here.
+    </p>
+
+    @if (_accessError is not null)
+    {
+        <div class="alert alert-danger" role="alert" data-testid="github-access-error">Could not load the repository access: @_accessError</div>
+    }
+    else if (_installations is null)
+    {
+        <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading…</span></div>
+    }
+    else
+    {
+        @if (_installations.Count == 0)
+        {
+            <div class="alert alert-warning" role="alert" data-testid="github-no-installations">
+                The GitHub App is not installed on any account you can access, so WebDevLoop cannot reach any repository yet.
+            </div>
+        }
+
+        @foreach (GitHubAppInstallation installation in _installations)
+        {
+            <div class="card mb-2" data-testid="github-installation">
+                <div class="card-header d-flex flex-wrap align-items-center gap-2">
+                    <strong>@installation.Account</strong>
+                    <span class="badge text-bg-secondary">
+                        @(installation.AllRepositories ? "All repositories" : $"{installation.Repositories.Count} selected {(installation.Repositories.Count == 1 ? "repository" : "repositories")}")
+                    </span>
+                    <a class="btn btn-outline-primary btn-sm ms-auto" href="@installation.ConfigureUrl" target="_blank" rel="noopener noreferrer" data-testid="github-manage-access">
+                        Manage repository access
+                    </a>
+                </div>
+                @if (installation.Repositories.Count > 0)
+                {
+                    <ul class="list-group list-group-flush small">
+                        @foreach (string repository in installation.Repositories)
+                        {
+                            <li class="list-group-item py-1">@repository</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        @if (_installUri is not null)
+        {
+            <p class="mt-2">
+                <a href="@_installUri" target="_blank" rel="noopener noreferrer" data-testid="github-install">Install the GitHub App on another account or organization</a>
+            </p>
+        }
+
+        @if (_repositories.Count > 0)
+        {
+            <h2 class="h5 mt-4">Registered repositories</h2>
+            <table class="table table-sm align-middle" data-testid="github-registered-repositories">
+                <thead>
+                    <tr>
+                        <th>Repository</th>
+                        <th>Access</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (RepositoryView repository in _repositories)
+                    {
+                        bool reachable = IsReachable(repository);
+                        <tr data-testid="github-registered-repository" data-reachable="@reachable.ToString().ToLowerInvariant()">
+                            <td>@repository.Owner/@repository.Name</td>
+                            <td>
+                                @if (reachable)
+                                {
+                                    <span class="badge text-bg-success">Reachable</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-danger">Not accessible</span>
+                                    <small class="text-muted ms-1">Add it to the App's installation with <em>Manage repository access</em>.</small>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+}
+
+@code {
+    private GitHubSignInStatus _status = default!;
+    private IReadOnlyList<GitHubAppInstallation>? _installations;
+    private IReadOnlyList<RepositoryView> _repositories = [];
+    private Uri? _installUri;
+    private string? _accessError;
+    private bool _loadingAccess;
+    private bool _confirmSignOut;
+    private bool _signingOut;
+
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? Error { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _status = Session.Status;
+        Session.Changed += OnSignInChanged;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (_status.IsSignedIn)
+        {
+            await LoadAccessAsync();
+        }
+    }
+
+    public void Dispose() => Session.Changed -= OnSignInChanged;
+
+    private async Task LoadAccessAsync()
+    {
+        _loadingAccess = true;
+        _accessError = null;
+        try
+        {
+            _installations = await AppAccess.ListInstallationsAsync(CancellationToken.None);
+            _installUri = AppAccess.InstallUri(_installations);
+            _repositories = await InScopeAsync(services => services.GetRequiredService<IRepositoryQueries>().ListAsync(CancellationToken.None));
+        }
+        catch (Exception exception) when (exception is HttpRequestException or WebDevLoop.Infrastructure.GitHub.Pulls.GitHubTokenUnavailableException or TaskCanceledException)
+        {
+            _accessError = exception.Message;
+        }
+        finally
+        {
+            _loadingAccess = false;
+        }
+    }
+
+    private bool IsReachable(RepositoryView repository) =>
+        _installations!.Any(installation => installation.Repositories.Contains($"{repository.Owner}/{repository.Name}", StringComparer.OrdinalIgnoreCase));
+
+    private async Task SignOutAsync()
+    {
+        _signingOut = true;
+        try
+        {
+            await Session.SignOutAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _signingOut = false;
+            _confirmSignOut = false;
+        }
+    }
+
+    private void OnSignInChanged() => _ = InvokeAsync(async () =>
+    {
+        _status = Session.Status;
+        _installations = null;
+        StateHasChanged();
+        if (_status.IsSignedIn)
+        {
+            await LoadAccessAsync();
+            StateHasChanged();
+        }
+    });
+}

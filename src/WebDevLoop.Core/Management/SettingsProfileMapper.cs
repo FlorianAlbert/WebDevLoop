@@ -24,7 +24,6 @@ internal static class SettingsProfileMapper
         target.TesterCycleLimit = data.TesterCycleLimit;
         target.TesterRunInstructions = data.TesterRunInstructions;
         target.TestPortRange = ParsePortRange(data.TestPortRange, errors);
-        target.PatFallbackEnabled = data.PatFallbackEnabled;
         ApplyRoles(data.Roles, target);
         return errors;
     }
@@ -44,7 +43,6 @@ internal static class SettingsProfileMapper
         TesterCycleLimit = profile.TesterCycleLimit,
         TesterRunInstructions = profile.TesterRunInstructions,
         TestPortRange = profile.TestPortRange is { } range ? new PortRangeData(range.Start, range.End) : null,
-        PatFallbackEnabled = profile.PatFallbackEnabled,
         Roles = profile.Roles.Where(entry => entry.Value != Unset).ToDictionary(),
     };
 
@@ -62,7 +60,6 @@ internal static class SettingsProfileMapper
         settings.TesterCycleLimit,
         settings.TesterRunInstructions,
         new PortRangeData(settings.TestPortRange.Start, settings.TestPortRange.End),
-        settings.PatFallbackEnabled,
         settings.Roles.ToDictionary(
             entry => entry.Key,
             entry => new EffectiveRoleSettingsView(entry.Value.Model, entry.Value.ReasoningEffort, entry.Value.PromptTemplate, (int)entry.Value.Timeout.TotalSeconds)));

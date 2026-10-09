@@ -16,7 +16,6 @@ public sealed record EffectiveSettingsView(
     int TesterCycleLimit,
     string TesterRunInstructions,
     PortRangeData TestPortRange,
-    bool PatFallbackEnabled,
     IReadOnlyDictionary<AgentRole, EffectiveRoleSettingsView> Roles);
 
 public sealed record EffectiveRoleSettingsView(string Model, string ReasoningEffort, string PromptTemplate, int TimeoutSeconds);

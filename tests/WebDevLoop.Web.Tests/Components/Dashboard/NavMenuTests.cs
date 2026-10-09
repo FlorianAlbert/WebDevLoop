@@ -12,7 +12,7 @@ public sealed class NavMenuTests : UiTestContext
 
         string[] hrefs = cut.FindAll("a.nav-link").Select(link => link.GetAttribute("href")!).ToArray();
 
-        Assert.Equal(["/", "/repositories", "/queue", "/settings", "/health"], hrefs);
+        Assert.Equal(["/", "/repositories", "/queue", "/settings", "/github", "/health"], hrefs);
     }
 
     [Fact]
@@ -28,7 +28,7 @@ public sealed class NavMenuTests : UiTestContext
     {
         Assert.Equal("/runs/run-1", UiRoutes.Run("run-1"));
         Assert.Equal("/runs/a%2Fb", UiRoutes.Run("a/b"));
-        Assert.Equal(["/", "/repositories", "/queue", "/settings", "/health"],
-            new[] { UiRoutes.Dashboard, UiRoutes.Repositories, UiRoutes.Queue, UiRoutes.Settings, UiRoutes.Health });
+        Assert.Equal(["/", "/repositories", "/queue", "/settings", "/github", "/health"],
+            new[] { UiRoutes.Dashboard, UiRoutes.Repositories, UiRoutes.Queue, UiRoutes.Settings, UiRoutes.GitHub, UiRoutes.Health });
     }
 }

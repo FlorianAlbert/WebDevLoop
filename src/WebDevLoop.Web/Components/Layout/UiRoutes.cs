@@ -8,6 +8,7 @@ public static class UiRoutes
     public const string Queue = "/queue";
     public const string Settings = "/settings";
     public const string Health = "/health";
+    public const string GitHub = "/github";
 
     public static string Run(string specRunId) => $"/runs/{Uri.EscapeDataString(specRunId)}";
 }

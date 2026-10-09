@@ -47,6 +47,7 @@ public sealed class TestPortRangeCheckTests
     {
         WorkspaceRoot = TestPrerequisiteOptions.WorkspaceRoot,
         GitHubAuth = new(),
+        GitHubSignIn = new FakeGitHubSignInState(null),
         TestPortRange = range,
     };
 }

@@ -54,7 +54,7 @@ public sealed class PrerequisiteRegistrationTests
             _ =>
             {
                 resolved++;
-                return new PrerequisiteOptions { WorkspaceRoot = Path.Combine(AppContext.BaseDirectory, "test-scratch", "late-workspace"), GitHubAuth = new() };
+                return new PrerequisiteOptions { WorkspaceRoot = Path.Combine(AppContext.BaseDirectory, "test-scratch", "late-workspace"), GitHubAuth = new(), GitHubSignIn = new FakeGitHubSignInState(null) };
             },
             "Data Source=:memory:",
             new BundledSkillsCatalog(new BundledSkillsOptions { Root = Path.Combine(AppContext.BaseDirectory, "no-skills") }));
@@ -73,6 +73,7 @@ public sealed class PrerequisiteRegistrationTests
         {
             WorkspaceRoot = Path.Combine(AppContext.BaseDirectory, "test-scratch", "unused-workspace"),
             GitHubAuth = new(),
+            GitHubSignIn = new FakeGitHubSignInState(null),
             CopilotCliPath = Path.Combine(AppContext.BaseDirectory, "no-such-copilot"),
             GitExecutable = "webdevloop-no-such-git",
             GhExecutable = "webdevloop-no-such-gh",

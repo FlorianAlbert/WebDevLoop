@@ -169,18 +169,15 @@ internal sealed class CopilotAgentRunner(
         return decision;
     }
 
-    /// <summary>App installation tokens live in the runtime environment; user/PAT tokens go to the session, via callback when they rotate.</summary>
-    private CopilotSessionAuth SessionAuth(AgentRunRequest request, GitHubAccessToken copilotToken) => copilotToken switch
-    {
-        { Kind: GitHubTokenKind.AppInstallation } => CopilotSessionAuth.None,
-        { ExpiresAt: null } => CopilotSessionAuth.StaticToken(copilotToken.Value),
-        _ => CopilotSessionAuth.RotatingToken(async cancellationToken =>
+    /// <summary>The user's token goes to the session; an expiring token is handed over through a callback that refreshes it.</summary>
+    private CopilotSessionAuth SessionAuth(AgentRunRequest request, GitHubAccessToken copilotToken) => copilotToken.ExpiresAt is null
+        ? CopilotSessionAuth.StaticToken(copilotToken.Value)
+        : CopilotSessionAuth.RotatingToken(async cancellationToken =>
         {
             GitHubAccessToken current = await pool.RequestTokenAsync(request.Repository, cancellationToken);
             TimeSpan remaining = current.ExpiresAt is { } expiresAt ? expiresAt - clock.UtcNow : TimeSpan.Zero;
             return new CopilotUserToken(current.Value, remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero);
-        }),
-    };
+        });
 
     private static async Task AbortTurnAsync(ICopilotAgentSession? session, AgentLogForwarder log)
     {

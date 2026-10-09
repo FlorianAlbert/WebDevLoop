@@ -64,7 +64,7 @@ public sealed class PortValueContractTests
     [Fact]
     public void access_token_never_reveals_its_secret_when_printed()
     {
-        var token = new GitHubAccessToken(Secret, GitHubTokenKind.AppInstallation, "installation-1", 3, null);
+        var token = new GitHubAccessToken(Secret, "octocat", 3, null);
 
         Assert.DoesNotContain(Secret, token.ToString());
         Assert.DoesNotContain(Secret, GitHubTokenResult.Available(token).ToString());
@@ -75,20 +75,7 @@ public sealed class PortValueContractTests
     public void unavailable_token_result_requires_a_reason()
     {
         Assert.Throws<ArgumentException>(() => GitHubTokenResult.Unavailable(""));
-        Assert.False(GitHubTokenResult.Unavailable("PAT fallback disabled").IsAvailable);
-    }
-
-    [Fact]
-    public void permission_sets_compare_by_content_regardless_of_order()
-    {
-        GitHubPermissionSet a = GitHubPermissionSet.IssuesWrite.With("contents", GitHubPermissionLevel.Read);
-        GitHubPermissionSet b = GitHubPermissionSet.ContentsRead.With("issues", GitHubPermissionLevel.Write);
-
-        Assert.Equal(a, b);
-        Assert.Equal(a.GetHashCode(), b.GetHashCode());
-        Assert.NotEqual(GitHubPermissionSet.ContentsRead, GitHubPermissionSet.ContentsWrite);
-        Assert.Equal(new GitHubTokenRequest(Repo, a), new GitHubTokenRequest(Repo, b));
-        Assert.Equal("contents:read,issues:write", a.ToString());
+        Assert.False(GitHubTokenResult.Unavailable("Nobody is signed in to GitHub.").IsAvailable);
     }
 
     [Fact]
@@ -106,7 +93,7 @@ public sealed class PortValueContractTests
     {
         int releases = 0;
         var lease = new CopilotRuntimeLease(
-            new CopilotRuntimeKey(new CopilotAuthIdentity(CopilotAuthKind.GitHubAppInstallation, "1"), 1, null),
+            new CopilotRuntimeKey(new CopilotAuthIdentity("octocat"), 1, null),
             () =>
             {
                 releases++;

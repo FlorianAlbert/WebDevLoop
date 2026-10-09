@@ -1,14 +1,12 @@
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Infrastructure.GitHub.Auth;
 
 namespace WebDevLoop.Infrastructure.Prerequisites;
 
-/// <summary>Checks that credentials are configured, never that they are valid; secrets are never echoed.</summary>
+/// <summary>Checks that GitHub sign-in is configured and a user is signed in, never that the token works; secrets are never echoed.</summary>
 public sealed class GitHubAuthCheck(PrerequisiteOptions options) : IPrerequisiteCheck
 {
     public const string CheckName = "GitHub authentication";
-
-    private const string ConfigureRemediation =
-        "Configure a GitHub App (client id and private key), or enable the PAT fallback together with a fine-grained token.";
 
     public string Name => CheckName;
 
@@ -16,32 +14,23 @@ public sealed class GitHubAuthCheck(PrerequisiteOptions options) : IPrerequisite
 
     private PrerequisiteCheck Evaluate()
     {
-        var auth = options.GitHubAuth;
-        bool hasClientId = !string.IsNullOrWhiteSpace(auth.AppClientId);
-        bool hasPrivateKey = !string.IsNullOrWhiteSpace(auth.AppPrivateKeyPem);
-        bool hasToken = !string.IsNullOrWhiteSpace(auth.UserToken);
-
-        if (hasClientId != hasPrivateKey)
+        GitHubAuthOptions auth = options.GitHubAuth;
+        string[] missing =
+        [
+            .. string.IsNullOrWhiteSpace(auth.AppClientId) ? ["client id (WebDevLoop:GitHub:AppClientId)"] : Array.Empty<string>(),
+            .. string.IsNullOrWhiteSpace(auth.AppClientSecret) ? ["client secret (WebDevLoop:GitHub:AppClientSecret)"] : Array.Empty<string>(),
+        ];
+        if (missing.Length > 0)
         {
-            string missing = hasClientId ? "private key" : "client id";
-            return CheckResult.Failed(Name, $"The GitHub App is half configured: the {missing} is missing.", ConfigureRemediation);
-        }
-
-        if (auth.IsAppConfigured)
-        {
-            return auth.PatFallbackEnabled && !hasToken
-                ? CheckResult.Warning(
-                    Name,
-                    "GitHub App configured, but the PAT fallback is enabled without a token.",
-                    "Provide a token or disable the PAT fallback.")
-                : CheckResult.Passed(Name, "GitHub App credentials are configured.");
-        }
-
-        return auth.PatFallbackEnabled && hasToken
-            ? CheckResult.Warning(
+            return CheckResult.Failed(
                 Name,
-                "No GitHub App configured: only the PAT fallback is available, which acts with a user's broader permissions.",
-                "Configure a GitHub App for least-privilege, per-repository installation tokens.")
-            : CheckResult.Failed(Name, "No GitHub credentials are configured.", ConfigureRemediation);
+                $"GitHub sign-in is not configured: the GitHub App's {string.Join(" and ", missing)} is missing.",
+                "Configure the GitHub App's client id and a client secret (user secrets or environment variables), see the README.");
+        }
+
+        GitHubSignInStatus status = options.GitHubSignIn.Status;
+        return status.IsSignedIn
+            ? CheckResult.Passed(Name, $"Signed in to GitHub as {status.Login}.")
+            : CheckResult.Failed(Name, "Nobody is signed in to GitHub.", "Sign in with GitHub on the GitHub page.");
     }
 }

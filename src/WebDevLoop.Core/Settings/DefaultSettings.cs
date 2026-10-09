@@ -14,7 +14,6 @@ public static class DefaultSettings
     public const int MaxRetries = 2;
     public const int ParentReviewCycleLimit = 3;
     public const int TesterCycleLimit = 3;
-    public const bool PatFallbackEnabled = true;
     public const string WorkspacesDirectoryName = "workspaces";
     public const string CopilotDirectoryName = "copilot";
 
@@ -74,7 +73,6 @@ public static class DefaultSettings
             TesterCycleLimit = TesterCycleLimit,
             TesterRunInstructions = TesterRunInstructions,
             TestPortRange = TestPortRange,
-            PatFallbackEnabled = PatFallbackEnabled,
             Roles = roles,
         };
     }

@@ -12,7 +12,7 @@ public abstract class GitHubIssuesTestBase
     private protected FakeIssuesApiHandler Api { get; } = new();
 
     private protected RecordingTokenProvider Tokens { get; } = new(
-        GitHubTokenResult.Available(new GitHubAccessToken(TokenValue, GitHubTokenKind.AppInstallation, "42", 1, null)));
+        GitHubTokenResult.Available(new GitHubAccessToken(TokenValue, "octocat", 1, null)));
 
     private protected GitHubIssues CreateSut(ITokenProvider? tokens = null) => new(new HttpClient(Api), tokens ?? Tokens);
 

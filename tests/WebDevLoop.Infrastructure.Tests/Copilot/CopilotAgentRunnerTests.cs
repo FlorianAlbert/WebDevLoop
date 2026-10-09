@@ -108,14 +108,12 @@ public sealed class CopilotAgentRunnerTests : IAsyncDisposable
         await _runner.StartAsync(Request(role), Ct);
 
         IReadOnlyDictionary<string, string> environment = Assert.Single(_factory.Runtimes).Launch.Environment;
-        Assert.DoesNotContain(environment.Keys, name => name is "GH_TOKEN" or "GITHUB_TOKEN");
-        Assert.Equal("ghs_gen1", environment["COPILOT_GITHUB_TOKEN"]);
+        Assert.DoesNotContain(environment.Keys, name => name is "GH_TOKEN" or "GITHUB_TOKEN" or "COPILOT_GITHUB_TOKEN");
         Assert.Equal("/usr/bin", environment["PATH"]);
         Assert.Equal("0", environment["GIT_TERMINAL_PROMPT"]);
-        Assert.All(_tokens.Requests, request => Assert.Equal(GitHubPermissionSet.CopilotRequests, request.Permissions));
         CopilotSessionSpec spec = _factory.Runtimes[0].Created[0];
         Assert.Null(spec.Auth.GitHubToken);
-        Assert.Null(spec.Auth.TokenProvider);
+        Assert.NotNull(spec.Auth.TokenProvider);
     }
 
     [Fact]
@@ -243,7 +241,7 @@ public sealed class CopilotAgentRunnerTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task crossing_app_token_expiry_drains_the_old_runtime_and_resumes_the_persisted_session_on_a_new_runtime()
+    public async Task crossing_user_token_expiry_resumes_the_persisted_session_on_the_same_runtime_with_the_refreshed_token()
     {
         _factory.OnSend = turn =>
         {
@@ -252,17 +250,15 @@ public sealed class CopilotAgentRunnerTests : IAsyncDisposable
         };
         await _runner.StartAsync(Request(AgentRole.Implementer), Ct);
 
-        _clock.Advance(TimeSpan.FromMinutes(58));
+        _clock.Advance(CopilotTokenProviderFake.Lifetime);
         AgentRunResult resumed = await _runner.ResumeAsync(Request(AgentRole.Implementer, prompt: "Fix the findings."), Ct);
 
         Assert.Equal(AgentRunOutcome.Reported, resumed.Outcome);
-        Assert.Equal(2, _factory.Runtimes.Count);
-        Assert.True(_factory.Runtimes[0].IsDisposed);
-        FakeCopilotRuntime replacement = _factory.Runtimes[1];
-        Assert.Equal("ghs_gen2", replacement.Launch.Environment["COPILOT_GITHUB_TOKEN"]);
-        Assert.Equal(_factory.Runtimes[0].Launch.BaseDirectory, replacement.Launch.BaseDirectory);
-        CopilotSessionSpec created = _factory.Runtimes[0].Created[0];
-        CopilotSessionSpec spec = Assert.Single(replacement.Resumed);
+        FakeCopilotRuntime runtime = Assert.Single(_factory.Runtimes);
+        Assert.False(runtime.IsDisposed);
+        CopilotSessionSpec created = runtime.Created[0];
+        CopilotSessionSpec spec = Assert.Single(runtime.Resumed);
+        Assert.Equal("ghu_gen2", (await spec.Auth.TokenProvider!(Ct)).Value);
         Assert.Equal(created.SessionId, spec.SessionId);
         Assert.Equal(created.WorkingDirectory, spec.WorkingDirectory);
         Assert.Equal(created.SkillDirectories, spec.SkillDirectories);
@@ -331,29 +327,25 @@ public sealed class CopilotAgentRunnerTests : IAsyncDisposable
     [Fact]
     public async Task unavailable_copilot_credentials_fail_authentication_without_starting_a_runtime()
     {
-        _tokens.UnavailableReason = "PAT fallback is disabled.";
+        _tokens.UnavailableReason = "Nobody is signed in to GitHub.";
 
         AgentRunResult result = await _runner.StartAsync(Request(AgentRole.Implementer), Ct);
 
         Assert.Equal(AgentRunOutcome.AuthenticationFailed, result.Outcome);
-        Assert.Contains("PAT fallback is disabled.", result.FailureReason);
+        Assert.Contains("Nobody is signed in to GitHub.", result.FailureReason);
         Assert.Empty(_factory.Runtimes);
     }
 
     [Fact]
-    public async Task rotatable_user_token_sessions_use_the_token_provider_callback()
+    public async Task expiring_user_token_sessions_use_the_token_provider_callback()
     {
-        await _pool.DisposeAsync();
-        _tokens = new CopilotTokenProviderFake(_clock, GitHubTokenKind.UserToken) { UserTokensRotate = true };
-        (_pool, _runner) = CreateRunner(_tokens);
-
         await _runner.StartAsync(Request(AgentRole.Implementer), Ct);
 
         CopilotSessionSpec spec = _factory.Runtimes[0].Created[0];
         Assert.Null(spec.Auth.GitHubToken);
         Assert.NotNull(spec.Auth.TokenProvider);
         Assert.DoesNotContain("COPILOT_GITHUB_TOKEN", _factory.Runtimes[0].Launch.Environment.Keys);
-        _clock.Advance(TimeSpan.FromMinutes(58));
+        _clock.Advance(CopilotTokenProviderFake.Lifetime - TimeSpan.FromMinutes(2));
         CopilotUserToken refreshed = await spec.Auth.TokenProvider(Ct);
         Assert.Equal("ghu_gen2", refreshed.Value);
         Assert.Equal(CopilotTokenProviderFake.Lifetime, refreshed.ExpiresIn);
@@ -363,7 +355,7 @@ public sealed class CopilotAgentRunnerTests : IAsyncDisposable
     public async Task non_expiring_user_tokens_are_passed_to_the_session_directly()
     {
         await _pool.DisposeAsync();
-        _tokens = new CopilotTokenProviderFake(_clock, GitHubTokenKind.UserToken);
+        _tokens = new CopilotTokenProviderFake(_clock) { TokensExpire = false };
         (_pool, _runner) = CreateRunner(_tokens);
 
         await _runner.StartAsync(Request(AgentRole.Implementer), Ct);

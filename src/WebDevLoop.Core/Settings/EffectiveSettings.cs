@@ -31,8 +31,6 @@ public sealed record EffectiveSettings
 
     public required TestPortRange TestPortRange { get; init; }
 
-    public required bool PatFallbackEnabled { get; init; }
-
     public required IReadOnlyDictionary<AgentRole, RoleSettings> Roles { get; init; }
 
     public RoleSettings For(AgentRole role) =>

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebDevLoop.Infrastructure.Skills;
 using WebDevLoop.Web.Background;
+using WebDevLoop.Web.GitHubAuth;
 
 namespace WebDevLoop.Web.DependencyInjection;
 
@@ -24,6 +25,7 @@ public static class WebDevLoopServiceCollectionExtensions
         services.AddWebDevLoopDashboardUi();
         services.AddRazorComponents().AddInteractiveServerComponents();
         services.TryAddSingleton<IAppInitializer, AppInitializer>();
+        services.AddGitHubSignInReadinessSync();
         if (options.Workflow.Enabled)
         {
             services.AddWebDevLoopWorkers();

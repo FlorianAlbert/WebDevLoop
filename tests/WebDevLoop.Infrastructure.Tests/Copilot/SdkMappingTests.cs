@@ -42,7 +42,7 @@ public sealed class SdkMappingTests
         Assert.Equal(true, tool.AdditionalProperties["is_terminal"]);
         Assert.Equal(true, tool.AdditionalProperties["skip_permission"]);
         Assert.Equal("object", tool.JsonSchema.GetProperty("type").GetString());
-        Assert.Null(config.GitHubToken);
+        Assert.Equal("ghu_session", config.GitHubToken);
         Assert.Null(config.GitHubTokenProvider);
     }
 
@@ -104,11 +104,11 @@ public sealed class SdkMappingTests
     }
 
     [Fact]
-    public void static_user_tokens_are_passed_per_session()
+    public void non_expiring_user_tokens_are_passed_per_session()
     {
-        SessionConfig config = SdkSessionConfigFactory.CreateSession(Spec(AgentRole.Tester, CopilotSessionAuth.StaticToken("github_pat_x")));
+        SessionConfig config = SdkSessionConfigFactory.CreateSession(Spec(AgentRole.Tester, CopilotSessionAuth.StaticToken("ghu_static")));
 
-        Assert.Equal("github_pat_x", config.GitHubToken);
+        Assert.Equal("ghu_static", config.GitHubToken);
         Assert.Null(config.GitHubTokenProvider);
     }
 
@@ -157,9 +157,9 @@ public sealed class SdkMappingTests
     [Fact]
     public void client_options_launch_an_isolated_runtime_with_the_given_environment()
     {
-        var environment = new Dictionary<string, string> { ["PATH"] = "/usr/bin", ["COPILOT_GITHUB_TOKEN"] = "ghs_runtime" };
+        var environment = new Dictionary<string, string> { ["PATH"] = "/usr/bin" };
         var launch = new CopilotRuntimeLaunch(
-            new CopilotRuntimeKey(new CopilotAuthIdentity(CopilotAuthKind.GitHubAppInstallation, "42"), 3, DateTimeOffset.UnixEpoch),
+            new CopilotRuntimeKey(new CopilotAuthIdentity("octocat"), 3, null),
             "/data/copilot",
             "/usr/local/bin/copilot",
             environment);
@@ -203,7 +203,7 @@ public sealed class SdkMappingTests
                     return "recorded";
                 }),
             policy.Authorize,
-            auth ?? CopilotSessionAuth.None,
+            auth ?? CopilotSessionAuth.StaticToken("ghu_session"),
             _events.Add);
     }
 

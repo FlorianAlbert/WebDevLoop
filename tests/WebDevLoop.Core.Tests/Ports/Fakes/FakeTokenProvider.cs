@@ -6,15 +6,15 @@ public sealed class FakeTokenProvider : ITokenProvider
 {
     private int _generation;
 
-    public List<GitHubTokenRequest> Requests { get; } = [];
+    public int Requests { get; private set; }
 
-    public bool AppCanAct { get; set; } = true;
+    public bool SignedIn { get; set; } = true;
 
-    public Task<GitHubTokenResult> GetTokenAsync(GitHubTokenRequest request, CancellationToken cancellationToken)
+    public Task<GitHubTokenResult> GetTokenAsync(CancellationToken cancellationToken)
     {
-        Requests.Add(request);
-        return Task.FromResult(AppCanAct
-            ? GitHubTokenResult.Available(new GitHubAccessToken($"ghs_fake{++_generation}", GitHubTokenKind.AppInstallation, "installation-1", _generation, null))
-            : GitHubTokenResult.Unavailable("GitHub App cannot act and PAT fallback is disabled."));
+        Requests++;
+        return Task.FromResult(SignedIn
+            ? GitHubTokenResult.Available(new GitHubAccessToken($"ghu_fake{++_generation}", "octocat", _generation, null))
+            : GitHubTokenResult.Unavailable("Nobody is signed in to GitHub."));
     }
 }

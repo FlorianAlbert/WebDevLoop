@@ -181,7 +181,7 @@ internal sealed class FakeSettingsManager : ISettingsManager
 
     public Task<CommandResult<EffectiveSettingsView>> GetEffectiveAsync(int repositoryId, CancellationToken cancellationToken) =>
         Task.FromResult(CommandResult<EffectiveSettingsView>.Succeeded(new EffectiveSettingsView(
-            "/ws", "/copilot", "main", 1, SpecDependencyMode.WaitForMerge, 2, 1, 3, 2, 2, 2, "run it", new PortRangeData(5000, 5010), false, Roles)));
+            "/ws", "/copilot", "main", 1, SpecDependencyMode.WaitForMerge, 2, 1, 3, 2, 2, 2, "run it", new PortRangeData(5000, 5010), Roles)));
 
     public Task<SettingsProfileData> GetGlobalAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 

@@ -1,10 +1,12 @@
 namespace WebDevLoop.Core.Ports;
 
 /// <summary>
-/// Mints/caches permission-scoped GitHub tokens. Callers request a token per operation (clone, fetch, push, API call)
-/// and must not keep it beyond that operation, so refreshed tokens are always used.
+/// Hands out the signed-in user's GitHub token, refreshing it before it expires. The token is used for every GitHub
+/// operation (API, clone, fetch, push) and for Copilot; which repositories it reaches is governed by the GitHub App's
+/// installations. Callers request a token per operation and must not keep it beyond that operation.
 /// </summary>
 public interface ITokenProvider
 {
-    Task<GitHubTokenResult> GetTokenAsync(GitHubTokenRequest request, CancellationToken cancellationToken);
+    /// <returns>An unavailable result when nobody is signed in or the sign-in expired.</returns>
+    Task<GitHubTokenResult> GetTokenAsync(CancellationToken cancellationToken);
 }

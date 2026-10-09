@@ -3,24 +3,28 @@ using WebDevLoop.Infrastructure.Tests.GitHub.Auth;
 
 namespace WebDevLoop.Infrastructure.Tests.Copilot.Fakes;
 
-/// <summary>Mints one-hour tokens like the GitHub App provider: cached until they expire within the skew, then a new generation.</summary>
-internal sealed class CopilotTokenProviderFake(TestClock clock, GitHubTokenKind kind = GitHubTokenKind.AppInstallation) : ITokenProvider
+/// <summary>
+/// Hands out the signed-in user's token like <c>GitHubUserSession</c>: an expiring token is reused until it expires within
+/// the skew, then refreshed with a new generation.
+/// </summary>
+internal sealed class CopilotTokenProviderFake(TestClock clock) : ITokenProvider
 {
-    public static readonly TimeSpan Lifetime = TimeSpan.FromHours(1);
+    public const string Login = "octocat";
+    public static readonly TimeSpan Lifetime = TimeSpan.FromHours(8);
     private static readonly TimeSpan Skew = TimeSpan.FromMinutes(5);
 
     private GitHubAccessToken? _current;
 
-    public List<GitHubTokenRequest> Requests { get; } = [];
+    public int Requests { get; private set; }
 
     public string? UnavailableReason { get; set; }
 
-    /// <summary>When false, user tokens never expire (a configured PAT).</summary>
-    public bool UserTokensRotate { get; set; }
+    /// <summary>When false, tokens never expire (the App opted out of expiring user tokens).</summary>
+    public bool TokensExpire { get; set; } = true;
 
-    public Task<GitHubTokenResult> GetTokenAsync(GitHubTokenRequest request, CancellationToken cancellationToken)
+    public Task<GitHubTokenResult> GetTokenAsync(CancellationToken cancellationToken)
     {
-        Requests.Add(request);
+        Requests++;
         if (UnavailableReason is not null)
         {
             return Task.FromResult(GitHubTokenResult.Unavailable(UnavailableReason));
@@ -29,18 +33,12 @@ internal sealed class CopilotTokenProviderFake(TestClock clock, GitHubTokenKind 
         if (_current is null || _current.ExpiresAt - Skew <= clock.UtcNow)
         {
             int generation = (_current?.Generation ?? 0) + 1;
-            bool expires = kind == GitHubTokenKind.AppInstallation || UserTokensRotate;
-            _current = new GitHubAccessToken(
-                kind == GitHubTokenKind.AppInstallation ? $"ghs_gen{generation}" : $"ghu_gen{generation}",
-                kind,
-                kind == GitHubTokenKind.AppInstallation ? "4242" : "user-token",
-                generation,
-                expires ? clock.UtcNow + Lifetime : null);
+            _current = new GitHubAccessToken($"ghu_gen{generation}", Login, generation, TokensExpire ? clock.UtcNow + Lifetime : null);
         }
 
         return Task.FromResult(GitHubTokenResult.Available(_current));
     }
 
-    /// <summary>Forces the next request to mint a new generation (e.g. the provider refreshed it elsewhere).</summary>
+    /// <summary>Forces the next request to hand out a new generation (e.g. the session refreshed it elsewhere).</summary>
     public void Expire() => _current = null;
 }

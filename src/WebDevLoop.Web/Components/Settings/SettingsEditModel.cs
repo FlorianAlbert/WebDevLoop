@@ -38,8 +38,6 @@ public sealed class SettingsEditModel
 
     public int? PortEnd { get; set; }
 
-    public bool? PatFallbackEnabled { get; set; }
-
     public Dictionary<AgentRole, RoleEditModel> Roles { get; } =
         Enum.GetValues<AgentRole>().ToDictionary(role => role, _ => new RoleEditModel());
 
@@ -62,7 +60,6 @@ public sealed class SettingsEditModel
             TesterRunInstructions = data.TesterRunInstructions,
             PortStart = data.TestPortRange?.Start,
             PortEnd = data.TestPortRange?.End,
-            PatFallbackEnabled = data.PatFallbackEnabled,
         };
 
         foreach ((AgentRole role, RoleSettingsOverride settings) in data.Roles ?? new Dictionary<AgentRole, RoleSettingsOverride>())
@@ -95,7 +92,6 @@ public sealed class SettingsEditModel
         TesterCycleLimit = TesterCycleLimit,
         TesterRunInstructions = NullIfBlank(TesterRunInstructions),
         TestPortRange = PortStart is { } start && PortEnd is { } end ? new PortRangeData(start, end) : null,
-        PatFallbackEnabled = PatFallbackEnabled,
         Roles = Roles
             .Select(entry => (entry.Key, Override: entry.Value.ToOverride()))
             .Where(entry => entry.Override != new RoleSettingsOverride())

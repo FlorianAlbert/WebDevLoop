@@ -8,7 +8,7 @@ namespace WebDevLoop.Core.Tests.Orchestration.Recovery.AgentSteps;
 
 public sealed class ImplementerSessionRecoveryTests
 {
-    private static readonly CopilotAuthIdentity Installation = new(CopilotAuthKind.GitHubAppInstallation, "4242");
+    private static readonly CopilotAuthIdentity User = new("octocat");
 
     private readonly AgentStepRecoveryFixture _fixture = new();
 
@@ -66,7 +66,7 @@ public sealed class ImplementerSessionRecoveryTests
     public async Task token_expiry_during_recovery_replaces_runtime_before_resume()
     {
         // Another live session keeps the runtime busy, so it is refreshed rather than evicted as idle.
-        CopilotRuntimeLease busy = await _fixture.Runtimes.AcquireAsync(Installation, AgentStepRecoveryFixture.Token);
+        CopilotRuntimeLease busy = await _fixture.Runtimes.AcquireAsync(User, AgentStepRecoveryFixture.Token);
         (_, StepRun crashed) = await CrashWhileImplementingAsync();
         _fixture.Clock.Advance(TimeSpan.FromMinutes(56));
         _fixture.Restart();
@@ -76,10 +76,10 @@ public sealed class ImplementerSessionRecoveryTests
         await busy.DisposeAsync();
 
         CopilotRuntimeKey stale = Assert.Single(report.RefreshedRuntimes);
-        Assert.Equal((Installation, 1), (stale.Identity, stale.TokenGeneration));
+        Assert.Equal((User, 1), (stale.Identity, stale.TokenGeneration));
         Assert.Null(report.RuntimeMaintenanceFailure);
         Assert.Equal(["refresh 1", $"agent {crashed.CopilotSessionId}"], _fixture.Journal);
-        await using CopilotRuntimeLease current = await _fixture.Runtimes.AcquireAsync(Installation, AgentStepRecoveryFixture.Token);
+        await using CopilotRuntimeLease current = await _fixture.Runtimes.AcquireAsync(User, AgentStepRecoveryFixture.Token);
         Assert.Equal(2, current.Key.TokenGeneration);
     }
 

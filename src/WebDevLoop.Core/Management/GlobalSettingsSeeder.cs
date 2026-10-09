@@ -38,7 +38,6 @@ public sealed class GlobalSettingsSeeder(ISettingsProfileRepository profiles, IU
         global.TesterCycleLimit = defaults.TesterCycleLimit;
         global.TesterRunInstructions = defaults.TesterRunInstructions;
         global.TestPortRange = defaults.TestPortRange;
-        global.PatFallbackEnabled = defaults.PatFallbackEnabled;
         foreach ((AgentRole role, RoleSettings settings) in defaults.Roles)
         {
             global.SetRole(role, new RoleSettingsOverride(

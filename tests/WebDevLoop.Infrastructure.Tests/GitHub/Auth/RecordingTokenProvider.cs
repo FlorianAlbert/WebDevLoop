@@ -4,11 +4,11 @@ namespace WebDevLoop.Infrastructure.Tests.GitHub.Auth;
 
 internal sealed class RecordingTokenProvider(GitHubTokenResult result) : ITokenProvider
 {
-    public List<GitHubTokenRequest> Requests { get; } = [];
+    public int Requests { get; private set; }
 
-    public Task<GitHubTokenResult> GetTokenAsync(GitHubTokenRequest request, CancellationToken cancellationToken)
+    public Task<GitHubTokenResult> GetTokenAsync(CancellationToken cancellationToken)
     {
-        Requests.Add(request);
+        Requests++;
         return Task.FromResult(result);
     }
 }

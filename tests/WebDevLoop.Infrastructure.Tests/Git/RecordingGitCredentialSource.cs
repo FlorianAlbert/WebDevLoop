@@ -8,29 +8,20 @@ namespace WebDevLoop.Infrastructure.Tests.Git;
 internal sealed class RecordingGitCredentialSource : IGitCredentialSource
 {
     private readonly ConcurrentQueue<(GitHubRepoRef Repo, GitRemoteOperation Operation)> _requests = new();
-    private readonly ConcurrentQueue<bool> _fallbacks = new();
 
     public IReadOnlyList<(GitHubRepoRef Repo, GitRemoteOperation Operation)> Requests => [.. _requests];
 
-    public IReadOnlyList<bool> UserTokenFallbacks => [.. _fallbacks];
-
     public int Issued { get; private set; }
 
-    public Task<GitHttpsCredential> GetCredentialAsync(
-        GitHubRepoRef repo,
-        GitRemoteOperation operation,
-        bool allowUserTokenFallback,
-        CancellationToken cancellationToken)
+    public Task<GitHttpsCredential> GetCredentialAsync(GitHubRepoRef repo, GitRemoteOperation operation, CancellationToken cancellationToken)
     {
         _requests.Enqueue((repo, operation));
-        _fallbacks.Enqueue(allowUserTokenFallback);
         return Task.FromResult(Next());
     }
 
-    public Func<GitHttpsCredential> CreateCallback(GitHubRepoRef repo, GitRemoteOperation operation, bool allowUserTokenFallback = false)
+    public Func<GitHttpsCredential> CreateCallback(GitHubRepoRef repo, GitRemoteOperation operation)
     {
         _requests.Enqueue((repo, operation));
-        _fallbacks.Enqueue(allowUserTokenFallback);
         return Next;
     }
 

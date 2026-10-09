@@ -3,10 +3,7 @@ namespace WebDevLoop.Infrastructure.Copilot.Runtime;
 /// <summary>A rotating user Copilot token and its remaining lifetime.</summary>
 internal sealed record CopilotUserToken(string Value, TimeSpan ExpiresIn);
 
-/// <summary>
-/// Session-level Copilot credentials. App installation tokens live in the runtime environment instead
-/// (<see cref="None"/>); user/PAT tokens are passed per session, through a callback when they rotate.
-/// </summary>
+/// <summary>Session-level Copilot credentials: the signed-in user's token, through a callback when it expires and is refreshed.</summary>
 internal sealed record CopilotSessionAuth
 {
     private CopilotSessionAuth(string? gitHubToken, Func<CancellationToken, Task<CopilotUserToken>>? tokenProvider)
@@ -14,8 +11,6 @@ internal sealed record CopilotSessionAuth
         GitHubToken = gitHubToken;
         TokenProvider = tokenProvider;
     }
-
-    public static CopilotSessionAuth None { get; } = new(null, null);
 
     public string? GitHubToken { get; }
 

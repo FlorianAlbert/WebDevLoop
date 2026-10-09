@@ -16,6 +16,7 @@ using WebDevLoop.Infrastructure.Queries;
 using WebDevLoop.Infrastructure.Runtime;
 using WebDevLoop.Infrastructure.Skills;
 using WebDevLoop.Infrastructure.TestHost;
+using WebDevLoop.Web.GitHubAuth;
 using WebDevLoop.Web.Resources.Prompts;
 
 namespace WebDevLoop.Web.DependencyInjection;
@@ -24,7 +25,7 @@ public static class InfrastructureServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the adapters behind the Core ports: clock and ids, embedded defaults, SQLite persistence with the outbox and
-    /// read models, GitHub (App tokens with PAT fallback, issues, PRs and stacks), the git workspace, the Copilot agent
+    /// read models, GitHub (the signed-in user's token, issues, PRs and stacks), the git workspace, the Copilot agent
     /// runner and runtime pool, the tester app host, the prerequisite checks and the persisted UI selection. Adapters that
     /// depend on the global settings are created after <see cref="StartupSettings"/> were resolved at startup.
     /// </summary>
@@ -46,7 +47,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddQueries();
         services.TryAddScoped<OutboxRetention>();
 
-        services.AddGitHub(options.GitHub);
+        services.AddGitHub(options);
         services.AddGitWorkspace();
         services.AddCopilot(options.Copilot, skills);
         services.AddTestHost();
@@ -54,20 +55,31 @@ public static class InfrastructureServiceCollectionExtensions
         return services;
     }
 
-    private static void AddGitHub(this IServiceCollection services, GitHubConnectionOptions github)
+    /// <summary>Every GitHub operation and every Copilot session uses the token of the user signed in through the GitHub App.</summary>
+    private static void AddGitHub(this IServiceCollection services, WebDevLoopOptions options)
     {
+        GitHubConnectionOptions github = options.GitHub;
         services.TryAddSingleton(new GitHubApiConnection(github.ApiBaseUrl));
-        services.TryAddSingleton(provider => new GitHubAuthOptions
+        services.TryAddSingleton(new GitHubAuthOptions
         {
             ApiBaseUrl = github.ApiBaseUrl,
+            WebBaseUrl = github.WebBaseUrl,
             AppClientId = NullIfEmpty(github.AppClientId),
-            AppPrivateKeyPem = NullIfEmpty(github.ResolvePrivateKeyPem()),
-            UserToken = NullIfEmpty(github.UserToken),
-            PatFallbackEnabled = provider.GetRequiredService<StartupSettings>().Current.PatFallbackEnabled,
+            AppClientSecret = NullIfEmpty(github.AppClientSecret),
+            AppSlug = NullIfEmpty(github.AppSlug),
         });
-        services.TryAddSingleton<ITokenProvider>(provider => new GitHubTokenProvider(
+        services.AddGitHubCredentialProtection(options);
+        services.TryAddSingleton(provider => new GitHubUserSession(
             provider.GetRequiredService<GitHubApiConnection>().Client,
             provider.GetRequiredService<IClock>(),
+            provider.GetRequiredService<GitHubAuthOptions>(),
+            provider.GetRequiredService<IGitHubCredentialStore>(),
+            provider.GetRequiredService<ILogger<GitHubUserSession>>()));
+        services.TryAddSingleton<ITokenProvider>(provider => provider.GetRequiredService<GitHubUserSession>());
+        services.TryAddSingleton<IGitHubSignInState>(provider => provider.GetRequiredService<GitHubUserSession>());
+        services.TryAddSingleton(provider => new GitHubAppAccess(
+            provider.GetRequiredService<GitHubApiConnection>().Client,
+            provider.GetRequiredService<ITokenProvider>(),
             provider.GetRequiredService<GitHubAuthOptions>()));
         services.TryAddSingleton<IGitCredentialSource, GitCredentialSource>();
         services.TryAddSingleton<IGitHubIssues>(provider => new GitHubIssues(
@@ -78,12 +90,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IGitHubPullsAndStacks>(provider => new GitHubPullsAndStacks(
             provider.GetRequiredService<GitHubApiConnection>().Client,
             provider.GetRequiredService<ITokenProvider>(),
-            new GitHubPullsOptions
-            {
-                ApiBaseUrl = github.ApiBaseUrl,
-                GraphQlUrl = github.GraphQlUrl,
-                AllowUserTokenFallback = provider.GetRequiredService<GitHubAuthOptions>().PatFallbackEnabled,
-            },
+            new GitHubPullsOptions { ApiBaseUrl = github.ApiBaseUrl, GraphQlUrl = github.GraphQlUrl },
             new ProcessGhCommandRunner(github.GhExecutable)));
     }
 
@@ -92,7 +99,7 @@ public static class InfrastructureServiceCollectionExtensions
         {
             EffectiveSettings global = provider.GetRequiredService<StartupSettings>().Current;
             return new GitWorkspace(
-                new GitWorkspaceOptions { WorkspaceRoot = global.WorkspaceRootDirectory, AllowUserTokenFallback = global.PatFallbackEnabled },
+                new GitWorkspaceOptions { WorkspaceRoot = global.WorkspaceRootDirectory },
                 provider.GetRequiredService<IGitCredentialSource>(),
                 provider.GetRequiredService<IClock>());
         });
@@ -108,7 +115,6 @@ public static class InfrastructureServiceCollectionExtensions
             {
                 BaseDirectory = provider.GetRequiredService<StartupSettings>().Current.CopilotBaseDirectory,
                 CliPath = NullIfEmpty(copilot.CliPath),
-                TokenRefreshSkew = copilot.TokenRefreshSkew,
                 IdleTimeout = copilot.IdleTimeout,
             },
             skills));
@@ -126,6 +132,7 @@ public static class InfrastructureServiceCollectionExtensions
         {
             WorkspaceRoot = global.WorkspaceRootDirectory,
             GitHubAuth = provider.GetRequiredService<GitHubAuthOptions>(),
+            GitHubSignIn = provider.GetRequiredService<IGitHubSignInState>(),
             CopilotCliPath = NullIfEmpty(options.Copilot.CliPath),
             TestPortRange = global.TestPortRange,
             GhStackMode = options.GitHub.GhStackMode,

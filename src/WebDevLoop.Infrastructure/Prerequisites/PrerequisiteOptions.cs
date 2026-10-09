@@ -14,7 +14,7 @@ public sealed class PrerequisiteOptions
 
     public required GitHubAuthOptions GitHubAuth { get; init; }
 
-    /// <summary>Configured Copilot CLI (see <c>CopilotRuntimeOptions.CliPath</c>); null falls back to the CLI bundled next to the app.</summary>
+    /// <summary>Configured Copilot CLI (<c>WebDevLoop:Copilot:CliPath</c>, see <c>CopilotRuntimeOptions.CliPath</c>); null falls back to the CLI bundled next to the app.</summary>
     public string? CopilotCliPath { get; init; }
 
     /// <summary>Where the Copilot SDK package copies its CLI when the build bundles it (<c>runtimes/&lt;rid&gt;/native</c>).</summary>

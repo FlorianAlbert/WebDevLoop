@@ -82,7 +82,20 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
 
     public IDisposable Subscribe(StepRunId stepRunId, Action onEntriesAvailable) => _subscriptions.Subscribe(stepRunId, onEntriesAvailable);
 
-    public async ValueTask DisposeAsync() => await FlushAsync(CancellationToken.None);
+    /// <summary>
+    /// Best-effort final flush. The host flushes during shutdown while the container is usable; when the container is
+    /// already disposed (it disposes this singleton last), the remaining entries are dropped instead of failing disposal.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await FlushAsync(CancellationToken.None);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
 
     private async Task<int> NextSequenceAsync(StepRunId stepRunId, CancellationToken cancellationToken)
     {

@@ -116,6 +116,12 @@ public sealed class GitHubTokenProvider : ITokenProvider
         using HttpResponseMessage response = await _http.SendAsync(mint, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                // The App was uninstalled (or reinstalled with a new id): look the installation up again next time.
+                _installationIds.Remove(request.Repo);
+            }
+
             return AppTokenOutcome.Failed(
                 $"GitHub rejected the installation token request for {request.Repo} (HTTP {(int)response.StatusCode}).");
         }

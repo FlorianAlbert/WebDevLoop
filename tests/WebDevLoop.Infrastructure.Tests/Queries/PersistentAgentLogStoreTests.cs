@@ -26,6 +26,19 @@ public sealed class PersistentAgentLogStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task disposing_with_pending_entries_after_the_container_was_disposed_does_not_throw()
+    {
+        var database = new AgentLogDatabase();
+        PersistentAgentLogStore store = database.CreateStore(new AgentLogStoreOptions { BatchSize = 100, FlushInterval = TimeSpan.FromHours(1) });
+        await store.AppendAsync(Entry(StepA, "pending"), CancellationToken.None);
+        database.Dispose();
+
+        Exception? failure = await Record.ExceptionAsync(async () => await store.DisposeAsync());
+
+        Assert.Null(failure);
+    }
+
+    [Fact]
     public async Task entries_are_numbered_per_step_in_arrival_order()
     {
         await using PersistentAgentLogStore store = _database.CreateStore();

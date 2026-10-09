@@ -234,6 +234,22 @@ public sealed class GitHubTokenProviderTests
         Assert.True(recovered.IsAvailable);
     }
 
+    [Fact]
+    public async Task installation_id_is_looked_up_again_after_the_installation_disappeared()
+    {
+        GitHubTokenProvider provider = CreateProvider();
+        await provider.GetTokenAsync(Request(GitHubPermissionSet.ContentsRead), CancellationToken.None);
+        _api.MintStatus = HttpStatusCode.NotFound;
+
+        GitHubTokenResult uninstalled = await provider.GetTokenAsync(Request(GitHubPermissionSet.IssuesWrite), CancellationToken.None);
+        _api.MintStatus = HttpStatusCode.Created;
+        GitHubTokenResult reinstalled = await provider.GetTokenAsync(Request(GitHubPermissionSet.IssuesWrite), CancellationToken.None);
+
+        Assert.False(uninstalled.IsAvailable);
+        Assert.True(reinstalled.IsAvailable);
+        Assert.Equal(2, _api.LookupRequests.Count());
+    }
+
     private static GitHubAuthOptions OptionsWithPat(bool patEnabled) => new()
     {
         AppClientId = "Iv1.test",

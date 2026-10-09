@@ -44,6 +44,27 @@ public sealed class PrerequisiteRegistrationTests
         Assert.Equal(ReadinessMode.DiagnosticOnly, provider.GetRequiredService<DiagnosticReadiness>().Current.Mode);
     }
 
+    [Fact]
+    public void options_from_a_factory_are_resolved_once_when_the_checks_are_first_needed()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IClock>(new FixedClock(DateTimeOffset.UnixEpoch));
+        int resolved = 0;
+        services.AddPrerequisites(
+            _ =>
+            {
+                resolved++;
+                return new PrerequisiteOptions { WorkspaceRoot = Path.Combine(AppContext.BaseDirectory, "test-scratch", "late-workspace"), GitHubAuth = new() };
+            },
+            "Data Source=:memory:",
+            new BundledSkillsCatalog(new BundledSkillsOptions { Root = Path.Combine(AppContext.BaseDirectory, "no-skills") }));
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        Assert.Equal(0, resolved);
+        Assert.Equal(10, provider.GetServices<IPrerequisiteCheck>().Count());
+        Assert.Equal(1, resolved);
+    }
+
     private static ServiceProvider BuildProvider()
     {
         var services = new ServiceCollection();

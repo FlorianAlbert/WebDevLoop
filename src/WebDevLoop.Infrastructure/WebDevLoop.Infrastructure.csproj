@@ -17,11 +17,13 @@
   </PropertyGroup>
 
   <!--
-    The Copilot SDK can download its pinned Copilot CLI runtime (~75 MB) at build time. Builds stay offline by default and
-    use the Copilot CLI configured in CopilotRuntimeOptions.CliPath (validated at startup). Pass
-    -p:CopilotSkipCliDownload=false to bundle the runtime into the app output instead.
+    The Copilot SDK can download its pinned Copilot CLI runtime (~75 MB) at build time. `dotnet publish` bundles it into the
+    published app (runtimes/<rid>/native), so a published WebDevLoop ships everything it needs. Development builds stay
+    offline and use the Copilot CLI configured in WebDevLoop:Copilot:CliPath (validated at startup). Override either way
+    with -p:CopilotSkipCliDownload=true|false.
   -->
   <PropertyGroup>
+    <CopilotSkipCliDownload Condition="'$(CopilotSkipCliDownload)' == '' And '$(_IsPublishing)' == 'true'">false</CopilotSkipCliDownload>
     <CopilotSkipCliDownload Condition="'$(CopilotSkipCliDownload)' == ''">true</CopilotSkipCliDownload>
   </PropertyGroup>
 

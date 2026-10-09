@@ -20,7 +20,7 @@ public sealed class CopilotRuntimeCheck(PrerequisiteOptions options, IFileSystem
             return CheckResult.Failed(
                 Name,
                 $"The {source} Copilot CLI was not found at '{cliPath}'.",
-                "Set CopilotRuntimeOptions.CliPath to an installed Copilot CLI, or build with -p:CopilotSkipCliDownload=false to bundle it.");
+                "Set WebDevLoop:Copilot:CliPath to an installed Copilot CLI, or use a published build (dotnet publish bundles the CLI; for dev builds pass -p:CopilotSkipCliDownload=false).");
         }
 
         ProcessProbeResult result = await processes.RunAsync(cliPath, ["--version"], cancellationToken);

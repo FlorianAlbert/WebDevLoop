@@ -69,7 +69,7 @@ public static class PromptPlaceholders
         [DiffHeadRef] = "Ref or SHA whose changes are under review.",
         [ChangedFiles] = "Newline-separated list of files changed between the diff refs.",
         [ConflictingFiles] = "Newline-separated list of files that conflict when squash-merging onto the integration tip.",
-        [ReviewAxis] = "Review axis: 'Coding Standards' or 'Specification'.",
+        [ReviewAxis] = "Review axis as named by the report tool: 'coding_standards' or 'specification'.",
         [ReviewScope] = "Review scope: 'ticket' (single ticket branch) or 'parent_spec' (final parent-spec review of the integration branch).",
         [ReviewFindingsJson] = "JSON array of open review findings to fix; '[]' on the first implementation turn.",
         [ReviewIteration] = "0-based number of completed review rounds for this ticket.",

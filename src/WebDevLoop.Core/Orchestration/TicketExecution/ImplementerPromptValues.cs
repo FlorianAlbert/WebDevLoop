@@ -1,83 +1,36 @@
 using System.Globalization;
-using System.Text;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Settings;
 
 namespace WebDevLoop.Core.Orchestration.TicketExecution;
 
-/// <summary>Placeholder values for an initial implementer turn (spec, ticket, and worktree context; no review findings yet).</summary>
+/// <summary>Placeholder values for an implementer turn: spec, ticket, and worktree context plus the findings to fix.</summary>
 internal static class ImplementerPromptValues
 {
-    private const string GitHubBaseUrl = "https://github.com";
     private const string NoReviewFindingsJson = "[]";
-    private const string InitialReviewIteration = "0";
+    private const int InitialReviewIteration = 0;
 
+    /// <param name="reviewFindingsJson">Findings of a fix turn; null for the initial implementation.</param>
+    /// <param name="reviewIteration">Review rounds completed so far (0 for the initial implementation).</param>
     public static IReadOnlyDictionary<string, string> Build(
         ImplementationContext context,
         int attempt,
         CommitSha integrationTip,
         string skillsRoot,
         IReadOnlyList<TicketRun> tickets,
-        IReadOnlyList<TicketDependency> dependencies)
+        IReadOnlyList<TicketDependency> dependencies,
+        string? reviewFindingsJson = null,
+        int reviewIteration = InitialReviewIteration)
     {
         (SpecRun spec, TicketRun ticket, RepositoryRecord repository, EffectiveSettings settings, _, _) = context;
-        return new Dictionary<string, string>
-        {
-            [PromptPlaceholders.RepoOwner] = repository.Owner,
-            [PromptPlaceholders.RepoName] = repository.Name,
-            [PromptPlaceholders.RepoUrl] = $"{GitHubBaseUrl}/{repository.Owner}/{repository.Name}",
-            [PromptPlaceholders.BaseBranch] = (spec.BaseBranch ?? settings.BaseBranch).Value,
-            [PromptPlaceholders.IntegrationBranch] = spec.IntegrationBranch.Value,
-            [PromptPlaceholders.IntegrationTipSha] = integrationTip.Value,
-            [PromptPlaceholders.WorkspaceRoot] = settings.WorkspaceRootDirectory,
-            [PromptPlaceholders.SkillsRoot] = skillsRoot,
-            [PromptPlaceholders.RunId] = spec.Id.Value,
-            [PromptPlaceholders.Attempt] = attempt.ToString(CultureInfo.InvariantCulture),
-            [PromptPlaceholders.ParentSpecIssueNumber] = spec.ParentIssue.Number.ToString(CultureInfo.InvariantCulture),
-            [PromptPlaceholders.ParentSpecTitle] = spec.Title,
-            [PromptPlaceholders.ParentSpecBody] = spec.BodySnapshot,
-            [PromptPlaceholders.SpecTickets] = TicketList(tickets, dependencies),
-            [PromptPlaceholders.ExplorationNotesPath] = context.Layout.ExplorationNotesDirectory,
-            [PromptPlaceholders.TicketIssueNumber] = ticket.Issue.Number.ToString(CultureInfo.InvariantCulture),
-            [PromptPlaceholders.TicketTitle] = ticket.Title,
-            [PromptPlaceholders.TicketBody] = ticket.BodySnapshot,
-            [PromptPlaceholders.TicketDependencies] = Blockers(ticket, tickets, dependencies),
-            [PromptPlaceholders.WorktreePath] = context.WorktreePath,
-            [PromptPlaceholders.BranchName] = ticket.BranchName.Value,
-            [PromptPlaceholders.ReviewFindingsJson] = NoReviewFindingsJson,
-            [PromptPlaceholders.ReviewIteration] = InitialReviewIteration,
-            [PromptPlaceholders.MaxReviewIterations] = settings.MaxReviewIterations.ToString(CultureInfo.InvariantCulture),
-        };
-    }
-
-    /// <summary>One markdown line per ticket of the spec: number, title, status, and blocking tickets.</summary>
-    private static string TicketList(IReadOnlyList<TicketRun> tickets, IReadOnlyList<TicketDependency> dependencies)
-    {
-        var list = new StringBuilder();
-        foreach (TicketRun ticket in tickets.OrderBy(ticket => ticket.Issue.Number))
-        {
-            int[] blockers = BlockersOf(ticket, tickets, dependencies).Select(blocker => blocker.Issue.Number).ToArray();
-            string blockedBy = blockers.Length == 0 ? "no blockers" : "blocked by " + string.Join(", ", blockers.Select(number => $"#{number}"));
-            list.Append(CultureInfo.InvariantCulture, $"- #{ticket.Issue.Number} {ticket.Title} ({ticket.Status}) — {blockedBy}").Append('\n');
-        }
-
-        return list.Length == 0 ? "(no tickets)" : list.ToString().TrimEnd('\n');
-    }
-
-    private static string Blockers(TicketRun ticket, IReadOnlyList<TicketRun> tickets, IReadOnlyList<TicketDependency> dependencies)
-    {
-        string[] lines = BlockersOf(ticket, tickets, dependencies)
-            .Select(blocker => $"- #{blocker.Issue.Number} {blocker.Title} ({blocker.Status})")
-            .ToArray();
-        return lines.Length == 0 ? "(no blockers)" : string.Join('\n', lines);
-    }
-
-    private static IEnumerable<TicketRun> BlockersOf(TicketRun ticket, IReadOnlyList<TicketRun> tickets, IReadOnlyList<TicketDependency> dependencies)
-    {
-        HashSet<TicketRunId> blockerIds = dependencies
-            .Where(dependency => dependency.BlockedTicketRunId == ticket.Id)
-            .Select(dependency => dependency.BlockingTicketRunId)
-            .ToHashSet();
-        return tickets.Where(candidate => blockerIds.Contains(candidate.Id)).OrderBy(candidate => candidate.Issue.Number);
+        Dictionary<string, string> values = SpecPromptValues.ForSpec(
+            spec, repository, settings, context.Layout, attempt, integrationTip, skillsRoot, tickets, dependencies);
+        SpecPromptValues.AddTicket(values, ticket, tickets, dependencies);
+        values[PromptPlaceholders.WorktreePath] = context.WorktreePath;
+        values[PromptPlaceholders.BranchName] = ticket.BranchName.Value;
+        values[PromptPlaceholders.ReviewFindingsJson] = reviewFindingsJson ?? NoReviewFindingsJson;
+        values[PromptPlaceholders.ReviewIteration] = reviewIteration.ToString(CultureInfo.InvariantCulture);
+        values[PromptPlaceholders.MaxReviewIterations] = settings.MaxReviewIterations.ToString(CultureInfo.InvariantCulture);
+        return values;
     }
 }

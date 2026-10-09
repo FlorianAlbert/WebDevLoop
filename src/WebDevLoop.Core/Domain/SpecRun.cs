@@ -94,6 +94,7 @@ public sealed class SpecRun : VersionedEntity
                 break;
             case SpecRunStatus.ReadyForReview:
                 ReadyAt = at;
+                MaxActiveSpecsSlot = null;
                 break;
         }
 

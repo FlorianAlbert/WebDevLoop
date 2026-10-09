@@ -96,6 +96,38 @@ public sealed class UniqueConstraintTests : IDisposable
     }
 
     [Fact]
+    public async Task a_new_spec_can_be_active_while_another_is_ready_for_review_or_awaiting_merge()
+    {
+        (int repositoryId, RunId _) = await TestData.SeedSpecRunAsync(_harness);
+        await ActivateAsync(FirstRun, slot: 1);
+        using (PersistenceScope review = _harness.OpenScope())
+        {
+            SpecRun first = (await review.SpecRuns.GetAsync(FirstRun, CancellationToken.None))!;
+            foreach (SpecRunStatus next in new[]
+            {
+                SpecRunStatus.Running, SpecRunStatus.ParentReviewing, SpecRunStatus.Testing, SpecRunStatus.ReadyForReview,
+            })
+            {
+                first.TransitionTo(next, TestData.Now);
+            }
+
+            // A leftover slot value must not matter: the index only covers specs that occupy a slot.
+            first.MaxActiveSpecsSlot = 1;
+            await review.SaveAsync();
+        }
+
+        using PersistenceScope scope = _harness.OpenScope();
+        SpecRun second = TestData.NewSpecRun(repositoryId, "run-2", issueNumber: 20, queuePosition: 2);
+        scope.SpecRuns.Add(second);
+        Activate(second, slot: 1);
+
+        await scope.SaveAsync();
+
+        using PersistenceScope read = _harness.OpenScope();
+        Assert.Equal(2, (await read.SpecRuns.ListByRepositoryAsync(repositoryId, CancellationToken.None)).Count);
+    }
+
+    [Fact]
     public async Task second_active_implement_or_fix_step_for_a_ticket_conflicts_but_review_steps_may_overlap()
     {
         (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);

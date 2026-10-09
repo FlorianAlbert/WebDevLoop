@@ -75,11 +75,11 @@ public sealed class StatusRulesTests
     }
 
     [Fact]
-    public void ready_for_review_and_awaiting_merge_are_active_not_terminal()
+    public void ready_for_review_and_awaiting_merge_do_not_occupy_an_active_slot_and_are_not_terminal()
     {
         foreach (SpecRunStatus status in new[] { SpecRunStatus.ReadyForReview, SpecRunStatus.AwaitingMerge })
         {
-            Assert.True(status.IsActive());
+            Assert.False(status.IsActive());
             Assert.False(status.IsTerminal());
         }
     }

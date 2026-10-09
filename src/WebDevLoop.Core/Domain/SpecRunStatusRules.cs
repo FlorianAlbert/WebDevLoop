@@ -29,14 +29,15 @@ public static class SpecRunStatusRules
     public static bool IsTerminal(this SpecRunStatus status) =>
         status is SpecRunStatus.Completed or SpecRunStatus.Aborted;
 
-    /// <summary>Statuses that occupy a repo/dependency lane. <c>NeedsAttention</c> is parked, not active.</summary>
+    /// <summary>
+    /// Statuses that occupy an active-spec slot (being implemented). <c>ReadyForReview</c>/<c>AwaitingMerge</c> are tracked
+    /// (non-terminal) while a human merges the stack, but free the slot; <c>NeedsAttention</c> is parked, not active.
+    /// </summary>
     public static bool IsActive(this SpecRunStatus status) =>
         status is SpecRunStatus.Preparing
             or SpecRunStatus.Running
             or SpecRunStatus.ParentReviewing
-            or SpecRunStatus.Testing
-            or SpecRunStatus.ReadyForReview
-            or SpecRunStatus.AwaitingMerge;
+            or SpecRunStatus.Testing;
 
     public static bool CanTransitionTo(this SpecRunStatus from, SpecRunStatus to)
     {

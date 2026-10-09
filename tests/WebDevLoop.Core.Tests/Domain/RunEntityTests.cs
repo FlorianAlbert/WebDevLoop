@@ -55,7 +55,7 @@ public sealed class RunEntityTests
     }
 
     [Fact]
-    public void ready_for_review_spec_is_active_and_not_terminal()
+    public void ready_for_review_spec_releases_its_slot_and_is_not_terminal()
     {
         SpecRun spec = NewSpec();
         foreach (SpecRunStatus next in new[]
@@ -65,9 +65,14 @@ public sealed class RunEntityTests
         })
         {
             spec.TransitionTo(next, T0);
+            if (next == SpecRunStatus.Preparing)
+            {
+                spec.MaxActiveSpecsSlot = 1;
+            }
         }
 
-        Assert.True(spec.IsActive);
+        Assert.False(spec.IsActive);
+        Assert.Null(spec.MaxActiveSpecsSlot);
         Assert.False(spec.IsTerminal);
         Assert.Null(spec.CompletedAt);
     }

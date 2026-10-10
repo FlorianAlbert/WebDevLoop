@@ -104,7 +104,7 @@ public sealed class OutboxDispatcherTests : IDisposable
         var bus = new InProcessRunEventBus(NullLogger<InProcessRunEventBus>.Instance);
 
         using PersistenceScope scope = _harness.OpenScope();
-        var dispatcher = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions { BatchSize = 2 });
+        var dispatcher = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions { BatchSize = 2 });
 
         Assert.Equal(2, await dispatcher.DispatchPendingAsync(CancellationToken.None));
         Assert.Equal(1, await dispatcher.DispatchPendingAsync(CancellationToken.None));
@@ -119,7 +119,7 @@ public sealed class OutboxDispatcherTests : IDisposable
         bus.Subscribe((envelope, _) => { received.Add(RunOf(envelope)); return Task.CompletedTask; });
 
         using PersistenceScope scope = _harness.OpenScope();
-        IOutboxReplay replay = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions { BatchSize = 2 });
+        IOutboxReplay replay = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions { BatchSize = 2 });
         int replayed = await replay.ReplayPendingAsync(CancellationToken.None);
 
         Assert.Equal(5, replayed);
@@ -133,7 +133,7 @@ public sealed class OutboxDispatcherTests : IDisposable
         await AppendAsync(Reconciliation("run-a"), Reconciliation("run-b"));
 
         using PersistenceScope scope = _harness.OpenScope();
-        IOutboxReplay replay = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock), new FailingOnceBus(), new OutboxDispatcherOptions { BatchSize = 2 });
+        IOutboxReplay replay = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock), new FailingOnceBus(), new OutboxDispatcherOptions { BatchSize = 2 });
         int replayed = await replay.ReplayPendingAsync(CancellationToken.None);
 
         Assert.Equal(1, replayed);
@@ -147,7 +147,7 @@ public sealed class OutboxDispatcherTests : IDisposable
     private async Task AppendAsync(params WorkflowEvent[] events)
     {
         using PersistenceScope scope = _harness.OpenScope();
-        var outbox = new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock);
+        var outbox = new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock);
         foreach (WorkflowEvent workflowEvent in events)
         {
             outbox.Append(workflowEvent);
@@ -159,13 +159,13 @@ public sealed class OutboxDispatcherTests : IDisposable
     private async Task<IReadOnlyList<EventEnvelope>> ReadPendingAsync()
     {
         using PersistenceScope scope = _harness.OpenScope();
-        return await new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock).ReadPendingAsync(100, CancellationToken.None);
+        return await new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock).ReadPendingAsync(100, CancellationToken.None);
     }
 
     private async Task<int> DispatchAsync(IRunEventBus bus, CancellationToken cancellationToken)
     {
         using PersistenceScope scope = _harness.OpenScope();
-        var dispatcher = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions());
+        var dispatcher = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions());
         return await dispatcher.DispatchPendingAsync(cancellationToken);
     }
 

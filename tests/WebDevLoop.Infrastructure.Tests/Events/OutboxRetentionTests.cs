@@ -36,7 +36,7 @@ public sealed class OutboxRetentionTests : IDisposable
         long deadLettered = await AppendAsync("run-dead");
         using (PersistenceScope scope = _harness.OpenScope())
         {
-            var outbox = new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock);
+            var outbox = new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock);
             for (int attempt = 0; attempt < EfOutbox.MaxDeliveryAttempts; attempt++)
             {
                 await outbox.RecordFailureAsync(deadLettered, "bus down", CancellationToken.None);
@@ -61,14 +61,14 @@ public sealed class OutboxRetentionTests : IDisposable
     {
         long id = await AppendAsync(runId);
         using PersistenceScope scope = _harness.OpenScope();
-        await new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock).MarkDispatchedAsync(id, CancellationToken.None);
+        await new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock).MarkDispatchedAsync(id, CancellationToken.None);
         return id;
     }
 
     private async Task<long> AppendAsync(string runId)
     {
         using PersistenceScope scope = _harness.OpenScope();
-        new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock).Append(new FrontierReconciliationRequested(new RunId(runId), _clock.UtcNow));
+        new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock).Append(new FrontierReconciliationRequested(new RunId(runId), _clock.UtcNow));
         await scope.UnitOfWork.SaveChangesAsync(CancellationToken.None);
         return scope.Context.OutboxMessages.Max(message => message.Id);
     }

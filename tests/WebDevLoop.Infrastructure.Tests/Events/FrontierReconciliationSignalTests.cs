@@ -34,7 +34,7 @@ public sealed class FrontierReconciliationSignalTests : IDisposable
 
         Assert.Equal(1, raised);
         using PersistenceScope reader = _harness.OpenScope();
-        EventEnvelope envelope = Assert.Single(await new EfOutbox(reader.Outbox, reader.UnitOfWork, _clock).ReadPendingAsync(10, CancellationToken.None));
+        EventEnvelope envelope = Assert.Single(await new EfOutbox(reader.Outbox, reader.Events, reader.UnitOfWork, _clock).ReadPendingAsync(10, CancellationToken.None));
         Assert.Equal(new FrontierReconciliationRequested(activeRun, _clock.UtcNow), envelope.Event);
     }
 
@@ -60,7 +60,7 @@ public sealed class FrontierReconciliationSignalTests : IDisposable
         });
         using (PersistenceScope scope = _harness.OpenScope())
         {
-            var dispatcher = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions());
+            var dispatcher = new OutboxDispatcher(new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock), bus, new OutboxDispatcherOptions());
             await dispatcher.DispatchPendingAsync(CancellationToken.None);
         }
 
@@ -77,5 +77,5 @@ public sealed class FrontierReconciliationSignalTests : IDisposable
     }
 
     private FrontierReconciliationSignal NewSignal(PersistenceScope scope) =>
-        new(scope.SpecRuns, new EfOutbox(scope.Outbox, scope.UnitOfWork, _clock), scope.UnitOfWork, _clock);
+        new(scope.SpecRuns, new EfOutbox(scope.Outbox, scope.Events, scope.UnitOfWork, _clock), scope.UnitOfWork, _clock);
 }

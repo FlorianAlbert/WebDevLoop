@@ -28,6 +28,8 @@ public sealed class EfOutboxTests : IDisposable
     [MemberData(nameof(AllEvents))]
     public async Task Appended_events_are_persisted_with_the_unit_of_work_and_read_back_typed(WorkflowEvent workflowEvent)
     {
+        await TestData.SeedTicketRunAsync(_harness);
+
         using (PersistenceScope writer = _harness.OpenScope())
         {
             EfOutbox outbox = NewOutbox(writer);
@@ -41,6 +43,26 @@ public sealed class EfOutboxTests : IDisposable
         EventEnvelope envelope = Assert.Single(pending);
         Assert.True(envelope.MessageId > 0);
         Assert.Equal(workflowEvent, envelope.Event);
+    }
+
+    [Fact]
+    public async Task Progress_events_are_also_written_to_the_run_event_log_in_the_same_save()
+    {
+        (RunId specRunId, TicketRunId ticketId) = await TestData.SeedTicketRunAsync(_harness);
+
+        using (PersistenceScope writer = _harness.OpenScope())
+        {
+            EfOutbox outbox = NewOutbox(writer);
+            outbox.Append(new SpecRunStatusChanged(specRunId, 1, SpecRunStatus.Queued, SpecRunStatus.Preparing, Now));
+            outbox.Append(new TicketRunStatusChanged(specRunId, ticketId, TicketRunStatus.Ready, TicketRunStatus.Implementing, Now));
+            outbox.Append(new FrontierReconciliationRequested(specRunId, Now));
+            await writer.SaveAsync();
+        }
+
+        using PersistenceScope reader = _harness.OpenScope();
+        IReadOnlyList<RunEvent> events = await reader.Events.ListBySpecRunAsync(specRunId, CancellationToken.None);
+        Assert.Equal([nameof(SpecRunStatusChanged), nameof(TicketRunStatusChanged)], events.Select(e => e.Type));
+        Assert.Equal(ticketId, events[1].TicketRunId);
     }
 
     [Fact]
@@ -218,7 +240,7 @@ public sealed class EfOutboxTests : IDisposable
 
     private static FrontierReconciliationRequested Reconciliation(string runId) => new(new RunId(runId), Now);
 
-    private EfOutbox NewOutbox(PersistenceScope scope) => new(scope.Outbox, scope.UnitOfWork, _clock);
+    private EfOutbox NewOutbox(PersistenceScope scope) => new(scope.Outbox, scope.Events, scope.UnitOfWork, _clock);
 
     private async Task AppendAndSaveAsync(params WorkflowEvent[] events)
     {

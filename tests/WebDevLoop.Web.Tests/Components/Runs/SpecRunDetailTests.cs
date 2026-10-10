@@ -198,6 +198,23 @@ public sealed class SpecRunDetailTests
     }
 
     [Fact]
+    public void Progress_events_are_described_in_plain_language()
+    {
+        using var harness = HarnessWithSpec();
+        harness.Queries.Events.Add(new(1, "run-1", null, "SpecRunStatusChanged", "{\"from\":\"Queued\",\"to\":\"Preparing\"}", Views.Now));
+        harness.Queries.Events.Add(new(2, "run-1", "t1", "StepRunStatusChanged", "{\"step\":\"s1\",\"to\":\"Running\"}", Views.Now.AddMinutes(1)));
+        harness.Queries.Events.Add(new(3, "run-1", "t1", "TicketRunStatusChanged", "{\"from\":\"Ready\",\"to\":\"InReview\"}", Views.Now.AddMinutes(2)));
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        var rows = cut.FindAll("[data-testid=run-event]");
+        Assert.Contains("Ticket is now in review", rows[0].TextContent);
+        Assert.Contains("Step is now running", rows[1].TextContent);
+        Assert.Contains("Run is now preparing", rows[2].TextContent);
+        Assert.Empty(cut.FindAll("[data-testid=no-events]"));
+    }
+
+    [Fact]
     public void Controls_area_offers_retry_and_abort_for_the_run()
     {
         using var harness = HarnessWithSpec(SpecRunStatus.NeedsAttention);

@@ -12,7 +12,7 @@
             {
                 <li class="d-flex flex-wrap align-items-baseline gap-2 py-1" data-testid="run-event">
                     <span class="text-body-secondary"><AppDateTime Value="runEvent.OccurredAt" Mode="DateTimeDisplay.Absolute" /></span>
-                    <strong>@runEvent.Type</strong>
+                    <strong title="@runEvent.Type">@DisplayNames.DescribeRunEvent(runEvent.Type, runEvent.PayloadJson)</strong>
                     @if (runEvent.TicketRunId is { } ticket)
                     {
                         <a href="/tickets/@ticket">@ticket</a>

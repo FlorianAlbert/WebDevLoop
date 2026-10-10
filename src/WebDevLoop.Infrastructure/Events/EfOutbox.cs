@@ -9,8 +9,9 @@ namespace WebDevLoop.Infrastructure.Events;
 /// <summary>
 /// <see cref="IOutbox"/> over the row-level <see cref="IOutboxMessageRepository"/>. Appended rows join the scope's pending
 /// changes, so they are saved by the same <see cref="IUnitOfWork.SaveChangesAsync"/> as the state change that raised them.
+/// Progress events are also written to the run event log (see <see cref="WorkflowRunEvents"/>) in that same unit of work.
 /// </summary>
-public sealed class EfOutbox(IOutboxMessageRepository messages, IUnitOfWork unitOfWork, IClock clock) : IOutbox
+public sealed class EfOutbox(IOutboxMessageRepository messages, IRunEventRepository runEvents, IUnitOfWork unitOfWork, IClock clock) : IOutbox
 {
     /// <summary>Failed deliveries after which a message is dead-lettered instead of being retried forever.</summary>
     public const int MaxDeliveryAttempts = 10;
@@ -21,6 +22,11 @@ public sealed class EfOutbox(IOutboxMessageRepository messages, IUnitOfWork unit
 
         (string type, string payloadJson) = WorkflowEventSerializer.Serialize(workflowEvent);
         messages.Add(OutboxMessage.Create(type, payloadJson, clock.UtcNow));
+
+        if (WorkflowRunEvents.TryCreate(workflowEvent) is { } runEvent)
+        {
+            runEvents.Add(runEvent);
+        }
     }
 
     /// <summary>

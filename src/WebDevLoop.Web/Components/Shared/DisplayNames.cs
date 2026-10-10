@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Web.Components.Shared;
@@ -27,6 +28,33 @@ public static class DisplayNames
         AgentRole.ConflictResolver => "Conflict resolver",
         _ => Humanize(role.ToString()),
     };
+
+    /// <summary>One-line description of a run event for the timeline; unknown types fall back to the raw type name.</summary>
+    public static string DescribeRunEvent(string type, string payloadJson)
+    {
+        string? to = null;
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(payloadJson);
+            if (document.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                to = document.RootElement.TryGetProperty("to", out JsonElement toValue) ? toValue.GetString() : null;
+            }
+        }
+        catch (JsonException)
+        {
+            return type;
+        }
+
+        return (type, to) switch
+        {
+            ("SpecRunStatusChanged", { } status) => $"Run is now {Humanize(status).ToLowerInvariant()}",
+            ("TicketRunStatusChanged", { } status) => $"Ticket is now {Humanize(status).ToLowerInvariant()}",
+            ("StepRunStatusChanged", { } status) => $"Step is now {Humanize(status).ToLowerInvariant()}",
+            ("SagaCheckpointAdvanced", { } checkpoint) => $"Integration reached {Humanize(checkpoint).ToLowerInvariant()}",
+            _ => type,
+        };
+    }
 
     /// <summary>Splits PascalCase into sentence case: "NeedsAttention" becomes "Needs attention".</summary>
     public static string Humanize(string? identifier)

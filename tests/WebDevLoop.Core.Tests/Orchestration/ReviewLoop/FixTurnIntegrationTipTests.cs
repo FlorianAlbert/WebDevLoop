@@ -44,6 +44,7 @@ public sealed class FixTurnIntegrationTipTests
         Assert.Contains("does not contain the integration tip", result.Reason, StringComparison.Ordinal);
         Assert.Equal(StepStatus.NeedsAttention, Assert.Single(_fixture.Steps(spec[1], StepKind.Fix)).Status);
         Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[1]).Status);
+        Assert.Equal(AttentionCode.TicketBranchNotBasedOnIntegration, _fixture.Ticket(spec[1]).Attention!.Code);
     }
 
     /// <summary>Another ticket's integration saga moves the local integration ref (the freshest tip source).</summary>

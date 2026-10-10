@@ -12,6 +12,7 @@ internal sealed class StepRunConfiguration : IEntityTypeConfiguration<StepRun>
         builder.HasKey(step => step.Id);
         builder.Property(step => step.Id).ValueGeneratedNever();
         builder.Property(step => step.InputPromptHash).IsRequired();
+        builder.Property(step => step.Attention).HasConversion<AttentionReasonConverter>();
         builder.HasOne<SpecRun>().WithMany().HasForeignKey(step => step.SpecRunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<TicketRun>().WithMany().HasForeignKey(step => step.TicketRunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(step => step.SpecRunId).HasDatabaseName("IX_StepRuns_SpecRun");

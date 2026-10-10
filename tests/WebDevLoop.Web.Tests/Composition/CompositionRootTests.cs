@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Orchestration.Attention;
+using WebDevLoop.Core.Orchestration.Integration;
 using WebDevLoop.Core.Orchestration.Recovery.AgentSteps;
 using WebDevLoop.Core.Orchestration.Recovery.ExternalState;
 using WebDevLoop.Core.Ports;
@@ -15,8 +18,12 @@ namespace WebDevLoop.Web.Tests.Composition;
 /// <summary>The real composition root (Program.cs) without any test replacement.</summary>
 public sealed class CompositionRootTests
 {
-    /// <summary>Composed internally by <c>ExternalStateReconciler</c> (several implementations by design).</summary>
-    private static readonly Type[] NotRegisteredByInterface = [typeof(ISpecReconciliationStep)];
+    /// <summary>
+    /// Composed internally by <c>ExternalStateReconciler</c> and the attention resolution pipeline (several implementations by
+    /// design), or markers implemented by exceptions rather than registered.
+    /// </summary>
+    private static readonly Type[] NotRegisteredByInterface =
+        [typeof(ISpecReconciliationStep), typeof(IKnownRemediation), typeof(IAttentionStage), typeof(ITransientFault)];
 
     private static readonly Type[] Ports =
     [
@@ -35,6 +42,31 @@ public sealed class CompositionRootTests
 
         Assert.True(Ports.Length > 40, $"Only {Ports.Length} ports were discovered.");
         Assert.Empty(problems);
+    }
+
+    [Fact]
+    public async Task the_attention_resolution_pipeline_runs_known_remediation_first_and_every_remediation_resolves()
+    {
+        using var sandbox = new WorkflowSandbox();
+        await using var host = new CompositionHost(sandbox);
+        await using AsyncServiceScope scope = host.Services.CreateAsyncScope();
+
+        IAttentionStage[] stages = [.. scope.ServiceProvider.GetServices<IAttentionStage>()];
+        AttentionCode[] remediated = [.. scope.ServiceProvider.GetServices<IKnownRemediation>().Select(remediation => remediation.Code).Order()];
+
+        Assert.IsType<KnownRemediationStage>(stages[0]);
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<AttentionTriageService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<AttentionTriageEventHandler>());
+        AttentionCode[] expected =
+        [
+            AttentionCode.IntegrationBranchExists,
+            AttentionCode.ExplorationFailed,
+            AttentionCode.WorktreeNotClean,
+            AttentionCode.TicketBranchNotBasedOnIntegration,
+            AttentionCode.IntegrationTemporaryFailure,
+            AttentionCode.TicketHasNoChanges,
+        ];
+        Assert.Equal(expected.Order(), remediated);
     }
 
     [Fact]

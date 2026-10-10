@@ -59,7 +59,7 @@ public sealed class SpecQueueRecomputationTests
         _fixture.SeedSpec(2);
         SpecRun parked = await _fixture.EnqueueAsync(1);
         await _fixture.ScheduleAsync();
-        parked.MarkNeedsAttention("Implementer interrupted too often.", _fixture.Clock.UtcNow);
+        parked.MarkNeedsAttention(AttentionReasons.Unclassified("Implementer interrupted too often.", true), _fixture.Clock.UtcNow);
         SpecRun next = await _fixture.EnqueueAsync(2);
 
         QueueRecomputationReport report = await Recomputation().RecomputeAsync(Token);

@@ -1,3 +1,5 @@
+using WebDevLoop.Core.Domain;
+
 namespace WebDevLoop.Core.Orchestration.Preparation;
 
 public enum ExplorationOutcome
@@ -11,11 +13,11 @@ public enum ExplorationOutcome
     ConcurrencyConflict,
 }
 
-public sealed record ExplorationResult(ExplorationOutcome Outcome, string? FailureReason = null)
+public sealed record ExplorationResult(ExplorationOutcome Outcome, string? FailureReason = null, AttentionReason? Attention = null)
 {
     public static ExplorationResult Explored { get; } = new(ExplorationOutcome.Explored);
 
     public static ExplorationResult Conflict { get; } = new(ExplorationOutcome.ConcurrencyConflict);
 
-    public static ExplorationResult Failed(string reason) => new(ExplorationOutcome.Failed, reason);
+    public static ExplorationResult Failed(AttentionReason reason) => new(ExplorationOutcome.Failed, reason.Details, reason);
 }

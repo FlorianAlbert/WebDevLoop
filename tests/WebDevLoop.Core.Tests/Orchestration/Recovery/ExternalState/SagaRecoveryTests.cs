@@ -123,6 +123,8 @@ public sealed class SagaRecoveryTests
         ExternalReconciliationReport report = await _x.ReconcileAsync();
 
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+
+        Assert.Equal(AttentionCode.ForeignPullRequest, ticket.Attention!.Code);
         Assert.Contains($"#{foreign.Number}", ticket.FailureReason, StringComparison.Ordinal);
         Assert.Null(ticket.PullRequestNumber);
         Assert.Empty(F.Layers(spec));

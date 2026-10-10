@@ -49,7 +49,11 @@ public sealed class SpecRun : VersionedEntity
 
     public DateTimeOffset? CompletedAt { get; private set; }
 
+    /// <summary>The technical wording of <see cref="Attention"/>; null unless the run needs attention.</summary>
     public string? FailureReason { get; private set; }
+
+    /// <summary>Structured guidance for the user while the run is in <see cref="SpecRunStatus.NeedsAttention"/>.</summary>
+    public AttentionReason? Attention { get; private set; }
 
     /// <summary>The phase the run was in when it last moved to <see cref="SpecRunStatus.NeedsAttention"/>, so a retry can resume it.</summary>
     public SpecRunStatus? NeedsAttentionFrom { get; private set; }
@@ -88,6 +92,7 @@ public sealed class SpecRun : VersionedEntity
         Status = next;
         StatusChangedAt = at;
         FailureReason = null;
+        Attention = null;
         NeedsAttentionFrom = null;
         if (!next.IsActive())
         {
@@ -116,11 +121,26 @@ public sealed class SpecRun : VersionedEntity
         }
     }
 
-    public void MarkNeedsAttention(string reason, DateTimeOffset at)
+    public void MarkNeedsAttention(AttentionReason reason, DateTimeOffset at)
     {
+        ArgumentNullException.ThrowIfNull(reason);
         SpecRunStatus failedIn = Status;
         TransitionTo(SpecRunStatus.NeedsAttention, at);
-        FailureReason = reason;
+        FailureReason = reason.Details;
+        Attention = reason;
         NeedsAttentionFrom = failedIn;
+    }
+
+    /// <summary>Replaces the guidance of a parked run, e.g. with what the remediation pipeline tried.</summary>
+    public void UpdateAttention(AttentionReason reason)
+    {
+        ArgumentNullException.ThrowIfNull(reason);
+        if (Status != SpecRunStatus.NeedsAttention)
+        {
+            throw new InvalidOperationException($"Spec run '{Id}' is {Status}; only a spec run that needs attention has guidance to update.");
+        }
+
+        FailureReason = reason.Details;
+        Attention = reason;
     }
 }

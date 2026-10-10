@@ -89,9 +89,9 @@ public sealed class SpecCompletionService(
         {
             return await NeedsAttentionAsync(
                 spec,
-                string.Create(
+                AttentionReasons.IntegrationTipNotTested(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"The integration tip {tip?.Value ?? "(missing)"} was not tested: test cycle {spec.TestCycle} passed {tested}."),
+                    $"The integration tip {tip?.Value ?? "(missing)"} was not tested: test cycle {spec.TestCycle} passed {tested}.")),
                 cancellationToken);
         }
 
@@ -103,7 +103,7 @@ public sealed class SpecCompletionService(
 
         if (await _verifier.FindProblemAsync(spec, location, stack, tested, cancellationToken) is { } problem)
         {
-            return await NeedsAttentionAsync(spec, $"Stack verification failed before marking the PRs ready: {problem}", cancellationToken);
+            return await NeedsAttentionAsync(spec, AttentionReasons.StackVerificationFailed(problem, location.Repo.ToString()), cancellationToken);
         }
 
         await MarkReadyAsync(location.Repo, stack, cancellationToken);
@@ -134,7 +134,8 @@ public sealed class SpecCompletionService(
         IReadOnlyList<PullStackLayer> stack = await layers.ListBySpecRunAsync(spec.Id, cancellationToken);
         if (stack.Count == 0)
         {
-            return await NeedsAttentionAsync(spec, $"Spec run '{spec.Id}' is ready for review but has no PR stack to track.", cancellationToken);
+            return await NeedsAttentionAsync(
+                spec, AttentionReasons.InternalInconsistency($"Spec run '{spec.Id}' is ready for review but has no PR stack to track.", forTicket: false), cancellationToken);
         }
 
         await MarkReadyAsync(location.Repo, stack, cancellationToken);
@@ -186,7 +187,10 @@ public sealed class SpecCompletionService(
         if (remote != tip
             && await git.PushAsync(location, new RefPush(spec.IntegrationBranch, tip, remote), cancellationToken) == PushOutcome.Rejected)
         {
-            return await NeedsAttentionAsync(spec, $"Pushing the integration branch '{spec.IntegrationBranch}' at {tip} was rejected.", cancellationToken);
+            return await NeedsAttentionAsync(
+                spec,
+                AttentionReasons.IntegrationPushRejected(spec.IntegrationBranch.Value, $"Pushing the integration branch '{spec.IntegrationBranch}' at {tip} was rejected.", forTicket: false),
+                cancellationToken);
         }
 
         TicketRun[] integrated = (await ticketRuns.ListBySpecRunAsync(spec.Id, cancellationToken))
@@ -243,10 +247,10 @@ public sealed class SpecCompletionService(
         return await SaveAsync(cancellationToken) ? new CompletionResult(CompletionOutcome.CleanedUp) : CompletionResult.ConcurrencyConflict;
     }
 
-    private async Task<CompletionResult> NeedsAttentionAsync(SpecRun spec, string reason, CancellationToken cancellationToken)
+    private async Task<CompletionResult> NeedsAttentionAsync(SpecRun spec, AttentionReason reason, CancellationToken cancellationToken)
     {
         _journal.MarkNeedsAttention(spec, reason);
-        return await SaveAsync(cancellationToken) ? new CompletionResult(CompletionOutcome.NeedsAttention, reason) : CompletionResult.ConcurrencyConflict;
+        return await SaveAsync(cancellationToken) ? new CompletionResult(CompletionOutcome.NeedsAttention, reason.Details) : CompletionResult.ConcurrencyConflict;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken) =>

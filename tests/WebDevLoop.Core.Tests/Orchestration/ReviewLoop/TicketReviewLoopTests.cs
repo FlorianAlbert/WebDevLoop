@@ -159,6 +159,7 @@ public sealed class TicketReviewLoopTests
         Assert.Equal(ReviewLoopOutcome.ReviewIterationsExhausted, result.Outcome);
         TicketRun ticket = _fixture.Ticket(spec[1]);
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Equal(AttentionCode.ReviewIterationsExhausted, ticket.Attention!.Code);
         Assert.Equal(result.Reason, ticket.FailureReason);
         Assert.Contains("2 review round(s)", result.Reason);
         Assert.Single(_fixture.Agents.Resumed);
@@ -224,6 +225,7 @@ public sealed class TicketReviewLoopTests
 
         Assert.Equal(ReviewLoopOutcome.Failed, result.Outcome);
         Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[1]).Status);
+        Assert.Equal(AttentionCode.ReportedCommitMismatch, _fixture.Ticket(spec[1]).Attention!.Code);
         Assert.Equal(StepStatus.Failed, Assert.Single(_fixture.Steps(spec[1], StepKind.Fix)).Status);
         Assert.Equal(2, _fixture.Steps(spec[1], StepKind.Review).Count);
     }
@@ -258,6 +260,7 @@ public sealed class TicketReviewLoopTests
         Assert.Equal(ReviewLoopOutcome.Failed, result.Outcome);
         Assert.Contains("specification", result.Reason, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[1]).Status);
+        Assert.Equal(AttentionCode.ReviewFailed, _fixture.Ticket(spec[1]).Attention!.Code);
         Assert.Equal(
             [
                 (AgentRole.ReviewerCodingStandards, StepStatus.Succeeded),

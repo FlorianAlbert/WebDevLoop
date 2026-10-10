@@ -1,6 +1,8 @@
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using System.Text.Json;
+using WebDevLoop.Core.Orchestration.Attention;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Ports;
 
@@ -21,6 +23,7 @@ public sealed class InterruptedStepFinisher(
     IEffectiveSettingsProvider settings,
     IAgentRunner agents,
     IAgentLogSink logs,
+    IRunEventRepository runEvents,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
     IClock clock,
@@ -71,6 +74,11 @@ public sealed class InterruptedStepFinisher(
         step.Finish(status, now, failureReason: reason);
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
         Owner? escalated = await EscalateIfRetriesExhaustedAsync(step, cancellationToken);
+        if (escalated is null)
+        {
+            runEvents.Add(RestartRecoveryEvent(step, reason, now));
+        }
+
         if (await unitOfWork.SaveChangesAsync(cancellationToken) != SaveOutcome.Saved)
         {
             result.Conflicts++;
@@ -89,6 +97,20 @@ public sealed class InterruptedStepFinisher(
                 break;
         }
     }
+
+    /// <summary>The run history says that WebDevLoop recovers by itself: the work is restarted without the user's involvement.</summary>
+    private static RunEvent RestartRecoveryEvent(StepRun step, string reason, DateTimeOffset at) => RunEvent.Create(
+        step.SpecRunId,
+        step.TicketRunId,
+        AttentionRunEvents.AutoResolved,
+        JsonSerializer.Serialize(new
+        {
+            code = "Interrupted",
+            stage = "Recovery",
+            summary = $"The {step.Kind} step was interrupted ({reason}); WebDevLoop restarts the work automatically.",
+            resume = "Retry",
+        }),
+        at);
 
     private (StepStatus Status, string Reason) Outcome(StepRun step, StoppedTestLease? lease) => (step.Kind, lease) switch
     {
@@ -129,10 +151,10 @@ public sealed class InterruptedStepFinisher(
             return null;
         }
 
-        string reason = $"The {step.Kind} step was interrupted {interruptions} times in a row (restarts or lost runners); at most {maxRetries} retries are allowed.";
         return step.TicketRunId is { } ticketId
-            ? await EscalateTicketAsync(ticketId, step.Kind, reason, cancellationToken)
-            : EscalateSpec(spec, step.Kind, reason);
+            ? await EscalateTicketAsync(
+                ticketId, step.Kind, AttentionReasons.InterruptedRepeatedly(step.Kind.ToString(), interruptions, maxRetries, forTicket: true), cancellationToken)
+            : EscalateSpec(spec, step.Kind, AttentionReasons.InterruptedRepeatedly(step.Kind.ToString(), interruptions, maxRetries, forTicket: false));
     }
 
     /// <summary>Interrupted steps of the same kind and role (review axis) in a row, newest first, including <paramref name="step"/>.</summary>
@@ -143,7 +165,7 @@ public sealed class InterruptedStepFinisher(
             .TakeWhile(StepInterruption.IsInterruption)
             .Count();
 
-    private async Task<Owner?> EscalateTicketAsync(TicketRunId ticketRunId, StepKind kind, string reason, CancellationToken cancellationToken)
+    private async Task<Owner?> EscalateTicketAsync(TicketRunId ticketRunId, StepKind kind, AttentionReason reason, CancellationToken cancellationToken)
     {
         if (await ticketRuns.GetAsync(ticketRunId, cancellationToken) is not { } ticket || ticket.Status != WorkingStatus.OfTicketFor(kind))
         {
@@ -157,7 +179,7 @@ public sealed class InterruptedStepFinisher(
         return new Owner(null, ticket.Id);
     }
 
-    private Owner? EscalateSpec(SpecRun spec, StepKind kind, string reason)
+    private Owner? EscalateSpec(SpecRun spec, StepKind kind, AttentionReason reason)
     {
         if (spec.Status != WorkingStatus.OfSpecFor(kind))
         {

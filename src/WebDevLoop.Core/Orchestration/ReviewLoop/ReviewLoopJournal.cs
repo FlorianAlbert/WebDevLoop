@@ -14,10 +14,18 @@ internal sealed class ReviewLoopJournal(IStepRunRepository stepRuns, IOutbox out
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, clock.UtcNow));
     }
 
-    public void Finish(StepRun step, StepStatus status, string? resultJson, string? failure)
+    public void Finish(StepRun step, StepStatus status, string? resultJson, string? failure, AttentionReason? attention = null)
     {
         DateTimeOffset now = clock.UtcNow;
-        step.Finish(status, now, resultJson, failure);
+        if (status == StepStatus.NeedsAttention)
+        {
+            step.MarkNeedsAttention(attention!, now, resultJson);
+        }
+        else
+        {
+            step.Finish(status, now, resultJson, failure);
+        }
+
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
     }
 
@@ -29,7 +37,7 @@ internal sealed class ReviewLoopJournal(IStepRunRepository stepRuns, IOutbox out
         outbox.Append(new TicketRunStatusChanged(ticket.SpecRunId, ticket.Id, previous, next, now));
     }
 
-    public void MarkNeedsAttention(TicketRun ticket, string reason)
+    public void MarkNeedsAttention(TicketRun ticket, AttentionReason reason)
     {
         DateTimeOffset now = clock.UtcNow;
         TicketRunStatus previous = ticket.Status;

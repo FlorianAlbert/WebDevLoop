@@ -66,6 +66,7 @@ public sealed class ReviewLoopFailureTests
 
         Assert.Equal(ReviewLoopOutcome.Failed, result.Outcome);
         Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[1]).Status);
+        Assert.Equal(AttentionCode.FixFailed, _fixture.Ticket(spec[1]).Attention!.Code);
         Assert.Equal([StepStatus.Failed, StepStatus.Failed], _fixture.Steps(spec[1], StepKind.Fix).Select(step => step.Status));
     }
 

@@ -83,7 +83,7 @@ public sealed class UniqueConstraintTests : IDisposable
         using (PersistenceScope finish = _harness.OpenScope())
         {
             SpecRun first = (await finish.SpecRuns.GetAsync(FirstRun, CancellationToken.None))!;
-            first.MarkNeedsAttention("cycle limit", TestData.Now);
+            first.MarkNeedsAttention(AttentionReasons.Unclassified("cycle limit", true), TestData.Now);
             await finish.SaveAsync();
         }
 

@@ -24,15 +24,15 @@ else
 {
     @foreach (RunAlert alert in Alerts(SpecRunLane.NeedsAttention))
     {
-        <div class="alert alert-warning py-2 d-flex justify-content-between align-items-center" role="alert" data-alert="NeedsAttention">
+        <div class="alert alert-warning py-2 d-flex flex-wrap justify-content-between align-items-center gap-2" role="alert" data-alert="NeedsAttention">
             <span>
                 <strong>Needs attention:</strong> @alert.RepositoryName #@alert.Run.ParentIssueNumber “@alert.Run.Title”
-                @if (alert.Run.FailureReason is { } reason)
+                @if (AttentionDisplay.Headline(alert.Run.Attention, alert.Run.FailureReason) is { } reason)
                 {
-                    <span> — @reason</span>
+                    <span data-testid="alert-summary"> — @reason</span>
                 }
             </span>
-            <a class="alert-link" href="@UiRoutes.Run(alert.Run.Id)">Open</a>
+            <a class="alert-link" href="@UiRoutes.Run(alert.Run.Id)" data-testid="alert-action">@AlertAction(alert.Run)<span class="visually-hidden"> for @alert.RepositoryName #@alert.Run.ParentIssueNumber</span></a>
         </div>
     }
 
@@ -74,6 +74,8 @@ else
     private IReadOnlyList<RepositoryOverview> _overviews = [];
 
     protected override bool ReactsTo(LiveEventView liveEvent) => SpecQueueEvents.Affects(liveEvent);
+
+    private static string AlertAction(SpecRunView run) => AttentionDisplay.CallToAction(run.Attention);
 
     private int Count(SpecRunLane lane) =>
         _overviews.Sum(overview => overview.Runs.Count(run => SpecRunLanes.For(run.Status) == lane));

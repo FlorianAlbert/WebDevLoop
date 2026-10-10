@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Attention;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
@@ -65,6 +66,7 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddScoped<SpecCompletionService>();
         services.TryAddScoped<MergeTrackingService>();
 
+        services.AddAttentionResolution();
         services.AddRecovery();
         services.AddEventHandlers();
         return services;
@@ -103,6 +105,7 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddSingleton<IParentReviewLauncher>(provider => provider.GetRequiredService<BackgroundWorkflowLaunchers>());
         services.TryAddSingleton<ITestingLauncher>(provider => provider.GetRequiredService<BackgroundWorkflowLaunchers>());
         services.TryAddSingleton<ICompletionLauncher>(provider => provider.GetRequiredService<BackgroundWorkflowLaunchers>());
+        services.TryAddSingleton<IAttentionTriageLauncher>(provider => provider.GetRequiredService<BackgroundWorkflowLaunchers>());
         services.TryAddSingleton(provider => new AgentStepRecoveryLaunchers(
             provider.GetRequiredService<IImplementationLauncher>(),
             provider.GetRequiredService<IReviewLoopLauncher>(),
@@ -136,6 +139,25 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddScoped<RecoveryCoordinator>();
     }
 
+    /// <summary>
+    /// The resolution order for work that needs attention: known remediation first. A troubleshooter agent stage registers
+    /// another <see cref="IAttentionStage"/> after it, before the user is asked.
+    /// </summary>
+    private static void AddAttentionResolution(this IServiceCollection services)
+    {
+        services.TryAddSingleton(AttentionTriageOptions.Default);
+        services.TryAddScoped<AttentionWorkLoader>();
+        services.TryAddScoped<WorktreeRemediator>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, WorktreeNotCleanRemediation>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, TicketBranchRebaseRemediation>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, TransientFailureRemediation>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, StaleIntegrationBranchRemediation>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, ExplorationRetryRemediation>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, NoChangesTicketRemediation>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IAttentionStage, KnownRemediationStage>());
+        services.TryAddScoped<AttentionTriageService>();
+    }
+
     private static void AddEventHandlers(this IServiceCollection services)
     {
         services.TryAddScoped<SpecQueueEventHandler>();
@@ -146,5 +168,6 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddScoped<ParentReviewEventHandler>();
         services.TryAddScoped<TestingEventHandler>();
         services.TryAddScoped<CompletionEventHandler>();
+        services.TryAddScoped<AttentionTriageEventHandler>();
     }
 }

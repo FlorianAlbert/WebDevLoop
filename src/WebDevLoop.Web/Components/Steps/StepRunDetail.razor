@@ -25,7 +25,14 @@ else if (_step is not null)
             <a href="/tickets/@ticketId" data-testid="ticket-link">Ticket run @ticketId</a>
         }
     </div>
-    @if (_step.FailureReason is { } failure)
+    @if (_step.Status == StepStatus.NeedsAttention)
+    {
+        <AttentionCard Reason="AttentionDisplay.Resolve(_step.Attention, _step.FailureReason, forTicket: _step.TicketRunId is not null)" />
+        <p class="quiet-note mb-3" data-testid="step-attention-hint">
+            Use the buttons on the <a href="@(_step.TicketRunId is { } owner ? $"/tickets/{owner}" : UiRoutes.Run(_step.SpecRunId))">@(_step.TicketRunId is null ? "spec run" : "ticket run")</a> page to continue.
+        </p>
+    }
+    else if (_step.FailureReason is { } failure)
     {
         <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
     }

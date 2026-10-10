@@ -23,7 +23,8 @@ public static class RunViewMapper
         run.ReadyAt,
         run.CompletedAt,
         run.FailureReason,
-        run.NeedsAttentionFrom);
+        run.NeedsAttentionFrom,
+        run.Status == SpecRunStatus.NeedsAttention ? run.Attention ?? AttentionReasons.Unclassified(run.FailureReason, forTicket: false) : null);
 
     public static TicketRunView ToView(this TicketRun ticket, IEnumerable<TicketRunId> blockedBy) => new(
         ticket.Id.Value,
@@ -43,7 +44,8 @@ public static class RunViewMapper
         ticket.CreatedAt,
         ticket.UpdatedAt,
         ticket.FailureReason,
-        ticket.NeedsAttentionFrom);
+        ticket.NeedsAttentionFrom,
+        ticket.Status == TicketRunStatus.NeedsAttention ? ticket.Attention ?? AttentionReasons.Unclassified(ticket.FailureReason, forTicket: true) : null);
 
     public static StepRunView ToView(this StepRun step) => new(
         step.Id.Value,
@@ -63,7 +65,8 @@ public static class RunViewMapper
         step.StructuredResultJson,
         step.FailureReason,
         step.Model,
-        step.ReasoningEffort);
+        step.ReasoningEffort,
+        step.Attention);
 
     public static RunEventView ToView(this RunEvent runEvent) => new(
         runEvent.Id,

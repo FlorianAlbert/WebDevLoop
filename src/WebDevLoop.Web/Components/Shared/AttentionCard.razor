@@ -1,0 +1,119 @@
+@using WebDevLoop.Core.Domain
+
+@* "Action needed": what happened, what WebDevLoop already tried, what the user can do, and the buttons (ChildContent). Without ChildContent the card is read-only. *@
+<section class="attention-card @(Reason.AutoFixPending ? "attention-card--auto" : "attention-card--" + Reason.Cause.ToString().ToLowerInvariant())"
+         aria-labelledby="@TitleId" data-testid="attention-card" data-cause="@Reason.Cause" data-code="@Reason.Code" data-auto-fix="@(Reason.AutoFixPending ? "pending" : null)">
+    <header class="attention-card__header">
+        <Icon Name="@(Reason.AutoFixPending ? "info" : "alert")" Size="20" Class="attention-card__icon" />
+        <h2 class="attention-card__title" id="@TitleId">@(Reason.AutoFixPending ? "Fixing automatically" : "Action needed")</h2>
+        <StatusPill Variant="AttentionDisplay.CauseVariant(Reason.Cause)" data-testid="attention-cause">@AttentionDisplay.CauseLabel(Reason.Cause)</StatusPill>
+    </header>
+
+    <p class="attention-card__summary" data-testid="failure-reason">@Reason.Summary</p>
+    <p class="attention-card__why" data-testid="attention-why">@Reason.WhyItMatters</p>
+
+    @if (Reason.AutoFixPending)
+    {
+        <div class="attention-card__auto" role="status" data-testid="attention-auto-fix">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <div>
+                <strong>WebDevLoop is trying to fix this automatically…</strong>
+                @if (Reason.AutoFix is { Description.Length: > 0 } autoFix)
+                {
+                    <span class="d-block">@autoFix.Description</span>
+                }
+                <span class="d-block quiet-note">You do not need to do anything yet. This page updates by itself.</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        @if (HasTried)
+        {
+            <h3 class="attention-card__heading">What WebDevLoop already tried</h3>
+            <ul class="attention-card__list" data-testid="attention-tried">
+                @foreach (string attempt in Reason.TriedSoFar)
+                {
+                    <li>@attempt</li>
+                }
+                @if (Reason.AutoFix is { Attempted: true } tried)
+                {
+                    <li data-testid="attention-auto-fix-outcome">
+                        @tried.Description
+                        @if (!string.IsNullOrWhiteSpace(tried.Outcome))
+                        {
+                            <span class="d-block quiet-note">Result: @tried.Outcome</span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (Reason.UserSteps.Count > 0)
+        {
+            <h3 class="attention-card__heading">What you can do</h3>
+            <ol class="attention-card__steps" data-testid="attention-steps">
+                @foreach (AttentionStep step in Reason.UserSteps)
+                {
+                    <li data-testid="attention-step">
+                        <span>@step.Text</span>
+                        @if (!string.IsNullOrWhiteSpace(step.Command))
+                        {
+                            <div class="attention-card__command" data-testid="attention-command">
+                                <pre class="attention-card__code"><code>@step.Command</code></pre>
+                                <CopyButton Text="@step.Command" AriaLabel="@($"Copy command: {step.Command}")" />
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(step.LinkHref))
+                        {
+                            <span class="d-block">
+                                @if (AttentionDisplay.IsInApp(step.LinkHref))
+                                {
+                                    <a href="@step.LinkHref" data-testid="attention-link">@(step.LinkLabel ?? step.LinkHref)</a>
+                                }
+                                else
+                                {
+                                    <a href="@step.LinkHref" target="_blank" rel="noopener noreferrer" data-testid="attention-link">@(step.LinkLabel ?? step.LinkHref)<Icon Name="external" Size="12" Class="ms-1" /><span class="visually-hidden"> (opens in a new tab)</span></a>
+                                }
+                            </span>
+                        }
+                    </li>
+                }
+            </ol>
+        }
+    }
+
+    @if (ChildContent is not null)
+    {
+        @if (Reason.AutoFixPending)
+        {
+            <details class="attention-card__more" data-testid="attention-actions-anyway">
+                <summary>Don't want to wait? Show the actions</summary>
+                <div class="attention-card__actions" data-testid="attention-actions">@ChildContent</div>
+            </details>
+        }
+        else
+        {
+            <div class="attention-card__actions" data-testid="attention-actions">@ChildContent</div>
+        }
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Reason.Details))
+    {
+        <details class="attention-card__details" data-testid="attention-details">
+            <summary>Technical details</summary>
+            <pre class="attention-card__code" data-testid="attention-details-text">@Reason.Details</pre>
+        </details>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public AttentionReason Reason { get; set; } = default!;
+
+    /// <summary>The control buttons; leave empty for a read-only card (e.g. on a step page).</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string TitleId => "attention-title";
+
+    private bool HasTried => Reason.TriedSoFar.Count > 0 || Reason.AutoFix is { Attempted: true };
+}

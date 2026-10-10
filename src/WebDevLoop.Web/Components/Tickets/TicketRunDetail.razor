@@ -26,7 +26,14 @@ else if (_ticket is not null)
             <span data-testid="ticket-pr">PR #@pr@(_ticket.StackPosition is { } position ? $" (stack layer {position})" : "")</span>
         }
     </div>
-    @if (_ticket.FailureReason is { } failure)
+    @if (_ticket.Status == TicketRunStatus.NeedsAttention)
+    {
+        AttentionReason attention = AttentionDisplay.Resolve(_ticket.Attention, _ticket.FailureReason, forTicket: true);
+        <AttentionCard Reason="attention">
+            <TicketRunControls Ticket="_ticket" Siblings="_siblings" Attention="attention" OnChanged="RefreshAsync" />
+        </AttentionCard>
+    }
+    else if (_ticket.FailureReason is { } failure)
     {
         <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
     }
@@ -63,9 +70,12 @@ else if (_ticket is not null)
         </dl>
     </SectionCard>
 
-    <RunControlsArea Scope="ticket run">
-        <TicketRunControls Ticket="_ticket" OnChanged="RefreshAsync" />
-    </RunControlsArea>
+    @if (_ticket.Status != TicketRunStatus.NeedsAttention)
+    {
+        <RunControlsArea Scope="ticket run">
+            <TicketRunControls Ticket="_ticket" Siblings="_siblings" OnChanged="RefreshAsync" />
+        </RunControlsArea>
+    }
 
     <StepsTable Steps="_steps" />
     <TicketFindingsPanel Steps="_steps" />
@@ -75,6 +85,7 @@ else if (_ticket is not null)
 @code {
     private TicketRunView? _ticket;
     private IReadOnlyList<TicketBlocker> _blockers = [];
+    private IReadOnlyList<TicketRunView> _siblings = [];
     private IReadOnlyList<StepRunView> _steps = [];
     private IntegrationSagaView? _saga;
 
@@ -94,8 +105,8 @@ else if (_ticket is not null)
 
         IsNotFound = false;
         _ticket = ticket;
-        var siblings = await queries.ListTicketRunsAsync(new RunId(ticket.SpecRunId), cancellationToken);
-        _blockers = TicketDagLayout.Build(siblings).FirstOrDefault(row => row.Ticket.Id == ticket.Id)?.Blockers ?? [];
+        _siblings = await queries.ListTicketRunsAsync(new RunId(ticket.SpecRunId), cancellationToken);
+        _blockers = TicketDagLayout.Build(_siblings).FirstOrDefault(row => row.Ticket.Id == ticket.Id)?.Blockers ?? [];
         _steps = await queries.ListStepsAsync(ticketId, cancellationToken);
         _saga = await queries.GetLatestSagaAsync(ticketId, cancellationToken);
     }

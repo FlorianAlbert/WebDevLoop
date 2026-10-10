@@ -155,11 +155,11 @@ public sealed class EntityMappingTests : IDisposable
         {
             SpecRun spec = (await write.SpecRuns.GetAsync(specRunId, CancellationToken.None))!;
             spec.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
-            spec.MarkNeedsAttention("clone failed", TestData.Now);
+            spec.MarkNeedsAttention(AttentionReasons.Unclassified("clone failed", true), TestData.Now);
             TicketRun ticket = (await write.Tickets.GetAsync(ticketRunId, CancellationToken.None))!;
             ticket.TransitionTo(TicketRunStatus.Ready, TestData.Now);
             ticket.TransitionTo(TicketRunStatus.Implementing, TestData.Now);
-            ticket.MarkNeedsAttention("retries exhausted", TestData.Now);
+            ticket.MarkNeedsAttention(AttentionReasons.Unclassified("retries exhausted", true), TestData.Now);
             await write.SaveAsync();
         }
 
@@ -167,6 +167,62 @@ public sealed class EntityMappingTests : IDisposable
 
         Assert.Equal(SpecRunStatus.Preparing, (await read.SpecRuns.GetAsync(specRunId, CancellationToken.None))!.NeedsAttentionFrom);
         Assert.Equal(TicketRunStatus.Implementing, (await read.Tickets.GetAsync(ticketRunId, CancellationToken.None))!.NeedsAttentionFrom);
+    }
+
+    [Fact]
+    public async Task the_structured_attention_reason_of_a_spec_a_ticket_and_a_step_round_trips_with_every_field()
+    {
+        (RunId specRunId, TicketRunId ticketRunId) = await TestData.SeedTicketRunAsync(_harness);
+        AttentionReason reason = AttentionReasons.WorktreeNotClean("/work/t1", "feature", "Worktree is Dirty").WithTried("Cleaned it once").WithAutoFixAttempted("still dirty");
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            SpecRun spec = (await write.SpecRuns.GetAsync(specRunId, CancellationToken.None))!;
+            spec.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
+            spec.MarkNeedsAttention(AttentionReasons.BaseBranchMissing("trunk", "acme/widgets", "no trunk"), TestData.Now);
+            TicketRun ticket = (await write.Tickets.GetAsync(ticketRunId, CancellationToken.None))!;
+            ticket.TransitionTo(TicketRunStatus.Ready, TestData.Now);
+            ticket.TransitionTo(TicketRunStatus.Implementing, TestData.Now);
+            ticket.MarkNeedsAttention(reason, TestData.Now);
+            StepRun step = TestData.NewStep(specRunId, ticketRunId, "s-attn", StepKind.Implement, AgentRole.Implementer);
+            step.Start(TestData.Now, TimeSpan.FromMinutes(30));
+            step.MarkNeedsAttention(AttentionReasons.TicketBranchNotBasedOnIntegration("feature", "missing tip"), TestData.Now);
+            write.Steps.Add(step);
+            await write.SaveAsync();
+        }
+
+        using PersistenceScope read = _harness.OpenScope();
+
+        AttentionReason loadedTicket = (await read.Tickets.GetAsync(ticketRunId, CancellationToken.None))!.Attention!;
+        Assert.Equal(reason.ToJson(), loadedTicket.ToJson());
+        Assert.Equal(["Cleaned it once"], loadedTicket.TriedSoFar);
+        Assert.True(loadedTicket.AutoFix!.Attempted);
+        Assert.Equal(AttentionCode.BaseBranchMissing, (await read.SpecRuns.GetAsync(specRunId, CancellationToken.None))!.Attention!.Code);
+        Assert.Equal(AttentionCode.TicketBranchNotBasedOnIntegration, (await read.Steps.GetAsync(new StepRunId("s-attn"), CancellationToken.None))!.Attention!.Code);
+    }
+
+    [Fact]
+    public async Task leaving_needs_attention_clears_the_stored_reason()
+    {
+        (RunId specRunId, TicketRunId ticketRunId) = await TestData.SeedTicketRunAsync(_harness);
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            TicketRun ticket = (await write.Tickets.GetAsync(ticketRunId, CancellationToken.None))!;
+            ticket.TransitionTo(TicketRunStatus.Ready, TestData.Now);
+            ticket.MarkNeedsAttention(AttentionReasons.ReviewFailed("failed"), TestData.Now);
+            await write.SaveAsync();
+        }
+
+        using (PersistenceScope retry = _harness.OpenScope())
+        {
+            (await retry.Tickets.GetAsync(ticketRunId, CancellationToken.None))!.Retry(TestData.Now);
+            await retry.SaveAsync();
+        }
+
+        using PersistenceScope read = _harness.OpenScope();
+        TicketRun loaded = (await read.Tickets.GetAsync(ticketRunId, CancellationToken.None))!;
+        Assert.Null(loaded.Attention);
+        Assert.Null(loaded.FailureReason);
+        Assert.Equal(specRunId, loaded.SpecRunId);
     }
 
     [Fact]
@@ -178,7 +234,7 @@ public sealed class EntityMappingTests : IDisposable
         {
             SpecRun spec = (await write.SpecRuns.GetAsync(specRunId, CancellationToken.None))!;
             spec.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
-            spec.MarkNeedsAttention("clone failed", TestData.Now.AddHours(1));
+            spec.MarkNeedsAttention(AttentionReasons.Unclassified("clone failed", true), TestData.Now.AddHours(1));
             spec.TransitionTo(SpecRunStatus.Preparing, retried);
             await write.SaveAsync();
         }

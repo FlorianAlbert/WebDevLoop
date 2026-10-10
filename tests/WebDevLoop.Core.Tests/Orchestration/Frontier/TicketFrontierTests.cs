@@ -67,7 +67,7 @@ public sealed class TicketFrontierTests
         TicketRun implementing = Advance(Ticket(2), TicketRunStatus.Ready, TicketRunStatus.Implementing);
         TicketRun integrated = Advance(Ticket(3), ToIntegrated);
         TicketRun needsAttention = Advance(Ticket(4), TicketRunStatus.Ready);
-        needsAttention.MarkNeedsAttention("stuck", T0);
+        needsAttention.MarkNeedsAttention(AttentionReasons.Unclassified("stuck", true), T0);
 
         FrontierSnapshot snapshot = TicketFrontier.Compute([ready, implementing, integrated, needsAttention], []);
 

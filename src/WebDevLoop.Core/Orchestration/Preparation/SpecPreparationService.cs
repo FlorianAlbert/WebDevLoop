@@ -36,7 +36,7 @@ public sealed class SpecPreparationService(
         RepositoryRecord? repository = await repositories.GetAsync(run.RepositoryId, cancellationToken);
         if (repository is null)
         {
-            return await NeedsAttentionAsync(run, $"Repository {run.RepositoryId} is no longer registered.", cancellationToken);
+            return await NeedsAttentionAsync(run, AttentionReasons.RepositoryNotRegistered(run.RepositoryId), cancellationToken);
         }
 
         EffectiveSettings effective = await settings.GetAsync(run.RepositoryId, cancellationToken);
@@ -72,7 +72,7 @@ public sealed class SpecPreparationService(
                 case ExplorationOutcome.ConcurrencyConflict:
                     return PreparationOutcome.ConcurrencyConflict;
                 case ExplorationOutcome.Failed:
-                    return await NeedsAttentionAsync(run, exploration.FailureReason!, cancellationToken);
+                    return await NeedsAttentionAsync(run, exploration.Attention!, cancellationToken);
             }
         }
 
@@ -90,7 +90,7 @@ public sealed class SpecPreparationService(
     /// otherwise the base is the current remote trunk tip.
     /// </summary>
     /// <returns>Null on success; otherwise why no base could be chosen.</returns>
-    private async Task<string?> ChooseIntegrationBaseAsync(
+    private async Task<AttentionReason?> ChooseIntegrationBaseAsync(
         SpecRun run,
         GitRepositoryLocation location,
         EffectiveSettings effective,
@@ -102,7 +102,8 @@ public sealed class SpecPreparationService(
             CommitSha? trunkTip = await git.GetBranchTipAsync(location, run.BaseBranch.Value, GitRefScope.Remote, cancellationToken);
             if (trunkTip is null)
             {
-                return $"Base branch '{run.BaseBranch}' does not exist on the remote of {location.Repo}.";
+                return AttentionReasons.BaseBranchMissing(
+                    run.BaseBranch.Value.Value, location.Repo.ToString(), $"Base branch '{run.BaseBranch}' does not exist on the remote of {location.Repo}.");
             }
 
             run.IntegrationBaseSha = trunkTip;
@@ -113,16 +114,19 @@ public sealed class SpecPreparationService(
     }
 
     /// <returns>Null on success; otherwise why the run-scoped integration branch could not be created.</returns>
-    private async Task<string?> CreateIntegrationBranchAsync(SpecRun run, GitRepositoryLocation location, CancellationToken cancellationToken)
+    private async Task<AttentionReason?> CreateIntegrationBranchAsync(SpecRun run, GitRepositoryLocation location, CancellationToken cancellationToken)
     {
         CommitSha baseSha = run.IntegrationBaseSha!.Value;
         RefUpdateResult created = await git.UpdateBranchAsync(location, run.IntegrationBranch, baseSha, expectedPriorTip: null, cancellationToken);
         return created.Succeeded
             ? null
-            : $"Integration branch '{run.IntegrationBranch}' already exists at {created.ActualTip}, expected it to be created at {baseSha}.";
+            : AttentionReasons.IntegrationBranchExists(
+                run.IntegrationBranch.Value,
+                $"Integration branch '{run.IntegrationBranch}' already exists at {created.ActualTip}, expected it to be created at {baseSha}.",
+                location.LocalPath);
     }
 
-    private async Task<PreparationOutcome> NeedsAttentionAsync(SpecRun run, string reason, CancellationToken cancellationToken)
+    private async Task<PreparationOutcome> NeedsAttentionAsync(SpecRun run, AttentionReason reason, CancellationToken cancellationToken)
     {
         DateTimeOffset now = clock.UtcNow;
         SpecRunStatus previous = run.Status;

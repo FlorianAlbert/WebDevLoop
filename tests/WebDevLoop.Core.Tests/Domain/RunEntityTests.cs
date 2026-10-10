@@ -110,7 +110,7 @@ public sealed class RunEntityTests
         SpecRun spec = NewSpec();
         spec.TransitionTo(SpecRunStatus.Preparing, T0);
 
-        spec.MarkNeedsAttention("review cycle limit reached", T0);
+        spec.MarkNeedsAttention(AttentionReasons.Unclassified("review cycle limit reached", true), T0);
 
         Assert.Equal(SpecRunStatus.NeedsAttention, spec.Status);
         Assert.Equal("review cycle limit reached", spec.FailureReason);
@@ -126,7 +126,7 @@ public sealed class RunEntityTests
         SpecRun spec = NewSpec();
         spec.TransitionTo(SpecRunStatus.Aborted, T0);
 
-        Assert.Throws<InvalidStatusTransitionException>(() => spec.MarkNeedsAttention("late", T0));
+        Assert.Throws<InvalidStatusTransitionException>(() => spec.MarkNeedsAttention(AttentionReasons.Unclassified("late", true), T0));
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public sealed class RunEntityTests
         Assert.Equal(1, ticket.Attempt);
         Assert.Equal(2, ticket.ReviewIteration);
 
-        ticket.MarkNeedsAttention("limit", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("limit", true), T0);
         ticket.TransitionTo(TicketRunStatus.Ready, T0);
         ticket.TransitionTo(TicketRunStatus.Implementing, T0);
 
@@ -196,7 +196,7 @@ public sealed class RunEntityTests
     {
         TicketRun ticket = NewTicket();
 
-        ticket.MarkNeedsAttention("max retries", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("max retries", true), T0);
 
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
         Assert.Equal("max retries", ticket.FailureReason);

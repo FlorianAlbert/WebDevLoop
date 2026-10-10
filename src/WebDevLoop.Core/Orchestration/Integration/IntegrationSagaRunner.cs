@@ -47,7 +47,10 @@ public sealed class IntegrationSagaRunner(
             if (spec is null || repository is null || spec.RepositoryId != assignment.RepositoryId || spec.IntegrationTipSha is not { } tip)
             {
                 return await NeedsAttentionAsync(
-                    ticket, $"Spec run, repository, or integration tip of ticket '{ticket.Id}' is missing or does not match repository {assignment.RepositoryId}.", cancellationToken);
+                    ticket,
+                    AttentionReasons.InternalInconsistency(
+                        $"Spec run, repository, or integration tip of ticket '{ticket.Id}' is missing or does not match repository {assignment.RepositoryId}.", forTicket: true),
+                    cancellationToken);
             }
 
             EffectiveSettings effective = await settings.GetAsync(spec.RepositoryId, cancellationToken);
@@ -109,14 +112,14 @@ public sealed class IntegrationSagaRunner(
         return null;
     }
 
-    private async Task<IntegrationResult> NeedsAttentionAsync(TicketRun ticket, string reason, CancellationToken cancellationToken)
+    private async Task<IntegrationResult> NeedsAttentionAsync(TicketRun ticket, AttentionReason reason, CancellationToken cancellationToken)
     {
         DateTimeOffset now = clock.UtcNow;
         TicketRunStatus previous = ticket.Status;
         ticket.MarkNeedsAttention(reason, now);
         outbox.Append(new TicketRunStatusChanged(ticket.SpecRunId, ticket.Id, previous, TicketRunStatus.NeedsAttention, now));
         return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved
-            ? new IntegrationResult(IntegrationOutcome.NeedsAttention, reason)
+            ? new IntegrationResult(IntegrationOutcome.NeedsAttention, reason.Details)
             : IntegrationResult.ConcurrencyConflict;
     }
 }

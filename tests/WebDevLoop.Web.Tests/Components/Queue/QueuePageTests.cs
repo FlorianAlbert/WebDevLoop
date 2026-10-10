@@ -6,6 +6,7 @@ using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Queries;
 using WebDevLoop.Web.Components.Queue;
 using WebDevLoop.Web.Tests.Api;
+using WebDevLoop.Web.Tests.Components.Support;
 using WebDevLoop.Web.Tests.Components.Dashboard;
 
 namespace WebDevLoop.Web.Tests.Components.Queue;
@@ -230,4 +231,17 @@ public sealed class QueuePageTests : UiTestContext
 
     private static string[] LaneRunIds(IRenderedComponent<QueuePage> cut, SpecRunLane lane) =>
         cut.FindAll($"[data-lane={lane}] [data-run-id]").Select(row => row.GetAttribute("data-run-id")!).ToArray();
+
+    [Fact]
+    public void needs_attention_runs_show_the_summary_under_the_status_pill_and_a_call_to_action()
+    {
+        Runs.SpecRuns.Add(Run("r-attn", SpecRunStatus.NeedsAttention, 1, issue: 13, failure: "fatal: raw") with { Attention = AttentionData.RunReason() });
+
+        IRenderedComponent<QueuePage> cut = Render<QueuePage>();
+
+        var row = cut.Find("[data-run-id=r-attn]");
+        Assert.Contains(AttentionData.RunReason().Summary, row.QuerySelector("[data-testid=run-attention-r-attn]")!.TextContent);
+        Assert.DoesNotContain("fatal: raw", row.TextContent);
+        Assert.Equal("Retry", cut.Find("[data-testid=run-note-r-attn] a").TextContent.Trim());
+    }
 }

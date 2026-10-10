@@ -65,7 +65,9 @@ public sealed class IntegrationSagaSteps(
         {
             return await NeedsAttentionAsync(
                 context,
-                $"Integration failed {saga.ConsecutiveFaults} time(s) in a row at checkpoint {saga.Checkpoint}: {exception.Message}",
+                TransientFaults.IsTransient(exception)
+                    ? AttentionReasons.IntegrationTemporaryFailure(saga.ConsecutiveFaults, saga.Checkpoint.ToString(), exception.Message)
+                    : AttentionReasons.IntegrationFailed(saga.ConsecutiveFaults, saga.Checkpoint.ToString(), exception.Message),
                 cancellationToken);
         }
 
@@ -123,7 +125,10 @@ public sealed class IntegrationSagaSteps(
     {
         if (context.Ticket.LastImplementedSha is not { } source)
         {
-            return await NeedsAttentionAsync(context, $"Ticket '{context.Ticket.Id}' has no reviewed commit to integrate.", cancellationToken);
+            return await NeedsAttentionAsync(
+                context,
+                AttentionReasons.InternalInconsistency($"Ticket '{context.Ticket.Id}' has no reviewed commit to integrate.", forTicket: true),
+                cancellationToken);
         }
 
         CommitSha tip = context.ExpectedPrior;
@@ -136,7 +141,7 @@ public sealed class IntegrationSagaSteps(
                 return await CheckpointAsync(context, IntegrationSagaCheckpoint.SquashCommitCreated, cancellationToken);
             case GitMergeOutcome.AlreadyUpToDate:
                 return await NeedsAttentionAsync(
-                    context, $"Ticket branch '{context.Ticket.BranchName}' at {source} has no changes relative to the integration tip {tip}.", cancellationToken);
+                    context, AttentionReasons.TicketHasNoChanges(context.Ticket.BranchName.Value, source.Value, tip.Value), cancellationToken);
             default:
                 return await ResolveConflictsAsync(context, source, squash.ConflictedPaths, cancellationToken);
         }
@@ -157,7 +162,7 @@ public sealed class IntegrationSagaSteps(
             ConflictResolutionOutcome.Resolved => null,
             ConflictResolutionOutcome.Cancelled => new IntegrationResult(IntegrationOutcome.Cancelled, resolution.Reason),
             ConflictResolutionOutcome.ConcurrencyConflict => IntegrationResult.ConcurrencyConflict,
-            _ => await NeedsAttentionAsync(context, resolution.Reason!, cancellationToken),
+            _ => await NeedsAttentionAsync(context, resolution.Attention!, cancellationToken),
         };
     }
 
@@ -170,7 +175,9 @@ public sealed class IntegrationSagaSteps(
         {
             return await NeedsAttentionAsync(
                 context,
-                $"Integration branch '{context.Spec.IntegrationBranch}' is at {update.ActualTip?.Value ?? "(missing)"} instead of the expected prior tip {context.ExpectedPrior}.",
+                AttentionReasons.IntegrationBranchMoved(
+                    context.Spec.IntegrationBranch.Value,
+                    $"Integration branch '{context.Spec.IntegrationBranch}' is at {update.ActualTip?.Value ?? "(missing)"} instead of the expected prior tip {context.ExpectedPrior}."),
                 cancellationToken);
         }
 
@@ -188,7 +195,9 @@ public sealed class IntegrationSagaSteps(
         return push == PushOutcome.Rejected
             ? await NeedsAttentionAsync(
                 context,
-                $"Pushing '{context.Spec.IntegrationBranch}' was rejected: the remote branch is not at {expectedRemote?.Value ?? "(absent)"}.",
+                AttentionReasons.IntegrationPushRejected(
+                    context.Spec.IntegrationBranch.Value,
+                    $"Pushing '{context.Spec.IntegrationBranch}' was rejected: the remote branch is not at {expectedRemote?.Value ?? "(absent)"}."),
                 cancellationToken)
             : await CheckpointAsync(context, IntegrationSagaCheckpoint.IntegrationPushed, cancellationToken);
     }
@@ -198,7 +207,10 @@ public sealed class IntegrationSagaSteps(
         BranchName stackBranch = context.Saga.StackBranchName;
         PushOutcome push = await git.PushAsync(context.Location, new RefPush(stackBranch, context.SquashCommit, null), cancellationToken);
         return push == PushOutcome.Rejected
-            ? await NeedsAttentionAsync(context, $"Stack branch '{stackBranch}' already exists on the remote at another commit.", cancellationToken)
+            ? await NeedsAttentionAsync(
+                context,
+                AttentionReasons.StackBranchExists(stackBranch.Value, $"Stack branch '{stackBranch}' already exists on the remote at another commit."),
+                cancellationToken)
             : await CheckpointAsync(context, IntegrationSagaCheckpoint.StackBranchPushed, cancellationToken);
     }
 
@@ -210,7 +222,11 @@ public sealed class IntegrationSagaSteps(
             ?? await pulls.CreateDraftPullRequestAsync(repository, StackLayerPullRequest.Draft(context, placement.BaseBranch), cancellationToken);
         if (pull.State != PullRequestState.Open)
         {
-            return await NeedsAttentionAsync(context, $"Pull request #{pull.Number} for '{pull.Head}' is {pull.State}.", cancellationToken);
+            return await NeedsAttentionAsync(
+                context,
+                AttentionReasons.PullRequestNotOpen(
+                    pull.Number.Value, pull.State.ToString(), $"Pull request #{pull.Number} for '{pull.Head}' is {pull.State}.", repository.ToString()),
+                cancellationToken);
         }
 
         if (placement.Own is null)
@@ -247,7 +263,10 @@ public sealed class IntegrationSagaSteps(
             if (belowStack is not null && belowStack.BottomToTop[^1] != below.PullRequestNumber)
             {
                 return await NeedsAttentionAsync(
-                    context, $"Stack {belowStack.StackNumber} does not end with #{below.PullRequestNumber}, the layer below #{pull}.", cancellationToken);
+                    context,
+                    AttentionReasons.PullRequestStackChanged(
+                        $"Stack {belowStack.StackNumber} does not end with #{below.PullRequestNumber}, the layer below #{pull}.", repository.ToString()),
+                    cancellationToken);
             }
 
             stack = belowStack is null
@@ -259,7 +278,10 @@ public sealed class IntegrationSagaSteps(
         if (index < 1 || stack.BottomToTop[index - 1] != below.PullRequestNumber)
         {
             return await NeedsAttentionAsync(
-                context, $"Pull request #{pull} is not directly above #{below.PullRequestNumber} in stack {stack.StackNumber}.", cancellationToken);
+                context,
+                AttentionReasons.PullRequestStackChanged(
+                    $"Pull request #{pull} is not directly above #{below.PullRequestNumber} in stack {stack.StackNumber}.", repository.ToString()),
+                cancellationToken);
         }
 
         context.Saga.StackNumber = stack.StackNumber;
@@ -275,7 +297,10 @@ public sealed class IntegrationSagaSteps(
         PullStackLayer own = placement.Own ?? throw new InvalidOperationException($"Stack layer of ticket '{context.Ticket.Id}' is missing.");
         if (await FindDiffProblemAsync(context, placement, own, cancellationToken) is { } problem)
         {
-            return await NeedsAttentionAsync(context, $"Diff verification of pull request #{own.PullRequestNumber} failed: {problem}", cancellationToken);
+            return await NeedsAttentionAsync(
+                context,
+                AttentionReasons.DiffVerificationFailed(own.PullRequestNumber.Value, problem, context.Repository.Ref.ToString()),
+                cancellationToken);
         }
 
         own.RecordVerifiedDiff(context.SquashCommit, clock.UtcNow);
@@ -435,16 +460,16 @@ public sealed class IntegrationSagaSteps(
         return await SaveAsync(cancellationToken) ? null : IntegrationResult.ConcurrencyConflict;
     }
 
-    private async Task<IntegrationResult> NeedsAttentionAsync(IntegrationContext context, string reason, CancellationToken cancellationToken)
+    private async Task<IntegrationResult> NeedsAttentionAsync(IntegrationContext context, AttentionReason reason, CancellationToken cancellationToken)
     {
         DateTimeOffset now = clock.UtcNow;
         TicketRun ticket = context.Ticket;
         TicketRunStatus previous = ticket.Status;
-        context.Saga.RecordError(reason, now);
+        context.Saga.RecordError(reason.Details, now);
         ticket.MarkNeedsAttention(reason, now);
         outbox.Append(new TicketRunStatusChanged(ticket.SpecRunId, ticket.Id, previous, TicketRunStatus.NeedsAttention, now));
         return await SaveAsync(cancellationToken)
-            ? new IntegrationResult(IntegrationOutcome.NeedsAttention, reason)
+            ? new IntegrationResult(IntegrationOutcome.NeedsAttention, reason.Details)
             : IntegrationResult.ConcurrencyConflict;
     }
 

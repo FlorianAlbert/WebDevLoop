@@ -1,3 +1,4 @@
+using WebDevLoop.Core.Orchestration.Attention;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
@@ -20,7 +21,8 @@ public sealed class BackgroundWorkflowLaunchers(BackgroundWorkRunner runner) :
     IIntegrationLauncher,
     IParentReviewLauncher,
     ITestingLauncher,
-    ICompletionLauncher
+    ICompletionLauncher,
+    IAttentionTriageLauncher
 {
     public void Launch(PreparationAssignment assignment) =>
         Run<SpecPreparationService>($"prepare:{assignment.SpecRunId}", (preparation, token) => preparation.PrepareAsync(assignment.SpecRunId, token));
@@ -42,6 +44,10 @@ public sealed class BackgroundWorkflowLaunchers(BackgroundWorkRunner runner) :
 
     public void Launch(CompletionAssignment assignment) =>
         Run<SpecCompletionService>($"complete:{assignment.SpecRunId}", (completion, token) => completion.RunAsync(assignment, token));
+
+    public void Launch(AttentionTriageAssignment assignment) =>
+        Run<AttentionTriageService>(
+            $"triage:{assignment.TicketRunId?.Value ?? assignment.SpecRunId.Value}", (triage, token) => triage.TriageAsync(assignment, token));
 
     private void Run<TRunner>(string key, Func<TRunner, CancellationToken, Task> work)
         where TRunner : notnull =>

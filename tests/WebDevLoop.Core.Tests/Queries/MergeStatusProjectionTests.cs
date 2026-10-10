@@ -52,7 +52,7 @@ public sealed class MergeStatusProjectionTests
     public void a_stack_closed_unmerged_is_closed_with_the_reason()
     {
         SpecRun spec = Spec(ToAwaitingMerge);
-        spec.MarkNeedsAttention("The PR stack #11, #12 was closed without being merged into 'main'.", At);
+        spec.MarkNeedsAttention(AttentionReasons.Unclassified("The PR stack #11, #12 was closed without being merged into 'main'.", true), At);
 
         MergeStatusView status = MergeStatusProjection.From(spec.ToView(), Stack);
 
@@ -64,7 +64,7 @@ public sealed class MergeStatusProjectionTests
     public void a_run_that_needs_attention_before_its_stack_was_ready_is_not_ready()
     {
         SpecRun spec = Spec(SpecRunStatus.Preparing, SpecRunStatus.Running, SpecRunStatus.ParentReviewing, SpecRunStatus.Testing);
-        spec.MarkNeedsAttention("tester failed", At);
+        spec.MarkNeedsAttention(AttentionReasons.Unclassified("tester failed", true), At);
 
         Assert.Equal(MergeState.NotReady, MergeStatusProjection.From(spec.ToView(), Stack).State);
     }
@@ -101,10 +101,10 @@ public sealed class MergeStatusProjectionTests
     public void views_expose_the_phase_that_needs_attention()
     {
         SpecRun spec = Spec(SpecRunStatus.Preparing);
-        spec.MarkNeedsAttention("clone failed", At);
+        spec.MarkNeedsAttention(AttentionReasons.Unclassified("clone failed", true), At);
         TicketRun ticket = TicketRun.Create(new TicketRunId("t-1"), spec.Id, new IssueRef("o", "r", 6), "Ticket", "body", At);
         ticket.TransitionTo(TicketRunStatus.Ready, At);
-        ticket.MarkNeedsAttention("stuck", At);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("stuck", true), At);
 
         Assert.Equal(SpecRunStatus.Preparing, spec.ToView().NeedsAttentionFrom);
         Assert.Equal(TicketRunStatus.Ready, ticket.ToView([]).NeedsAttentionFrom);

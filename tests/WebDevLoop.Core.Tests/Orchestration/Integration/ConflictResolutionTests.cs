@@ -75,6 +75,8 @@ public sealed class ConflictResolutionTests
         Assert.Equal(IntegrationOutcome.NeedsAttention, result.Outcome);
         Assert.Contains("contradict", result.Reason, StringComparison.Ordinal);
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Equal(AttentionCode.MergeConflictUnresolved, ticket.Attention!.Code);
+        Assert.Contains(ticket.Attention.TriedSoFar, tried => tried.Contains("conflict-resolver", StringComparison.Ordinal));
         Assert.Equal(["squash"], _f.Journal.Calls.Skip(callsBefore));
         Assert.Equal(bottomLayer, _f.LocalTip(spec.IntegrationBranch));
         Assert.Single(_f.Pulls.PullRequests);

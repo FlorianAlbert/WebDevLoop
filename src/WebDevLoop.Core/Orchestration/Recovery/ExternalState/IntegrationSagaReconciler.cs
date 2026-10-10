@@ -97,7 +97,7 @@ public sealed class IntegrationSagaReconciler(
 
         if (await FindForeignPullRequestAsync(context, ticket, saga, cancellationToken) is { } foreign)
         {
-            return await RejectAsync(spec, ticket, saga, foreign, cancellationToken);
+            return await RejectAsync(context, spec, ticket, saga, foreign, cancellationToken);
         }
 
         IntegrationSagaCheckpoint from = saga.Checkpoint;
@@ -123,6 +123,7 @@ public sealed class IntegrationSagaReconciler(
     }
 
     private async Task<ReconciliationAction> RejectAsync(
+        SpecReconciliationContext context,
         SpecRun spec,
         TicketRun ticket,
         IntegrationSaga saga,
@@ -133,7 +134,8 @@ public sealed class IntegrationSagaReconciler(
         string reason = $"Pull request #{foreign.Number} on the run-scoped stack branch '{saga.StackBranchName}' does not identify run '{spec.Id}' "
             + $"and ticket run '{ticket.Id}', so it was not adopted as the ticket's stack layer.";
         saga.RecordError(reason, now);
-        ticket.MarkNeedsAttention(reason, now);
+        ticket.MarkNeedsAttention(
+            AttentionReasons.ForeignPullRequest(foreign.Number.Value, saga.StackBranchName.Value, reason, context.Repository.Ref.ToString()), now);
         outbox.Append(new TicketRunStatusChanged(spec.Id, ticket.Id, TicketRunStatus.Integrating, TicketRunStatus.NeedsAttention, now));
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return new ReconciliationAction(spec.Id, ticket.Id, ReconciliationActionKind.ForeignPullRequestRejected, reason);

@@ -5,13 +5,27 @@
 @inject DiagnosticReadiness Readiness
 
 @* Buttons for Retry/Skip/Abort; destructive commands ask for confirmation first. All are disabled in diagnostic-only mode. *@
-<div class="d-flex flex-wrap gap-2" data-testid="run-control-buttons">
+<div class="run-controls" data-testid="run-control-buttons">
     @foreach (RunControlCommand command in Commands)
     {
-        <button type="button" class="btn btn-sm @(command.IsDestructive ? "btn-outline-danger" : "btn-outline-primary")"
-                data-testid="control-@command.Key" disabled="@(!CanRun(command))" title="@DisabledReason(command)" aria-description="@DisabledReason(command)" aria-busy="@(_running ? "true" : null)" @onclick="() => RequestAsync(command)">
-            @command.Label
-        </button>
+        (string? consequence, string? impact) = ConsequenceLine(command);
+        bool hasLine = !string.IsNullOrWhiteSpace(consequence) || !string.IsNullOrWhiteSpace(impact);
+        <div class="run-controls__item" data-testid="control-item-@command.Key">
+            <button type="button" class="btn btn-sm @ButtonClass(command)"
+                    data-testid="control-@command.Key" disabled="@(!CanRun(command))" title="@DisabledReason(command)" aria-describedby="@(hasLine ? $"consequence-{command.Key}" : null)" aria-busy="@(_running ? "true" : null)" @onclick="() => RequestAsync(command)">
+                @command.Label
+            </button>
+            @if (hasLine)
+            {
+                <p class="run-controls__consequence" id="consequence-@command.Key" data-testid="consequence-@command.Key">
+                    @consequence
+                    @if (!string.IsNullOrWhiteSpace(impact))
+                    {
+                        <span class="run-controls__impact" data-testid="impact-@command.Key">@impact</span>
+                    }
+                </p>
+            }
+        </div>
     }
 </div>
 
@@ -73,6 +87,15 @@
         CanRun(command) || _running ? null
         : !command.IsAvailable ? command.UnavailableReason
         : "Workflow actions are disabled in diagnostic-only mode.";
+
+    private static string ButtonClass(RunControlCommand command) =>
+        command.IsDestructive ? "btn-outline-danger" : command.Key == "retry" && command.IsAvailable ? "btn-primary" : "btn-outline-primary";
+
+    /// <summary>What the button does and whom it affects; a button that is unavailable says why instead, so the line under it is never misleading.</summary>
+    private static (string? Consequence, string? Impact) ConsequenceLine(RunControlCommand command) =>
+        !command.IsAvailable && command.UnavailableReason is { } reason
+            ? (reason, null)
+            : (command.Consequence, command.Impact);
 
     private Task RequestAsync(RunControlCommand command)
     {

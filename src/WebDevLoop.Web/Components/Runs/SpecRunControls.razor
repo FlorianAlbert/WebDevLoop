@@ -4,16 +4,15 @@
 <RunControlPanel Commands="Commands" OnApplied="OnChanged" />
 
 @code {
-    private const string AbortConfirmation =
-        "Abort this spec run? Its agent sessions and tester app are stopped, its open tickets are aborted, and its worktrees are cleaned up. This cannot be undone.";
-
     [Parameter, EditorRequired] public SpecRunView Spec { get; set; } = default!;
+
+    /// <summary>The spec's tickets, so the abort command can name the open ones.</summary>
+    [Parameter] public IReadOnlyList<TicketRunView> Tickets { get; set; } = [];
+
+    /// <summary>When set, only the buttons this reason lists are offered, worded as it words them.</summary>
+    [Parameter] public AttentionReason? Attention { get; set; }
 
     [Parameter] public EventCallback OnChanged { get; set; }
 
-    private IReadOnlyList<RunControlCommand> Commands =>
-    [
-        new("retry", "Retry", Spec.Status == SpecRunStatus.NeedsAttention, "Retry is only available when the run needs attention.", null, (control, token) => control.RetrySpecAsync(new RunId(Spec.Id), token)),
-        new("abort", "Abort run", !Spec.Status.IsTerminal(), "This run has already finished.", AbortConfirmation, (control, token) => control.AbortSpecAsync(new RunId(Spec.Id), token)),
-    ];
+    private IReadOnlyList<RunControlCommand> Commands => SpecRunCommands.Build(Spec, Tickets, Attention);
 }

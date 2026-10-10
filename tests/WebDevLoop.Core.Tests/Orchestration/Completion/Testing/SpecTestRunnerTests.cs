@@ -209,6 +209,7 @@ public sealed class SpecTestRunnerTests
         Assert.Single(_fixture.Issues.CreatedDrafts);
         SpecRun run = _fixture.Spec(spec.Id);
         Assert.Equal(SpecRunStatus.NeedsAttention, run.Status);
+        Assert.Equal(AttentionCode.TestCycleLimit, run.Attention!.Code);
         Assert.Contains("limit is 1", run.FailureReason, StringComparison.Ordinal);
     }
 
@@ -223,6 +224,7 @@ public sealed class SpecTestRunnerTests
         Assert.Equal(TestingOutcome.Blocked, result.Outcome);
         SpecRun run = _fixture.Spec(spec.Id);
         Assert.Equal(SpecRunStatus.NeedsAttention, run.Status);
+        Assert.Equal(AttentionCode.TesterBlocked, run.Attention!.Code);
         Assert.Contains("database that is not installed", run.FailureReason, StringComparison.Ordinal);
         Assert.Equal(StepStatus.Succeeded, Assert.Single(_fixture.TestSteps(spec.Id)).Status);
         Assert.Empty(_fixture.Issues.CreatedDrafts);

@@ -96,6 +96,7 @@ public sealed class SpecExplorationTests
 
         Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
         Assert.Equal(SpecRunStatus.NeedsAttention, run.Status);
+        Assert.Equal(AttentionCode.ExplorationFailed, run.Attention!.Code);
         Assert.Contains("Exploration", run.FailureReason);
         Assert.Equal(2, _fixture.Agents.Started.Count);
         Assert.All(await StepRuns.ListBySpecRunAsync(run.Id, Ct), step => Assert.Equal(StepStatus.Failed, step.Status));
@@ -107,7 +108,7 @@ public sealed class SpecExplorationTests
         _fixture.Agents.Script(AgentRole.Explorer, Completed);
         SpecRun run = await ActivateAsync();
         await _fixture.PrepareAsync(run);
-        run.MarkNeedsAttention("parked for the test", _fixture.Clock.UtcNow);
+        run.MarkNeedsAttention(AttentionReasons.Unclassified("parked for the test", true), _fixture.Clock.UtcNow);
         run.TransitionTo(SpecRunStatus.Preparing, _fixture.Clock.UtcNow);
 
         PreparationOutcome outcome = await _fixture.PrepareAsync(run);

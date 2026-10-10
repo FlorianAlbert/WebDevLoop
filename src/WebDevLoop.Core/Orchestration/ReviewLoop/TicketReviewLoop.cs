@@ -54,7 +54,11 @@ public sealed class TicketReviewLoop(
 
             if (await LoadContextAsync(ticket, cancellationToken) is not { } context || ticket.LastImplementedSha is not { } head)
             {
-                return await NeedsAttentionAsync(ticket, ReviewLoopOutcome.Failed, $"Spec run, repository, or implemented commit of ticket '{ticket.Id}' is missing.", cancellationToken);
+                return await NeedsAttentionAsync(
+                    ticket,
+                    ReviewLoopOutcome.Failed,
+                    AttentionReasons.InternalInconsistency($"Spec run, repository, or implemented commit of ticket '{ticket.Id}' is missing.", forTicket: true),
+                    cancellationToken);
             }
 
             if (ticket.Status == TicketRunStatus.FixingReviewFindings)
@@ -113,7 +117,8 @@ public sealed class TicketReviewLoop(
     {
         if (await DiffBaseAsync(context, head, cancellationToken) is not { } diffBase)
         {
-            return ReviewRoundResult.Failed($"Ticket branch '{context.Ticket.BranchName}' at {head} is not based on the integration branch.");
+            return ReviewRoundResult.Failed(AttentionReasons.TicketBranchNotBasedOnIntegration(
+                context.Ticket.BranchName.Value, $"Ticket branch '{context.Ticket.BranchName}' at {head} is not based on the integration branch."));
         }
 
         TicketRun ticket = context.Ticket;
@@ -152,7 +157,7 @@ public sealed class TicketReviewLoop(
         {
             ReviewRoundOutcome.Cancelled => new ReviewLoopResult(ReviewLoopOutcome.Cancelled, round.Reason),
             ReviewRoundOutcome.ConcurrencyConflict => ReviewLoopResult.ConcurrencyConflict,
-            _ => await NeedsAttentionAsync(ticket, ReviewLoopOutcome.Failed, round.Reason!, cancellationToken),
+            _ => await NeedsAttentionAsync(ticket, ReviewLoopOutcome.Failed, round.Attention!, cancellationToken),
         };
 
     /// <returns>The final result, or null when a fix was applied and both axes must review again.</returns>
@@ -172,7 +177,7 @@ public sealed class TicketReviewLoop(
             return await NeedsAttentionAsync(
                 ticket,
                 ReviewLoopOutcome.ReviewIterationsExhausted,
-                $"Review still found {findings.Length} issue(s) after {completedRounds} review round(s); the limit is {maxRounds}.",
+                AttentionReasons.ReviewIterationsExhausted(findings.Length, completedRounds, maxRounds),
                 cancellationToken);
         }
 
@@ -194,7 +199,10 @@ public sealed class TicketReviewLoop(
         if (findings.Length == 0)
         {
             return await NeedsAttentionAsync(
-                ticket, ReviewLoopOutcome.Failed, $"The interrupted fix of ticket '{ticket.Id}' has no persisted review findings to resume with.", cancellationToken);
+                ticket,
+                ReviewLoopOutcome.Failed,
+                AttentionReasons.InternalInconsistency($"The interrupted fix of ticket '{ticket.Id}' has no persisted review findings to resume with.", forTicket: true),
+                cancellationToken);
         }
 
         return AfterFix(await fixes.ResumeAsync(context, findings, interruptedSession, cancellationToken));
@@ -209,10 +217,10 @@ public sealed class TicketReviewLoop(
         _ => ReviewLoopResult.ConcurrencyConflict,
     };
 
-    private async Task<ReviewLoopResult> NeedsAttentionAsync(TicketRun ticket, ReviewLoopOutcome outcome, string reason, CancellationToken cancellationToken)
+    private async Task<ReviewLoopResult> NeedsAttentionAsync(TicketRun ticket, ReviewLoopOutcome outcome, AttentionReason reason, CancellationToken cancellationToken)
     {
         _journal.MarkNeedsAttention(ticket, reason);
-        return await SaveAsync(cancellationToken) ? new ReviewLoopResult(outcome, reason) : ReviewLoopResult.ConcurrencyConflict;
+        return await SaveAsync(cancellationToken) ? new ReviewLoopResult(outcome, reason.Details) : ReviewLoopResult.ConcurrencyConflict;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken) =>

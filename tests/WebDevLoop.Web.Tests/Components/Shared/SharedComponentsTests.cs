@@ -191,4 +191,32 @@ public sealed class SharedComponentsTests : BunitContext
 
         public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
+
+    [Theory]
+    [InlineData("AttentionRaised", "{\"code\":\"X\",\"summary\":\"The folder is dirty.\",\"cause\":\"You\"}", "Needs attention: The folder is dirty")]
+    [InlineData("AttentionRaised", "{}", "Needs attention: something stopped the work")]
+    [InlineData("AttentionRemediationAttempted", "{\"outcome\":\"Unresolved\",\"summary\":\"Reset failed.\"}", "WebDevLoop tried an automatic fix, but it did not solve it: Reset failed")]
+    [InlineData("AttentionRemediationAttempted", "{\"outcome\":\"Resolved\",\"summary\":\"Reset the branch\"}", "WebDevLoop tried an automatic fix: Reset the branch")]
+    [InlineData("AttentionAutoResolved", "{\"summary\":\"Removed 3 untracked files\",\"resume\":\"Retry\"}", "WebDevLoop fixed it by itself: Removed 3 untracked files and resumed the work")]
+    [InlineData("AttentionAutoResolved", "{\"summary\":\"Nothing to keep\",\"resume\":\"SkipTicket\"}", "WebDevLoop fixed it by itself: Nothing to keep and skipped the ticket")]
+    [InlineData("AttentionNeedsYou", "{\"summary\":\"Conflict.\",\"tried\":[\"a\",\"b\"]}", "WebDevLoop needs you: Conflict (it already tried 2 things)")]
+    [InlineData("AttentionNeedsYou", "{\"summary\":\"Conflict.\",\"tried\":[\"a\"]}", "WebDevLoop needs you: Conflict (it already tried 1 thing)")]
+    [InlineData("AttentionNeedsYou", "{\"summary\":\"Conflict.\",\"tried\":[]}", "WebDevLoop needs you: Conflict")]
+    [InlineData("ControlRetry", "{\"action\":\"Retry\",\"status\":\"Implementing\",\"tickets\":[]}", "You retried it")]
+    [InlineData("ControlAutoRetry", "{\"action\":\"AutoRetry\",\"status\":\"Implementing\",\"tickets\":[]}", "WebDevLoop retried it automatically")]
+    [InlineData("ControlSkip", "{\"action\":\"Skip\",\"status\":\"Skipped\",\"tickets\":[\"t2\",\"t3\"]}", "You skipped the ticket and 2 tickets that depended on it")]
+    [InlineData("ControlAutoSkip", "{\"action\":\"AutoSkip\",\"status\":\"Skipped\",\"tickets\":[]}", "WebDevLoop skipped the ticket automatically")]
+    [InlineData("ControlAbort", "{\"action\":\"Abort\",\"status\":\"Aborted\",\"tickets\":[\"t2\"]}", "You aborted it and 1 ticket that depended on it")]
+    public void run_events_of_the_attention_pipeline_are_described_in_plain_language(string type, string payload, string expected)
+    {
+        Assert.Equal(expected, DisplayNames.DescribeRunEvent(type, payload));
+    }
+
+    [Fact]
+    public void unknown_or_malformed_run_events_fall_back_to_the_type_name()
+    {
+        Assert.Equal("SomethingNew", DisplayNames.DescribeRunEvent("SomethingNew", "{}"));
+        Assert.Equal("AttentionRaised", DisplayNames.DescribeRunEvent("AttentionRaised", "not json"));
+        Assert.Equal("SomethingNew", DisplayNames.DescribeRunEvent("SomethingNew", "[1]"));
+    }
 }

@@ -1,5 +1,6 @@
 @page "/runs/{Id}"
 @inherits LiveDetailPageBase
+@using WebDevLoop.Core.Domain
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Api
 @using WebDevLoop.Web.Components.Layout
@@ -25,7 +26,14 @@ else if (_spec is not null)
             <span data-testid="dependency-mode">Mode: @DisplayNames.For(mode)</span>
         }
     </div>
-    @if (_spec.FailureReason is { } failure)
+    @if (_spec.Status == SpecRunStatus.NeedsAttention)
+    {
+        AttentionReason attention = AttentionDisplay.Resolve(_spec.Attention, _spec.FailureReason, forTicket: false);
+        <AttentionCard Reason="attention">
+            <SpecRunControls Spec="_spec" Tickets="_tickets" Attention="attention" OnChanged="RefreshAsync" />
+        </AttentionCard>
+    }
+    else if (_spec.FailureReason is { } failure)
     {
         <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
     }
@@ -47,13 +55,16 @@ else if (_spec is not null)
 
     <SpecBlockersPanel Blockers="_blockers" />
 
-    <RunControlsArea Scope="spec run">
-        <SpecRunControls Spec="_spec" OnChanged="RefreshAsync" />
-    </RunControlsArea>
+    @if (_spec.Status != SpecRunStatus.NeedsAttention)
+    {
+        <RunControlsArea Scope="spec run">
+            <SpecRunControls Spec="_spec" Tickets="_tickets" OnChanged="RefreshAsync" />
+        </RunControlsArea>
+    }
 
     <TicketDagView Tickets="_tickets" Sagas="_sagas" />
     <StackLayersPanel Layers="_stack" />
-    <MergeTrackingPanel Status="_spec.Status" LayerCount="_stack.Count" FailureReason="_spec.FailureReason" />
+    <MergeTrackingPanel Status="_spec.Status" LayerCount="_stack.Count" Attention="_spec.Attention" FailureReason="@_spec.FailureReason" />
     <RunEventsTimeline Events="_events" />
 }
 

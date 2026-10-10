@@ -8,6 +8,7 @@ using WebDevLoop.Core.Queries;
 using WebDevLoop.Web.Components.Dashboard;
 using WebDevLoop.Web.Components.Repositories;
 using WebDevLoop.Web.Tests.Api;
+using WebDevLoop.Web.Tests.Components.Support;
 
 namespace WebDevLoop.Web.Tests.Components.Dashboard;
 
@@ -185,5 +186,33 @@ public sealed class DashboardOverviewTests : UiTestContext
         await Task.Delay(100, Xunit.TestContext.Current.CancellationToken);
 
         Assert.Equal("0", cut.Find("[data-testid=count-Active]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void the_attention_alert_shows_the_summary_and_the_call_to_action_instead_of_the_raw_failure()
+    {
+        Runs.SpecRuns.Add(Run("r-you", SpecRunStatus.NeedsAttention, issue: 23, failure: "fatal: raw git error") with { Attention = AttentionReasons.BaseBranchMissing("develop", "acme/widgets", "ref missing") });
+        Runs.SpecRuns.Add(Run("r-decide", SpecRunStatus.NeedsAttention, issue: 24, failure: "cycles") with { Attention = AttentionData.RunReason() });
+
+        IRenderedComponent<DashboardOverview> cut = Render<DashboardOverview>();
+
+        var alerts = cut.FindAll("[data-alert=NeedsAttention]");
+        Assert.Equal(2, alerts.Count);
+        Assert.Contains("The base branch 'develop' does not exist on GitHub.", alerts[0].QuerySelector("[data-testid=alert-summary]")!.TextContent);
+        Assert.DoesNotContain("raw git error", alerts[0].TextContent);
+        Assert.Contains("Fix and continue", alerts[0].QuerySelector("[data-testid=alert-action]")!.TextContent);
+        Assert.Equal("/runs/r-you", alerts[0].QuerySelector("[data-testid=alert-action]")!.GetAttribute("href"));
+        Assert.Contains("Retry", alerts[1].QuerySelector("[data-testid=alert-action]")!.TextContent);
+        Assert.Equal("2", cut.Find("[data-testid=count-NeedsAttention]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void the_attention_alert_says_when_webdevloop_is_still_fixing_it()
+    {
+        Runs.SpecRuns.Add(Run("r-auto", SpecRunStatus.NeedsAttention, issue: 25) with { Attention = AttentionReasons.IntegrationBranchExists("integration/r", "exists") });
+
+        IRenderedComponent<DashboardOverview> cut = Render<DashboardOverview>();
+
+        Assert.Contains("WebDevLoop is on it", cut.Find("[data-alert=NeedsAttention] [data-testid=alert-action]").TextContent);
     }
 }

@@ -76,7 +76,7 @@ public sealed class ParkedIntegrationTests
         TicketRun second = F.SeedReviewedTicket(spec, 2, "second.cs");
         F.JournaledPulls.FailNextCreate = new HttpRequestException("503 Service Unavailable");
         Assert.Equal(IntegrationOutcome.Faulted, (await F.IntegrateAsync(first)).Outcome);
-        first.MarkNeedsAttention("Integration failed 4 time(s) in a row at checkpoint StackBranchPushed: 503", IntegrationFixture.T0);
+        first.MarkNeedsAttention(AttentionReasons.Unclassified("Integration failed 4 time(s) in a row at checkpoint StackBranchPushed: 503", true), IntegrationFixture.T0);
         Assert.Equal(IntegrationOutcome.WaitingForEarlierLayer, (await F.IntegrateAsync(second)).Outcome);
         return (spec, first, second);
     }

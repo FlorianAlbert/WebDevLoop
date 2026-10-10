@@ -79,6 +79,7 @@ public sealed class TicketImplementationRunnerTests
         Assert.Contains(branchHead.Value, result.Reason);
         TicketRun ticket = _fixture.Ticket(spec[1]);
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Equal(AttentionCode.ReportedCommitMismatch, ticket.Attention!.Code);
         Assert.Equal(result.Reason, ticket.FailureReason);
         Assert.Null(ticket.LastImplementedSha);
         Assert.Equal(StepStatus.Failed, Assert.Single(_fixture.Steps(ticket.Id)).Status);
@@ -127,6 +128,7 @@ public sealed class TicketImplementationRunnerTests
         Assert.Equal(ImplementationOutcome.IntegrationMergeMissing, result.Outcome);
         Assert.Contains(startTip.Value, result.Reason);
         Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[2]).Status);
+        Assert.Equal(AttentionCode.TicketBranchNotBasedOnIntegration, _fixture.Ticket(spec[2]).Attention!.Code);
         StepRun step = Assert.Single(_fixture.Steps(ticket.Id));
         Assert.Equal(StepStatus.NeedsAttention, step.Status);
         Assert.Equal(request.SessionId.Value, step.CopilotSessionId);
@@ -198,6 +200,7 @@ public sealed class TicketImplementationRunnerTests
         Assert.Equal(2, _fixture.Agents.Started.Select(request => request.SessionId).Distinct().Count());
         Assert.Equal([(1, StepStatus.Failed), (2, StepStatus.Failed)], _fixture.Steps(spec[1]).Select(step => (step.Attempt, step.Status)));
         Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[1]).Status);
+        Assert.Equal(AttentionCode.ImplementationFailed, _fixture.Ticket(spec[1]).Attention!.Code);
     }
 
     [Fact]

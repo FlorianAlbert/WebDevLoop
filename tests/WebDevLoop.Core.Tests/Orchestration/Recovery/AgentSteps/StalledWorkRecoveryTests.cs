@@ -1,3 +1,4 @@
+using WebDevLoop.Core.Orchestration.Attention;
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
@@ -70,6 +71,7 @@ public sealed class StalledWorkRecoveryTests
         Assert.Equal(StepInterruption.Restarted, _fixture.Step("impl-2").FailureReason);
         TicketRun ticket = _fixture.Ticket(spec[1]);
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Equal(AttentionCode.InterruptedRepeatedly, ticket.Attention!.Code);
         Assert.Contains("interrupted 2 times in a row", ticket.FailureReason);
         Assert.Equal([spec[1]], report.TicketsNeedingAttention);
         Assert.Empty(report.Relaunched);
@@ -90,6 +92,21 @@ public sealed class StalledWorkRecoveryTests
         Assert.Equal((StepStatus.Failed, StepInterruption.Restarted), (_fixture.Step("fix-1").Status, _fixture.Step("fix-1").FailureReason));
         Assert.Equal([new ReviewAssignment(spec.Id, spec[1], new AgentSessionId("session-impl"))], _fixture.Review.Launcher.Launched);
         Assert.Equal([new RecoveredWork(RecoveredWorkKind.ReviewLoop, spec.Id, spec[1], new AgentSessionId("session-impl"))], report.Relaunched);
+    }
+
+    [Fact]
+    public async Task a_restart_recovery_is_recorded_in_the_run_history_as_resolved_automatically()
+    {
+        SeededSpec spec = await SeedTicketAsync(ToFixing);
+        await _fixture.SeedRunningStepAsync(spec.Id, spec[1], StepKind.Fix, AgentRole.Implementer, "fix-1", session: "session-impl");
+        _fixture.Restart();
+
+        await _fixture.RecoverAsync();
+
+        RunEvent recovered = Assert.Single(_fixture.RunEvents.All);
+        Assert.Equal(AttentionRunEvents.AutoResolved, recovered.Type);
+        Assert.Equal(spec[1], recovered.TicketRunId);
+        Assert.Contains("restarts the work automatically", recovered.PayloadJson, StringComparison.Ordinal);
     }
 
     [Fact]

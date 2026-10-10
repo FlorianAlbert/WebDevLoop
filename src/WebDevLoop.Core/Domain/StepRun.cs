@@ -44,6 +44,9 @@ public sealed class StepRun : VersionedEntity
 
     public string? FailureReason { get; private set; }
 
+    /// <summary>Structured guidance when the step ended in <see cref="StepStatus.NeedsAttention"/>.</summary>
+    public AttentionReason? Attention { get; private set; }
+
     public bool IsActive => Status.IsActive();
 
     public static StepRun Create(
@@ -79,10 +82,26 @@ public sealed class StepRun : VersionedEntity
 
     public void Finish(StepStatus outcome, DateTimeOffset at, string? structuredResultJson = null, string? failureReason = null)
     {
+        if (outcome == StepStatus.NeedsAttention)
+        {
+            throw new ArgumentException("A step needing attention must be finished with MarkNeedsAttention so it carries a reason.", nameof(outcome));
+        }
+
         TransitionTo(outcome);
         CompletedAt = at;
         StructuredResultJson = structuredResultJson;
         FailureReason = failureReason;
+    }
+
+    /// <summary>Ends the running step as <see cref="StepStatus.NeedsAttention"/>; the reason is mandatory.</summary>
+    public void MarkNeedsAttention(AttentionReason reason, DateTimeOffset at, string? structuredResultJson = null)
+    {
+        ArgumentNullException.ThrowIfNull(reason);
+        TransitionTo(StepStatus.NeedsAttention);
+        CompletedAt = at;
+        StructuredResultJson = structuredResultJson;
+        FailureReason = reason.Details;
+        Attention = reason;
     }
 
     private void TransitionTo(StepStatus next)

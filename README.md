@@ -173,7 +173,7 @@ license texts, and are copied to `skills/` in the app output.
 Runs and tickets that need attention are resumed by the user from the run/ticket pages or the API
 (`POST /api/spec-runs/{id}/retry|abort`, `POST /api/ticket-runs/{id}/retry|skip|abort`). The commands are rejected with
 `503` and the failing prerequisites in diagnostic-only mode, are compare-and-swap safe (`409` on a lost race), and are
-audited as `Control<Action>` run events.
+audited as `Control<Action>` run events (`ControlAutoRetry`/`ControlAutoSkip` when WebDevLoop resumed the work itself after a remediation).
 
 - **Retry a spec** resumes the phase that failed: preparation, parent review, testing, or merge tracking (restarted
   from `ReadyForReview`, which gives trunk a fresh containment window). If the last
@@ -190,6 +190,34 @@ audited as `Control<Action>` run events.
 
 `GET /api/spec-runs/{id}/merge-status` reports the PR stack as `Awaiting`, `Merged`, `Closed` (closed unmerged or never
 reached trunk), `NotReady`, `CompletedWithoutPullRequests`, or `Aborted`.
+
+## Needs attention: guidance and automatic remediation
+
+WebDevLoop does not park work with "something went wrong". A run, ticket or step enters `NeedsAttention` only with a
+structured `AttentionReason` (`src/WebDevLoop.Core/Domain/Attention`): a reason **code** (one per situation, see
+`AttentionCode`), a plain-language **summary** and **why it matters**, the **cause** (`WebDevLoop`: WebDevLoop's own working
+area or agents, `You`: something outside WebDevLoop to fix, `Decision`: you choose how to go on), the automatic fix it can
+try, what was **already tried**, numbered **steps for you** (commands are copy-able) and the **actions** that make sense,
+each with a one-line consequence. The technical wording (exception text, paths, hashes) stays available as `Details` and as
+`FailureReason`. The reason is stored as JSON next to the run, ticket and step, shown through `attention` on their API views
+and rendered as an **Action needed** card on the run, ticket and step pages; the dashboard alert and the queue show its
+summary. The wording of every reason lives in one place, `AttentionReasons`; a guard test fails the build when work is parked
+with a free-form string or a reason code has no factory.
+
+Before the user is asked, every item that enters `NeedsAttention` goes through the resolution order
+(`AttentionTriageService`), which records what it did as run events (`AttentionRaised`, `AttentionRemediationAttempted`,
+`AttentionAutoResolved`, `AttentionNeedsYou`, `ControlAutoRetry`, `ControlAutoSkip`):
+
+1. **Known automatic remediation** (`IKnownRemediation`, one per code, deterministic, bounded per item until the user's next
+   Retry): a dirty ticket worktree is cleaned (tracked changes are saved as a patch in the run folder first) and verified;
+   a ticket branch that does not contain the integration branch gets the integration tip merged (conflicts go to the user);
+   a temporary GitHub or network failure while publishing is retried with a growing pause (30 s, 2 min, 5 min); a leftover
+   integration branch of the same run is reset while nothing was integrated; a failed exploration is run once more; a
+   reviewed ticket that adds nothing to the integration branch is skipped as "no changes needed". Interrupted steps are
+   restarted after a restart by the agent-step recovery and recorded the same way; merge conflicts first go to the
+   conflict-resolver agent. A remediation resumes the work exactly like the user's Retry would.
+2. Further stages (e.g. a troubleshooter agent session) register another `IAttentionStage` after the known remediation.
+3. The user, now with what was tried on the card.
 
 ## Build and test
 

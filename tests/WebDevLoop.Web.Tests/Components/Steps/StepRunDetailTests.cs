@@ -169,4 +169,30 @@ public sealed class StepRunDetailTests
         Assert.NotNull(cut.Find("[data-testid=controls-placeholder]"));
         Assert.Empty(cut.FindAll("[data-testid=controls-placeholder] button"));
     }
+
+    [Fact]
+    public void A_step_that_needs_attention_shows_the_read_only_card_without_buttons()
+    {
+        using var harness = HarnessWithStep(Views.Step("s1", status: StepStatus.NeedsAttention) with { Attention = AttentionData.Full(), FailureReason = "raw technical text" });
+
+        var cut = Render(harness);
+
+        Assert.Empty(cut.FindAll(".alert-danger"));
+        Assert.Equal(AttentionData.Full().Summary, cut.Find("[data-testid=failure-reason]").TextContent.Trim());
+        Assert.Empty(cut.FindAll("[data-testid=attention-card] button[data-testid^=control-]"));
+        Assert.Empty(cut.FindAll("[data-testid=attention-actions]"));
+        Assert.Equal("/tickets/t1", cut.Find("[data-testid=step-attention-hint] a").GetAttribute("href"));
+        Assert.NotNull(cut.Find("[data-testid=attention-details]"));
+    }
+
+    [Fact]
+    public void A_failed_step_keeps_the_plain_failure_box()
+    {
+        using var harness = HarnessWithStep(Views.Step("s1", status: StepStatus.Failed) with { FailureReason = "agent crashed" });
+
+        var cut = Render(harness);
+
+        Assert.Equal("agent crashed", cut.Find(".alert-danger[data-testid=failure-reason]").TextContent.Trim());
+        Assert.Empty(cut.FindAll("[data-testid=attention-card]"));
+    }
 }

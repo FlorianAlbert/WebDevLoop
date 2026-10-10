@@ -34,11 +34,11 @@ public sealed class RunControlJournal(IRunEventRepository runEvents, IOutbox out
         outbox.Append(new TicketRunStatusChanged(ticket.SpecRunId, ticket.Id, previous, next, now));
     }
 
-    public TicketRunStatus RetryTicket(TicketRun ticket, bool integrationInProgress)
+    public TicketRunStatus RetryTicket(TicketRun ticket, bool integrationInProgress, TicketRunStatus? resumeAt = null)
     {
         DateTimeOffset now = clock.UtcNow;
         TicketRunStatus previous = ticket.Status;
-        TicketRunStatus target = ticket.Retry(now, integrationInProgress);
+        TicketRunStatus target = ticket.Retry(now, integrationInProgress, resumeAt);
         outbox.Append(new TicketRunStatusChanged(ticket.SpecRunId, ticket.Id, previous, target, now));
         return target;
     }

@@ -21,7 +21,7 @@ public sealed class RepositoryProjectionTests : IDisposable
             scope.SpecRuns.Add(parked);
             scope.SpecRuns.Add(aborted);
             scope.SpecRuns.Add(completed);
-            parked.MarkNeedsAttention("limit", TestData.Now);
+            parked.MarkNeedsAttention(AttentionReasons.Unclassified("limit", true), TestData.Now);
             aborted.TransitionTo(SpecRunStatus.Aborted, TestData.Now);
             completed.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
             completed.TransitionTo(SpecRunStatus.Running, TestData.Now);

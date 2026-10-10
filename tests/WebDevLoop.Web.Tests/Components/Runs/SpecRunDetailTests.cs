@@ -215,15 +215,29 @@ public sealed class SpecRunDetailTests
     }
 
     [Fact]
-    public void Controls_area_offers_retry_and_abort_for_the_run()
+    public void Attention_card_hosts_retry_and_abort_for_a_run_that_needs_attention()
     {
         using var harness = HarnessWithSpec(SpecRunStatus.NeedsAttention);
 
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
 
         Assert.Empty(cut.FindAll("[data-testid=controls-placeholder]"));
-        Assert.False(cut.Find("[data-testid=run-controls] [data-testid=control-retry]").HasAttribute("disabled"));
-        Assert.NotNull(cut.Find("[data-testid=run-controls] [data-testid=control-abort]"));
+        Assert.Empty(cut.FindAll("[data-testid=run-controls]"));
+        Assert.False(cut.Find("[data-testid=attention-card] [data-testid=control-retry]").HasAttribute("disabled"));
+        Assert.NotNull(cut.Find("[data-testid=attention-card] [data-testid=control-abort]"));
+    }
+
+    [Fact]
+    public void Controls_area_offers_abort_with_its_consequence_while_the_run_is_working()
+    {
+        using var harness = HarnessWithSpec(SpecRunStatus.Running);
+        harness.Queries.Tickets.Add(Views.Ticket("t1", 10, TicketRunStatus.Implementing));
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.Empty(cut.FindAll("[data-testid=attention-card]"));
+        Assert.True(cut.Find("[data-testid=run-controls] [data-testid=control-retry]").HasAttribute("disabled"));
+        Assert.Contains("1 open ticket", cut.Find("[data-testid=run-controls] [data-testid=consequence-abort]").TextContent);
     }
 
     [Fact]
@@ -236,5 +250,107 @@ public sealed class SpecRunDetailTests
         cut.Find("[data-testid=control-retry]").Click();
 
         cut.WaitForAssertion(() => Assert.Equal("Running", cut.Find("[data-testid=spec-status]").TextContent.Trim()));
+    }
+
+    private static RunDetailHarness HarnessNeedingAttention(AttentionReason? attention = null, string? failure = "fatal: raw technical failure")
+    {
+        var harness = new RunDetailHarness();
+        harness.Queries.Specs.Add(Views.Spec(status: SpecRunStatus.NeedsAttention) with { Attention = attention ?? AttentionData.RunReason(), FailureReason = failure });
+        harness.Queries.Tickets.Add(Views.Ticket("t1", 10, TicketRunStatus.Implementing));
+        harness.Queries.Tickets.Add(Views.Ticket("t2", 11, TicketRunStatus.Blocked, blockedBy: "t1"));
+        harness.Queries.Tickets.Add(Views.Ticket("t3", 12, TicketRunStatus.Integrated));
+        return harness;
+    }
+
+    [Fact]
+    public void Needs_attention_shows_the_action_card_instead_of_the_red_failure_box()
+    {
+        using var harness = HarnessNeedingAttention();
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.Empty(cut.FindAll(".alert-danger"));
+        Assert.Equal(AttentionData.RunReason().Summary, cut.Find("[data-testid=failure-reason]").TextContent.Trim());
+        Assert.Equal("Your decision", cut.Find("[data-testid=attention-cause]").TextContent.Trim());
+        Assert.DoesNotContain("raw technical failure", cut.Find("[data-testid=attention-card]").TextContent);
+        Assert.False(cut.Find("[data-testid=attention-details]").HasAttribute("open"));
+    }
+
+    [Fact]
+    public void Abort_run_names_the_number_of_open_tickets_in_its_consequence_and_confirmation()
+    {
+        using var harness = HarnessNeedingAttention();
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.Equal("Aborts 2 open tickets (#10 Ticket 10, #11 Ticket 11).", cut.Find("[data-testid=impact-abort]").TextContent.Trim());
+        Assert.Contains("Starts another review round.", cut.Find("[data-testid=consequence-retry]").TextContent);
+
+        cut.Find("[data-testid=control-abort]").Click();
+
+        Assert.Contains("2 open tickets", cut.Find("[data-testid=control-confirm]").TextContent);
+        Assert.Empty(harness.Control.Calls);
+        cut.Find("[data-testid=control-confirm-yes]").Click();
+        Assert.Equal("abort-spec", Assert.Single(harness.Control.Calls).Command);
+    }
+
+    [Fact]
+    public void Merge_tracking_shows_the_real_summary_and_never_the_literal_parameter_expression()
+    {
+        using var harness = HarnessNeedingAttention(failure: "closed unmerged");
+        harness.Queries.Stack.Add(Views.Layer(1, "t1", 201));
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        string text = cut.Find("[data-testid=merge-tracking]").TextContent;
+        Assert.Contains("Needs attention: " + AttentionData.RunReason().Summary.TrimEnd('.'), text);
+        Assert.DoesNotContain("_spec.FailureReason", text);
+        Assert.DoesNotContain("_spec.FailureReason", cut.Markup);
+    }
+
+    [Fact]
+    public void Merge_tracking_passes_the_failure_text_as_a_value_when_there_is_no_structured_reason()
+    {
+        using var harness = new RunDetailHarness();
+        harness.Queries.Specs.Add(Views.Spec(status: SpecRunStatus.NeedsAttention) with { FailureReason = "closed unmerged" });
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.DoesNotContain("_spec.FailureReason", cut.Find("[data-testid=merge-tracking]").TextContent);
+        Assert.Contains("Needs attention: ", cut.Find("[data-testid=merge-tracking]").TextContent);
+    }
+
+    [Fact]
+    public void Merge_tracking_panel_prefers_the_summary_over_the_raw_failure()
+    {
+        using var context = new BunitContext();
+
+        var withReason = context.Render<MergeTrackingPanel>(p => p
+            .Add(c => c.Status, SpecRunStatus.NeedsAttention)
+            .Add(c => c.Attention, AttentionData.RunReason())
+            .Add(c => c.FailureReason, "raw"));
+        var withFailure = context.Render<MergeTrackingPanel>(p => p
+            .Add(c => c.Status, SpecRunStatus.NeedsAttention)
+            .Add(c => c.FailureReason, "raw failure."));
+        var withNothing = context.Render<MergeTrackingPanel>(p => p.Add(c => c.Status, SpecRunStatus.NeedsAttention));
+
+        Assert.Equal("Needs attention: The parent review still finds problems after 3 rounds.", withReason.Find("p").TextContent.Trim());
+        Assert.Equal("Needs attention: raw failure.", withFailure.Find("p").TextContent.Trim());
+        Assert.Contains("merge tracking failed", withNothing.Find("p").TextContent);
+    }
+
+    [Fact]
+    public void Attention_events_are_described_in_plain_language_on_the_timeline()
+    {
+        using var harness = HarnessWithSpec();
+        harness.Queries.Events.Add(new(1, "run-1", "t1", "AttentionRaised", "{\"code\":\"WorktreeNotClean\",\"summary\":\"The working folder is dirty.\",\"cause\":\"WebDevLoop\"}", Views.Now));
+        harness.Queries.Events.Add(new(2, "run-1", "t1", "AttentionAutoResolved", "{\"code\":\"WorktreeNotClean\",\"stage\":\"Known\",\"summary\":\"Removed 3 untracked files\",\"resume\":\"Retry\"}", Views.Now.AddMinutes(1)));
+        harness.Queries.Events.Add(new(3, "run-1", "t1", "ControlAutoRetry", "{\"action\":\"AutoRetry\",\"status\":\"Implementing\",\"tickets\":[]}", Views.Now.AddMinutes(2)));
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        string[] rows = cut.FindAll("[data-testid=run-event]").Select(row => row.TextContent).ToArray();
+        Assert.Contains("WebDevLoop retried it automatically", rows[0]);
+        Assert.Contains("WebDevLoop fixed it by itself: Removed 3 untracked files and resumed the work", rows[1]);
+        Assert.Contains("Needs attention: The working folder is dirty", rows[2]);
     }
 }

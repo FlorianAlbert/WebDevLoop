@@ -68,7 +68,8 @@ public sealed class MergeTrackingService(
         IReadOnlyList<PullStackLayer> stack = await layers.ListBySpecRunAsync(spec.Id, cancellationToken);
         if (stack.Count == 0)
         {
-            return await NeedsAttentionAsync(spec, $"Spec run '{spec.Id}' awaits merge but has no PR stack to track.", cancellationToken);
+            return await NeedsAttentionAsync(
+                spec, AttentionReasons.InternalInconsistency($"Spec run '{spec.Id}' awaits merge but has no PR stack to track.", forTicket: false), cancellationToken);
         }
 
         BranchName trunk = spec.BaseBranch ?? repository.DefaultBaseBranch;
@@ -81,7 +82,7 @@ public sealed class MergeTrackingService(
                 StackMergeStatus.Merged => await CompleteAsync(spec, cancellationToken),
                 StackMergeStatus.ClosedUnmerged => await NeedsAttentionAsync(
                     spec,
-                    $"The PR stack {PullRequestNumbers.Describe(bottomToTop)} was closed without being merged into '{trunk}'.",
+                    AttentionReasons.PullRequestsClosedUnmerged(PullRequestNumbers.Describe(bottomToTop), trunk.Value, repository.Ref.ToString()),
                     cancellationToken),
                 _ => await AllMergedAsync(repository.Ref, bottomToTop, cancellationToken)
                     ? await AwaitTrunkAsync(spec, stack, trunk, cancellationToken)
@@ -132,8 +133,10 @@ public sealed class MergeTrackingService(
             ? new MergeTrackingResult(MergeTrackingOutcome.AwaitingTrunk)
             : await NeedsAttentionAsync(
                 spec,
-                $"Every PR of the stack {PullRequestNumbers.Describe(stack.Select(layer => layer.PullRequestNumber))} is merged, but '{trunk}' does not contain the top layer "
-                    + $"#{top.PullRequestNumber} ({top.CommitSha}) {timeout:c} after the merge was first seen.",
+                AttentionReasons.TrunkMissingStack(
+                    $"Every PR of the stack {PullRequestNumbers.Describe(stack.Select(layer => layer.PullRequestNumber))} is merged, but '{trunk}' does not contain the top layer "
+                        + $"#{top.PullRequestNumber} ({top.CommitSha}) {timeout:c} after the merge was first seen.",
+                    trunk.Value),
                 cancellationToken);
     }
 
@@ -143,11 +146,11 @@ public sealed class MergeTrackingService(
         return await SaveAsync(cancellationToken) ? new MergeTrackingResult(MergeTrackingOutcome.Completed) : MergeTrackingResult.ConcurrencyConflict;
     }
 
-    private async Task<MergeTrackingResult> NeedsAttentionAsync(SpecRun spec, string reason, CancellationToken cancellationToken)
+    private async Task<MergeTrackingResult> NeedsAttentionAsync(SpecRun spec, AttentionReason reason, CancellationToken cancellationToken)
     {
         _journal.MarkNeedsAttention(spec, reason);
         return await SaveAsync(cancellationToken)
-            ? new MergeTrackingResult(MergeTrackingOutcome.NeedsAttention, reason)
+            ? new MergeTrackingResult(MergeTrackingOutcome.NeedsAttention, reason.Details)
             : MergeTrackingResult.ConcurrencyConflict;
     }
 

@@ -14,6 +14,7 @@ internal sealed class TicketRunConfiguration : IEntityTypeConfiguration<TicketRu
         builder.Property(ticket => ticket.Title).IsRequired();
         builder.Property(ticket => ticket.BodySnapshot).IsRequired();
         builder.ComplexProperty(ticket => ticket.Issue, IssueRefColumns.Configure);
+        builder.Property(ticket => ticket.Attention).HasConversion<AttentionReasonConverter>();
         builder.HasOne<SpecRun>().WithMany().HasForeignKey(ticket => ticket.SpecRunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(ticket => new { ticket.SpecRunId, ticket.Status }).HasDatabaseName("IX_TicketRuns_SpecRun_Status");
     }

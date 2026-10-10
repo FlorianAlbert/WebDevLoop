@@ -32,7 +32,7 @@ public sealed class RunControlRulesTests
         spec.TransitionTo(SpecRunStatus.Running, T0);
         spec.TransitionTo(SpecRunStatus.ParentReviewing, T0);
 
-        spec.MarkNeedsAttention("review failed", T0);
+        spec.MarkNeedsAttention(AttentionReasons.Unclassified("review failed", true), T0);
 
         Assert.Equal(SpecRunStatus.ParentReviewing, spec.NeedsAttentionFrom);
         Assert.Equal("review failed", spec.FailureReason);
@@ -43,7 +43,7 @@ public sealed class RunControlRulesTests
     {
         SpecRun spec = NewSpec();
         spec.TransitionTo(SpecRunStatus.Preparing, T0);
-        spec.MarkNeedsAttention("clone failed", T0);
+        spec.MarkNeedsAttention(AttentionReasons.Unclassified("clone failed", true), T0);
 
         spec.TransitionTo(SpecRunStatus.Preparing, T0);
 
@@ -94,7 +94,7 @@ public sealed class RunControlRulesTests
     {
         TicketRun ticket = TicketIn(TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing, TicketRunStatus.Integrating);
 
-        ticket.MarkNeedsAttention("push rejected", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("push rejected", true), T0);
 
         Assert.Equal(TicketRunStatus.Integrating, ticket.NeedsAttentionFrom);
     }
@@ -103,7 +103,7 @@ public sealed class RunControlRulesTests
     public void retrying_a_ticket_that_failed_while_implementing_reimplements_it()
     {
         TicketRun ticket = TicketIn(TicketRunStatus.Ready, TicketRunStatus.Implementing);
-        ticket.MarkNeedsAttention("retries exhausted", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("retries exhausted", true), T0);
 
         TicketRunStatus target = ticket.Retry(T0);
 
@@ -124,7 +124,7 @@ public sealed class RunControlRulesTests
         }
 
         ticket.LastImplementedSha = Head;
-        ticket.MarkNeedsAttention("review iterations exhausted", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("review iterations exhausted", true), T0);
 
         TicketRunStatus target = ticket.Retry(T0);
 
@@ -137,7 +137,7 @@ public sealed class RunControlRulesTests
     {
         TicketRun ticket = TicketIn(TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing, TicketRunStatus.Integrating);
         ticket.LastImplementedSha = Head;
-        ticket.MarkNeedsAttention("diff verification failed", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("diff verification failed", true), T0);
 
         Assert.Equal(TicketRunStatus.Integrating, ticket.Retry(T0));
         Assert.Equal((1, 0), (ticket.Attempt, ticket.ReviewIteration));
@@ -154,7 +154,7 @@ public sealed class RunControlRulesTests
             ticket.TransitionTo(TicketRunStatus.Reviewing, T0);
         }
 
-        ticket.MarkNeedsAttention("interrupted", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("interrupted", true), T0);
 
         Assert.Equal(TicketRunStatus.Integrating, ticket.Retry(T0, integrationInProgress: true));
         Assert.Equal((1, 0), (ticket.Attempt, ticket.ReviewIteration));
@@ -164,7 +164,7 @@ public sealed class RunControlRulesTests
     public void a_ticket_without_an_implemented_commit_is_reimplemented_whatever_phase_failed()
     {
         TicketRun ticket = TicketIn(TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing);
-        ticket.MarkNeedsAttention("implemented commit missing", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("implemented commit missing", true), T0);
 
         Assert.Equal(TicketRunStatus.Ready, ticket.Retry(T0));
     }

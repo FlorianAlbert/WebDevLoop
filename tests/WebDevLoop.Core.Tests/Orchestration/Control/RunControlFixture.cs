@@ -55,11 +55,17 @@ internal sealed class RunControlFixture : IDisposable
 
     public IRunControl Control()
     {
+        (SpecRunControl specs, TicketRunControl tickets) = Controls();
+        return new RunControlService(specs, tickets);
+    }
+
+    public (SpecRunControl Specs, TicketRunControl Tickets) Controls()
+    {
         var settings = new PersistedEffectiveSettingsProvider(Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
         var scheduler = new SpecQueueScheduler(Store, Store, new InMemoryGitHubIssues(), settings, Store, Store, Clock);
         var journal = new RunControlJournal(Store, Store, Clock);
         var stopper = new ActiveWorkStopper(Agents, Targets);
-        return new RunControlService(
+        return (
             new SpecRunControl(Store, Store, Store, Store, scheduler, Gate, stopper, journal, Store, Options),
             new TicketRunControl(Store, Store, Store, Store, Gate, stopper, journal, Store, Options));
     }
@@ -89,7 +95,7 @@ internal sealed class RunControlFixture : IDisposable
     public SpecRun SeedFailedSpec(params SpecRunStatus[] path)
     {
         SpecRun spec = SeedSpec(1, path);
-        spec.MarkNeedsAttention($"{path[^1]} failed", T0);
+        spec.MarkNeedsAttention(AttentionReasons.Unclassified($"{path[^1]} failed", true), T0);
         return spec;
     }
 
@@ -113,7 +119,7 @@ internal sealed class RunControlFixture : IDisposable
     public TicketRun SeedFailedTicket(SpecRun spec, params TicketRunStatus[] path)
     {
         TicketRun ticket = SeedTicket(spec, path);
-        ticket.MarkNeedsAttention($"{path[^1]} failed", T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified($"{path[^1]} failed", true), T0);
         return ticket;
     }
 

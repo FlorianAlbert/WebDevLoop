@@ -47,8 +47,8 @@ public sealed class SpecExplorer(
         RunWorkspaceLayout layout = RunWorkspaceLayout.For(settings.WorkspaceRootDirectory, run.Id);
         if (PathConfinement.IsUnder(layout.ExplorationNotesDirectory, repository.LocalPath))
         {
-            return ExplorationResult.Failed(
-                $"Exploration notes directory '{layout.ExplorationNotesDirectory}' would be inside the repository clone '{repository.LocalPath}'.");
+            return ExplorationResult.Failed(AttentionReasons.InternalInconsistency(
+                $"Exploration notes directory '{layout.ExplorationNotesDirectory}' would be inside the repository clone '{repository.LocalPath}'.", forTicket: false));
         }
 
         directories.EnsureExists(layout.ExplorationNotesDirectory);
@@ -65,7 +65,8 @@ public sealed class SpecExplorer(
             }
             catch (Exception exception) when (exception is SettingsValidationException or PromptRenderingException)
             {
-                return ExplorationResult.Failed($"The explorer prompt cannot be rendered: {exception.Message}");
+                return ExplorationResult.Failed(
+                    AttentionReasons.PromptNotRenderable("Explorer", $"The explorer prompt cannot be rendered: {exception.Message}", forTicket: false));
             }
 
             AttemptResult? finished = await RunAttemptAsync(context, attempt, prompt, cancellationToken);
@@ -82,7 +83,7 @@ public sealed class SpecExplorer(
             lastFailure = finished.Failure;
         }
 
-        return ExplorationResult.Failed($"Exploration failed after {maxAttempts} attempt(s): {lastFailure}");
+        return ExplorationResult.Failed(AttentionReasons.ExplorationFailed($"Exploration failed after {maxAttempts} attempt(s): {lastFailure}"));
     }
 
     /// <returns>The step's final status and failure reason, or null when a save lost a concurrency race.</returns>

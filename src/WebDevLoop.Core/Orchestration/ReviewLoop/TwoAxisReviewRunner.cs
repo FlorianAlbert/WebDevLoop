@@ -51,7 +51,8 @@ public sealed class TwoAxisReviewRunner(
 
         if (await LoadContextAsync(request, cancellationToken) is not { } context)
         {
-            return ReviewRoundResult.Failed($"Spec run '{request.SpecRunId}', its repository, its ticket, or its integration tip is missing.");
+            return ReviewRoundResult.Failed(AttentionReasons.InternalInconsistency(
+                $"Spec run '{request.SpecRunId}', its repository, its ticket, or its integration tip is missing.", request.Scope == ReviewScope.Ticket));
         }
 
         var reports = new Dictionary<FindingAxis, ReviewReport>();
@@ -68,7 +69,7 @@ public sealed class TwoAxisReviewRunner(
 
             if (turns.Failure is { } renderFailure)
             {
-                return ReviewRoundResult.Failed(renderFailure);
+                return ReviewRoundResult.Failed(AttentionReasons.PromptNotRenderable("Reviewer", renderFailure, request.Scope == ReviewScope.Ticket));
             }
 
             AgentRunResult[] results = await RunTurnsAsync(context, turns.Started, cancellationToken);
@@ -104,9 +105,13 @@ public sealed class TwoAxisReviewRunner(
 
         return pending.Length == 0
             ? new ReviewRoundResult(ReviewRoundOutcome.Completed, reports.OrderBy(pair => pair.Key).Select(pair => pair.Value).ToArray())
-            : ReviewRoundResult.Failed(string.Join(" ", pending.Select(axis =>
-                $"The {ReviewJson.Name(axis)} review failed after {attempts} attempt(s): {failures[axis]}")));
+            : ReviewRoundResult.Failed(ReviewFailure(
+                request.Scope,
+                string.Join(" ", pending.Select(axis => $"The {ReviewJson.Name(axis)} review failed after {attempts} attempt(s): {failures[axis]}"))));
     }
+
+    private static AttentionReason ReviewFailure(ReviewScope scope, string details) =>
+        scope == ReviewScope.Ticket ? AttentionReasons.ReviewFailed(details) : AttentionReasons.ParentReviewFailed(details);
 
     private async Task<ReviewContext?> LoadContextAsync(ReviewRequest request, CancellationToken cancellationToken)
     {

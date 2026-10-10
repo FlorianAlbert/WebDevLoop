@@ -51,7 +51,11 @@ public sealed class ParentSpecReviewRunner(
         if (await LoadContextAsync(spec, cancellationToken) is not { } context)
         {
             return await NeedsAttentionAsync(
-                spec, ParentReviewOutcome.Failed, $"Repository, integration base, or integration tip of spec run '{spec.Id}' is missing.", [], cancellationToken);
+                spec,
+                ParentReviewOutcome.Failed,
+                AttentionReasons.InternalInconsistency($"Repository, integration base, or integration tip of spec run '{spec.Id}' is missing.", forTicket: false),
+                [],
+                cancellationToken);
         }
 
         ReviewRound round = ParentReviewRounds.Current(spec);
@@ -67,14 +71,18 @@ public sealed class ParentSpecReviewRunner(
                 case ReviewRoundOutcome.ConcurrencyConflict:
                     return ParentReviewResult.ConcurrencyConflict;
                 case ReviewRoundOutcome.Failed:
-                    return await NeedsAttentionAsync(spec, ParentReviewOutcome.Failed, review.Reason!, [], cancellationToken);
+                    return await NeedsAttentionAsync(spec, ParentReviewOutcome.Failed, review.Attention!, [], cancellationToken);
             }
 
             results = await ReadRoundAsync(context, round, cancellationToken);
             if (results.Count < ReviewRequest.BothAxes.Count)
             {
                 return await NeedsAttentionAsync(
-                    spec, ParentReviewOutcome.Failed, $"The parent-spec review of {context.Head} completed without a persisted result for every axis.", [], cancellationToken);
+                    spec,
+                    ParentReviewOutcome.Failed,
+                    AttentionReasons.ParentReviewFailed($"The parent-spec review of {context.Head} completed without a persisted result for every axis."),
+                    [],
+                    cancellationToken);
             }
         }
 
@@ -142,7 +150,9 @@ public sealed class ParentSpecReviewRunner(
             return await NeedsAttentionAsync(
                 spec,
                 ParentReviewOutcome.NoNewWork,
-                $"Parent-spec review cycle {spec.ReviewCycle} only repeated findings whose tickets are already done ({issueList}); working the tickets again cannot resolve them.",
+                AttentionReasons.NoNewWork(
+                    "final review",
+                    $"Parent-spec review cycle {spec.ReviewCycle} only repeated findings whose tickets are already done ({issueList}); working the tickets again cannot resolve them."),
                 issuance.Tickets,
                 cancellationToken);
         }
@@ -153,9 +163,13 @@ public sealed class ParentSpecReviewRunner(
             return await NeedsAttentionAsync(
                 spec,
                 ParentReviewOutcome.CycleLimitReached,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The parent-spec review still found {sourced.Length} issue(s) after {spec.ReviewCycle} parent-spec review cycle(s); the limit is {limit}. Finding tickets: {issueList}."),
+                AttentionReasons.ParentReviewCycleLimit(
+                    sourced.Length,
+                    spec.ReviewCycle,
+                    limit,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The parent-spec review still found {sourced.Length} issue(s) after {spec.ReviewCycle} parent-spec review cycle(s); the limit is {limit}. Finding tickets: {issueList}.")),
                 issuance.Tickets,
                 cancellationToken);
         }
@@ -167,10 +181,10 @@ public sealed class ParentSpecReviewRunner(
     }
 
     private async Task<ParentReviewResult> NeedsAttentionAsync(
-        SpecRun spec, ParentReviewOutcome outcome, string reason, IReadOnlyList<FindingTicket> tickets, CancellationToken cancellationToken)
+        SpecRun spec, ParentReviewOutcome outcome, AttentionReason reason, IReadOnlyList<FindingTicket> tickets, CancellationToken cancellationToken)
     {
         _journal.MarkNeedsAttention(spec, reason);
-        return await SaveAsync(cancellationToken) ? new ParentReviewResult(outcome, tickets, reason) : ParentReviewResult.ConcurrencyConflict;
+        return await SaveAsync(cancellationToken) ? new ParentReviewResult(outcome, tickets, reason.Details) : ParentReviewResult.ConcurrencyConflict;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken) =>

@@ -20,4 +20,5 @@ public sealed record StepRunView(
     string? StructuredResultJson,
     string? FailureReason,
     string? Model,
-    string? ReasoningEffort);
+    string? ReasoningEffort,
+    AttentionReason? Attention = null);

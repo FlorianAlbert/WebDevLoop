@@ -222,7 +222,7 @@ public sealed class FakeOrchestratorContractTests
 
         private (SpecRun, TicketRun) Fail(SpecRun spec, TicketRun ticket, AgentRunResult result)
         {
-            ticket.MarkNeedsAttention($"{result.Outcome}: {result.FailureReason}", clock.UtcNow);
+            ticket.MarkNeedsAttention(AttentionReasons.Unclassified($"{result.Outcome}: {result.FailureReason}", true), clock.UtcNow);
             return (spec, ticket);
         }
 

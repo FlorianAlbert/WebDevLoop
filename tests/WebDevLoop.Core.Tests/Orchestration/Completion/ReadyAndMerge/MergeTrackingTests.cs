@@ -55,6 +55,7 @@ public sealed class MergeTrackingTests
 
         Assert.Equal(MergeTrackingOutcome.NeedsAttention, result.Outcome);
         Assert.Equal(SpecRunStatus.NeedsAttention, blocking.Status);
+        Assert.Equal(AttentionCode.PullRequestsClosedUnmerged, blocking.Attention!.Code);
         Assert.Contains("closed without being merged", blocking.FailureReason, StringComparison.Ordinal);
         Assert.Equal(SpecRunStatus.WaitingForDependency, dependent.Status);
     }
@@ -78,6 +79,7 @@ public sealed class MergeTrackingTests
         Assert.Equal(_fixture.Layers(spec)[^1].PullRequestNumber, waiting.TopPullRequest);
         Assert.Equal(MergeTrackingOutcome.NeedsAttention, afterTimeout.Outcome);
         Assert.Equal(SpecRunStatus.NeedsAttention, spec.Status);
+        Assert.Equal(AttentionCode.TrunkMissingStack, spec.Attention!.Code);
         Assert.Contains("does not contain", spec.FailureReason, StringComparison.Ordinal);
     }
 

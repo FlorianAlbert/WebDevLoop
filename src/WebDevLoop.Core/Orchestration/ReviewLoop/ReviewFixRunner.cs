@@ -77,6 +77,7 @@ public sealed class ReviewFixRunner(
         int firstAttempt = steps.Count(step => step.Kind == StepKind.Fix) + 1;
         int attempts = context.Settings.MaxRetries + 1;
         string? lastFailure = null;
+        string? lastBlocked = null;
         for (int turn = 0; turn < attempts; turn++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -88,9 +89,14 @@ public sealed class ReviewFixRunner(
             }
 
             lastFailure = result.RetryableFailure;
+            lastBlocked = result.BlockedMessage;
         }
 
-        return await NeedsAttentionAsync(ticket, $"Fixing the review findings failed after {attempts} attempt(s): {lastFailure}", cancellationToken);
+        string details = $"Fixing the review findings failed after {attempts} attempt(s): {lastFailure}";
+        AttentionReason reason = lastBlocked is null
+            ? AttentionReasons.FixFailed(attempts, lastFailure!).WithDetails(details)
+            : AttentionReasons.ImplementerBlocked(lastBlocked, fix: true).WithDetails(details);
+        return await NeedsAttentionAsync(ticket, reason, cancellationToken);
     }
 
     /// <returns>Null when the ticket now holds an implementer slot; otherwise why not.</returns>
@@ -125,7 +131,8 @@ public sealed class ReviewFixRunner(
         TicketRun ticket = context.Ticket;
         if (await CurrentIntegrationTipAsync(context, cancellationToken) is not { } integrationTip)
         {
-            return TurnResult.Finished(await NeedsAttentionAsync(ticket, $"Spec run '{context.Spec.Id}' has no integration tip.", cancellationToken));
+            return TurnResult.Finished(await NeedsAttentionAsync(
+                ticket, AttentionReasons.InternalInconsistency($"Spec run '{context.Spec.Id}' has no integration tip.", forTicket: true), cancellationToken));
         }
 
         string prompt;
@@ -135,7 +142,8 @@ public sealed class ReviewFixRunner(
         }
         catch (Exception exception) when (exception is SettingsValidationException or PromptRenderingException)
         {
-            return TurnResult.Finished(await NeedsAttentionAsync(ticket, $"The fix prompt cannot be rendered: {exception.Message}", cancellationToken));
+            return TurnResult.Finished(await NeedsAttentionAsync(
+                ticket, AttentionReasons.PromptNotRenderable("Implementer", $"The fix prompt cannot be rendered: {exception.Message}"), cancellationToken));
         }
 
         StepRun step = StartStep(context, attempt, resumable, prompt);
@@ -158,7 +166,7 @@ public sealed class ReviewFixRunner(
         if (verdict.Outcome is null)
         {
             _journal.Finish(step, verdict.StepStatus, verdict.ResultJson, verdict.Failure);
-            return await SaveAsync(cancellationToken) ? TurnResult.Retry(verdict.Failure!) : TurnResult.Finished(FixResult.ConcurrencyConflict);
+            return await SaveAsync(cancellationToken) ? TurnResult.Retry(verdict.Failure!, verdict.BlockedMessage) : TurnResult.Finished(FixResult.ConcurrencyConflict);
         }
 
         return TurnResult.Finished(await FinishAsync(context, step, verdict, cancellationToken));
@@ -175,7 +183,7 @@ public sealed class ReviewFixRunner(
     {
         if (await VerifyWorktreeAsync(context, cancellationToken) is { } problem)
         {
-            return new Verdict(StepStatus.Failed, FixOutcome.Failed, problem, null);
+            return new Verdict(StepStatus.Failed, FixOutcome.Failed, problem.Details, null, Attention: problem);
         }
 
         AgentRunRequest request = BuildRequest(context, step, prompt);
@@ -224,7 +232,7 @@ public sealed class ReviewFixRunner(
     }
 
     /// <returns>Null when the worktree is a clean checkout of the ticket branch containing the reviewed commit.</returns>
-    private async Task<string?> VerifyWorktreeAsync(ImplementationContext context, CancellationToken cancellationToken)
+    private async Task<AttentionReason?> VerifyWorktreeAsync(ImplementationContext context, CancellationToken cancellationToken)
     {
         BranchName branch = context.Ticket.BranchName;
         CommitSha reviewed = context.Ticket.LastImplementedSha!.Value;
@@ -235,8 +243,12 @@ public sealed class ReviewFixRunner(
             && await git.IsAncestorAsync(context.Location, reviewed, head, cancellationToken);
         return usable
             ? null
-            : $"Worktree '{context.WorktreePath}' is {worktree.Status} on '{worktree.Branch}' at {worktree.Head?.Value ?? "(missing)"} "
-              + $"instead of a clean checkout of '{branch}' containing the reviewed commit {reviewed}.";
+            : AttentionReasons.WorktreeNotClean(
+                context.WorktreePath,
+                branch.Value,
+                $"Worktree '{context.WorktreePath}' is {worktree.Status} on '{worktree.Branch}' at {worktree.Head?.Value ?? "(missing)"} "
+                + $"instead of a clean checkout of '{branch}' containing the reviewed commit {reviewed}.")
+                .WithTried("Saved uncommitted changes as a patch, reset the working folder and removed untracked files; it is still not a clean checkout of the reviewed commit.");
     }
 
     private static AgentRunRequest BuildRequest(ImplementationContext context, StepRun step, string prompt)
@@ -265,11 +277,12 @@ public sealed class ReviewFixRunner(
                 return verification.Outcome switch
                 {
                     ImplementationOutcome.Implemented => new Verdict(StepStatus.Succeeded, FixOutcome.Fixed, null, Serialize(report), head),
-                    ImplementationOutcome.IntegrationMergeMissing => new Verdict(StepStatus.NeedsAttention, FixOutcome.Failed, verification.Reason, Serialize(report)),
-                    _ => new Verdict(StepStatus.Failed, FixOutcome.Failed, verification.Reason, Serialize(report)),
+                    ImplementationOutcome.IntegrationMergeMissing => new Verdict(
+                        StepStatus.NeedsAttention, FixOutcome.Failed, verification.Reason, Serialize(report), Attention: verification.Attention),
+                    _ => new Verdict(StepStatus.Failed, FixOutcome.Failed, verification.Reason, Serialize(report), Attention: verification.Attention),
                 };
             case { Report: ImplementationReport report }:
-                return Verdict.Retryable(StepStatus.Failed, $"Implementer reported blocked: {report.Summary}", Serialize(report));
+                return Verdict.Retryable(StepStatus.Failed, $"Implementer reported blocked: {report.Summary}", Serialize(report), report.Summary);
             case { Report: { } other }:
                 return Verdict.Retryable(StepStatus.Failed, $"Implementer returned an unexpected {other.GetType().Name}.", null);
             case { Outcome: AgentRunOutcome.Cancelled }:
@@ -283,7 +296,7 @@ public sealed class ReviewFixRunner(
 
     private async Task<FixResult> FinishAsync(ImplementationContext context, StepRun step, Verdict verdict, CancellationToken cancellationToken)
     {
-        _journal.Finish(step, verdict.StepStatus, verdict.ResultJson, verdict.Failure);
+        _journal.Finish(step, verdict.StepStatus, verdict.ResultJson, verdict.Failure, verdict.Attention);
         switch (verdict.Outcome!.Value)
         {
             case FixOutcome.Fixed:
@@ -293,14 +306,15 @@ public sealed class ReviewFixRunner(
             case FixOutcome.Cancelled:
                 return await SaveAsync(cancellationToken) ? new FixResult(FixOutcome.Cancelled, verdict.Failure) : FixResult.ConcurrencyConflict;
             default:
-                return await NeedsAttentionAsync(context.Ticket, verdict.Failure!, cancellationToken);
+                return await NeedsAttentionAsync(
+                    context.Ticket, verdict.Attention ?? AttentionReasons.FixFailed(1, verdict.Failure!).WithDetails(verdict.Failure!), cancellationToken);
         }
     }
 
-    private async Task<FixResult> NeedsAttentionAsync(TicketRun ticket, string reason, CancellationToken cancellationToken)
+    private async Task<FixResult> NeedsAttentionAsync(TicketRun ticket, AttentionReason reason, CancellationToken cancellationToken)
     {
         _journal.MarkNeedsAttention(ticket, reason);
-        return await SaveAsync(cancellationToken) ? new FixResult(FixOutcome.Failed, reason) : FixResult.ConcurrencyConflict;
+        return await SaveAsync(cancellationToken) ? new FixResult(FixOutcome.Failed, reason.Details) : FixResult.ConcurrencyConflict;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken) =>
@@ -312,15 +326,23 @@ public sealed class ReviewFixRunner(
 
     /// <param name="Outcome">Null when the turn failed in a way a fresh session may fix.</param>
     /// <param name="FixedHead">The verified ticket branch head of a successful fix report.</param>
-    private sealed record Verdict(StepStatus StepStatus, FixOutcome? Outcome, string? Failure, string? ResultJson, CommitSha? FixedHead = null)
+    private sealed record Verdict(
+        StepStatus StepStatus,
+        FixOutcome? Outcome,
+        string? Failure,
+        string? ResultJson,
+        CommitSha? FixedHead = null,
+        AttentionReason? Attention = null,
+        string? BlockedMessage = null)
     {
-        public static Verdict Retryable(StepStatus status, string failure, string? resultJson) => new(status, null, failure, resultJson);
+        public static Verdict Retryable(StepStatus status, string failure, string? resultJson, string? blockedMessage = null) =>
+            new(status, null, failure, resultJson, BlockedMessage: blockedMessage);
     }
 
-    private sealed record TurnResult(FixResult? Final, string? RetryableFailure)
+    private sealed record TurnResult(FixResult? Final, string? RetryableFailure, string? BlockedMessage = null)
     {
         public static TurnResult Finished(FixResult result) => new(result, null);
 
-        public static TurnResult Retry(string failure) => new(null, failure);
+        public static TurnResult Retry(string failure, string? blockedMessage) => new(null, failure, blockedMessage);
     }
 }

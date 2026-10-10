@@ -58,7 +58,11 @@ public sealed class SpecTestRunner(
         if (await LoadContextAsync(spec, cancellationToken) is not { } context)
         {
             return await NeedsAttentionAsync(
-                spec, TestingOutcome.Failed, $"The repository or integration tip of spec run '{spec.Id}' is missing.", [], cancellationToken);
+                spec,
+                TestingOutcome.Failed,
+                AttentionReasons.InternalInconsistency($"The repository or integration tip of spec run '{spec.Id}' is missing.", forTicket: false),
+                [],
+                cancellationToken);
         }
 
         if (TestStepRecord.Latest(steps, spec.TestCycle, context.Head) is { } persisted)
@@ -72,7 +76,7 @@ public sealed class SpecTestRunner(
             TesterAttemptOutcome.Reported => await ConcludeAsync(context, tested.StepRunId!.Value, tested.Report!, cancellationToken),
             TesterAttemptOutcome.Cancelled => new TestingResult(TestingOutcome.Cancelled, [], tested.Failure),
             TesterAttemptOutcome.ConcurrencyConflict => TestingResult.ConcurrencyConflict,
-            _ => await NeedsAttentionAsync(spec, TestingOutcome.Failed, tested.Failure!, [], cancellationToken),
+            _ => await NeedsAttentionAsync(spec, TestingOutcome.Failed, AttentionReasons.TestingFailed(tested.Failure!), [], cancellationToken),
         };
     }
 
@@ -136,7 +140,7 @@ public sealed class SpecTestRunner(
                 return await SaveAsync(cancellationToken) ? new TestingResult(TestingOutcome.Passed, []) : TestingResult.ConcurrencyConflict;
             case TestVerdict.Blocked:
                 return await NeedsAttentionAsync(
-                    spec, TestingOutcome.Blocked, $"The tester could not test the application: {report.Summary}", [], cancellationToken);
+                    spec, TestingOutcome.Blocked, AttentionReasons.TesterBlocked(report.Summary), [], cancellationToken);
             default:
                 SourcedFinding[] sourced = report.Issues.Select(issue => new SourcedFinding(StepKind.Test, stepRunId, issue)).ToArray();
                 return await IssueFindingsAsync(context, sourced, cancellationToken);
@@ -159,7 +163,9 @@ public sealed class SpecTestRunner(
             return await NeedsAttentionAsync(
                 spec,
                 TestingOutcome.NoNewWork,
-                $"Test cycle {spec.TestCycle} only repeated issues whose tickets are already done ({issueList}); working the tickets again cannot resolve them.",
+                AttentionReasons.NoNewWork(
+                    "test",
+                    $"Test cycle {spec.TestCycle} only repeated issues whose tickets are already done ({issueList}); working the tickets again cannot resolve them."),
                 issuance.Tickets,
                 cancellationToken);
         }
@@ -170,9 +176,11 @@ public sealed class SpecTestRunner(
             return await NeedsAttentionAsync(
                 spec,
                 TestingOutcome.CycleLimitReached,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The tester still found {sourced.Length} issue(s) after {spec.TestCycle} test cycle(s); the limit is {limit}. Finding tickets: {issueList}."),
+                AttentionReasons.TestCycleLimit(
+                    spec.TestCycle,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The tester still found {sourced.Length} issue(s) after {spec.TestCycle} test cycle(s); the limit is {limit}. Finding tickets: {issueList}.")),
                 issuance.Tickets,
                 cancellationToken);
         }
@@ -184,10 +192,10 @@ public sealed class SpecTestRunner(
     }
 
     private async Task<TestingResult> NeedsAttentionAsync(
-        SpecRun spec, TestingOutcome outcome, string reason, IReadOnlyList<FindingTicket> tickets, CancellationToken cancellationToken)
+        SpecRun spec, TestingOutcome outcome, AttentionReason reason, IReadOnlyList<FindingTicket> tickets, CancellationToken cancellationToken)
     {
         _journal.MarkNeedsAttention(spec, reason);
-        return await SaveAsync(cancellationToken) ? new TestingResult(outcome, tickets, reason) : TestingResult.ConcurrencyConflict;
+        return await SaveAsync(cancellationToken) ? new TestingResult(outcome, tickets, reason.Details) : TestingResult.ConcurrencyConflict;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken) =>

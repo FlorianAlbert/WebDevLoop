@@ -16,7 +16,13 @@ public sealed class TicketRunControl(
     IUnitOfWork unitOfWork,
     RunControlOptions options)
 {
-    public async Task<ControlResult> RetryAsync(TicketRunId ticketRunId, CancellationToken cancellationToken)
+    /// <param name="automatic">WebDevLoop's own retry after a successful remediation rather than the user's command; audited as such.</param>
+    /// <param name="resumeAt">Where the remediation wants the ticket resumed; null resumes the phase that failed.</param>
+    public async Task<ControlResult> RetryAsync(
+        TicketRunId ticketRunId,
+        CancellationToken cancellationToken,
+        bool automatic = false,
+        TicketRunStatus? resumeAt = null)
     {
         (TicketRun? ticket, SpecRun? spec, ControlResult? refused) = await LoadAsync(ticketRunId, cancellationToken);
         if (refused is not null)
@@ -32,12 +38,16 @@ public sealed class TicketRunControl(
         // A saga past the squash must be resumed: implementing again would leave its commit orphaned on the integration branch.
         bool integrationInProgress = await sagas.FindLatestForTicketAsync(ticket.Id, cancellationToken)
             is { IsCompleted: false, Checkpoint: >= IntegrationSagaCheckpoint.SquashCommitCreated };
-        TicketRunStatus target = journal.RetryTicket(ticket, integrationInProgress);
-        journal.Record(ControlAction.Retry, spec!.Id, ticket.Id, target.ToString());
+        TicketRunStatus target = journal.RetryTicket(ticket, integrationInProgress, resumeAt);
+        journal.Record(automatic ? ControlAction.AutoRetry : ControlAction.Retry, spec!.Id, ticket.Id, target.ToString());
         return await SaveAsync(ticketRunId, cancellationToken);
     }
 
-    public async Task<ControlResult> SkipAsync(TicketRunId ticketRunId, SkipDependents dependents, CancellationToken cancellationToken)
+    public async Task<ControlResult> SkipAsync(
+        TicketRunId ticketRunId,
+        SkipDependents dependents,
+        CancellationToken cancellationToken,
+        bool automatic = false)
     {
         (TicketRun? ticket, SpecRun? spec, ControlResult? refused) = await LoadAsync(ticketRunId, cancellationToken);
         if (refused is not null)
@@ -70,7 +80,7 @@ public sealed class TicketRunControl(
             journal.MoveTicket(candidate, TicketRunStatus.Skipped);
         }
 
-        journal.Record(ControlAction.Skip, spec!.Id, ticket!.Id, nameof(TicketRunStatus.Skipped), skipped.Skip(1).Select(candidate => candidate.Id));
+        journal.Record(automatic ? ControlAction.AutoSkip : ControlAction.Skip, spec!.Id, ticket!.Id, nameof(TicketRunStatus.Skipped), skipped.Skip(1).Select(candidate => candidate.Id));
         return await SaveAsync(ticketRunId, cancellationToken);
     }
 

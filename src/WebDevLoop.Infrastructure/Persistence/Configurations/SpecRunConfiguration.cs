@@ -14,6 +14,7 @@ internal sealed class SpecRunConfiguration : IEntityTypeConfiguration<SpecRun>
         builder.Property(run => run.Title).IsRequired();
         builder.Property(run => run.BodySnapshot).IsRequired();
         builder.ComplexProperty(run => run.ParentIssue, IssueRefColumns.Configure);
+        builder.Property(run => run.Attention).HasConversion<AttentionReasonConverter>();
         builder.HasOne<RepositoryRecord>().WithMany().HasForeignKey(run => run.RepositoryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(run => new { run.RepositoryId, run.QueuePosition }).HasDatabaseName("IX_SpecRuns_Repository_QueuePosition");
         builder.HasIndex(run => run.Status).HasDatabaseName("IX_SpecRuns_Status");

@@ -34,7 +34,7 @@ public static partial class SpecRunDisplay
             blockers),
         SpecRunStatus.ReadyForReview => "Ready for human review",
         SpecRunStatus.AwaitingMerge => "Stack is open; waiting for a human to merge it",
-        SpecRunStatus.NeedsAttention => run.FailureReason ?? "Needs a human decision",
+        SpecRunStatus.NeedsAttention => AttentionDisplay.Headline(run.Attention, run.FailureReason) ?? "Needs a human decision",
         SpecRunStatus.Aborted => run.FailureReason,
         _ => null,
     };

@@ -22,6 +22,11 @@ internal sealed class PullRequestNumberConverter() : ValueConverter<PullRequestN
     number => number.Value,
     value => new PullRequestNumber(value));
 
+/// <summary>Structured attention guidance, stored as JSON; unreadable JSON reads back as no guidance.</summary>
+internal sealed class AttentionReasonConverter() : ValueConverter<AttentionReason, string>(
+    reason => reason.ToJson(),
+    json => AttentionReason.TryParse(json)!);
+
 /// <summary>Stored as UTC ticks so SQLite can order and compare timestamps; offsets are normalised to UTC.</summary>
 internal sealed class DateTimeOffsetTicksConverter() : ValueConverter<DateTimeOffset, long>(
     value => value.UtcTicks,

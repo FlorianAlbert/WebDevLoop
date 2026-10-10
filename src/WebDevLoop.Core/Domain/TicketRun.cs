@@ -36,7 +36,11 @@ public sealed class TicketRun : VersionedEntity
 
     public int? StackPosition { get; set; }
 
+    /// <summary>The technical wording of <see cref="Attention"/>; null unless the ticket needs attention.</summary>
     public string? FailureReason { get; private set; }
+
+    /// <summary>Structured guidance for the user while the ticket is in <see cref="TicketRunStatus.NeedsAttention"/>.</summary>
+    public AttentionReason? Attention { get; private set; }
 
     /// <summary>The phase the ticket was in when it last moved to <see cref="TicketRunStatus.NeedsAttention"/>, so a retry can resume it.</summary>
     public TicketRunStatus? NeedsAttentionFrom { get; private set; }
@@ -74,6 +78,7 @@ public sealed class TicketRun : VersionedEntity
 
         Status = next;
         FailureReason = null;
+        Attention = null;
         NeedsAttentionFrom = null;
         UpdatedAt = at;
 
@@ -99,8 +104,12 @@ public sealed class TicketRun : VersionedEntity
     /// The ticket's integration saga already squashed (its commit may be on the integration branch): whatever phase failed,
     /// the saga is resumed rather than implementing the ticket again.
     /// </param>
+    /// <param name="resumeAt">
+    /// A remediation that already repaired the phase's input resumes the ticket there instead of where <see cref="NeedsAttentionFrom"/> says
+    /// (e.g. a ticket branch brought up to date with the integration branch is reviewed rather than implemented again).
+    /// </param>
     /// <returns>The status the ticket moved to.</returns>
-    public TicketRunStatus Retry(DateTimeOffset at, bool integrationInProgress = false)
+    public TicketRunStatus Retry(DateTimeOffset at, bool integrationInProgress = false, TicketRunStatus? resumeAt = null)
     {
         if (Status != TicketRunStatus.NeedsAttention)
         {
@@ -110,6 +119,7 @@ public sealed class TicketRun : VersionedEntity
         TicketRunStatus target = (NeedsAttentionFrom, LastImplementedSha) switch
         {
             _ when integrationInProgress => TicketRunStatus.Integrating,
+            _ when resumeAt is { } requested => requested,
             (TicketRunStatus.Reviewing or TicketRunStatus.FixingReviewFindings, not null) => TicketRunStatus.Reviewing,
             (TicketRunStatus.Integrating, not null) => TicketRunStatus.Integrating,
             _ => TicketRunStatus.Ready,
@@ -125,11 +135,27 @@ public sealed class TicketRun : VersionedEntity
         return target;
     }
 
-    public void MarkNeedsAttention(string reason, DateTimeOffset at)
+    public void MarkNeedsAttention(AttentionReason reason, DateTimeOffset at)
     {
+        ArgumentNullException.ThrowIfNull(reason);
         TicketRunStatus failedIn = Status;
         TransitionTo(TicketRunStatus.NeedsAttention, at);
-        FailureReason = reason;
+        FailureReason = reason.Details;
+        Attention = reason;
         NeedsAttentionFrom = failedIn;
+    }
+
+    /// <summary>Replaces the guidance of a parked ticket, e.g. with what the remediation pipeline tried.</summary>
+    public void UpdateAttention(AttentionReason reason, DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(reason);
+        if (Status != TicketRunStatus.NeedsAttention)
+        {
+            throw new InvalidOperationException($"Ticket run '{Id}' is {Status}; only a ticket run that needs attention has guidance to update.");
+        }
+
+        FailureReason = reason.Details;
+        Attention = reason;
+        UpdatedAt = at;
     }
 }

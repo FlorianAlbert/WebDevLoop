@@ -1,5 +1,6 @@
 using Bunit;
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Orchestration.Control;
 using WebDevLoop.Web.Components.Tickets;
 using WebDevLoop.Web.Tests.Components.Support;
 
@@ -120,15 +121,126 @@ public sealed class TicketRunDetailTests
     }
 
     [Fact]
-    public void Controls_area_offers_retry_skip_and_abort_for_the_ticket()
+    public void Attention_card_hosts_retry_skip_and_abort_for_a_ticket_that_needs_attention()
     {
         using var harness = HarnessWithTicket(TicketRunStatus.NeedsAttention);
 
         var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
 
         Assert.Empty(cut.FindAll("[data-testid=controls-placeholder]"));
+        Assert.Empty(cut.FindAll("[data-testid=run-controls]"));
         Assert.Equal(
             ["control-retry", "control-skip", "control-skip-dependents", "control-abort"],
-            cut.FindAll("[data-testid=run-controls] button[data-testid^=control-]").Select(button => button.GetAttribute("data-testid")));
+            cut.FindAll("[data-testid=attention-card] button[data-testid^=control-]").Select(button => button.GetAttribute("data-testid")));
+    }
+
+    private static RunDetailHarness HarnessWithDependents()
+    {
+        var harness = new RunDetailHarness();
+        harness.Queries.Specs.Add(Views.Spec());
+        harness.Queries.Tickets.Add(Views.Ticket("t1", 10, TicketRunStatus.NeedsAttention) with { Attention = AttentionData.Full() });
+        harness.Queries.Tickets.Add(Views.Ticket("t2", 11, TicketRunStatus.Blocked, blockedBy: "t1") with { Title = "Add login" });
+        harness.Queries.Tickets.Add(Views.Ticket("t3", 12, TicketRunStatus.Blocked, blockedBy: "t2") with { Title = "Add logout" });
+        harness.Queries.Tickets.Add(Views.Ticket("t4", 13, TicketRunStatus.Implementing));
+        return harness;
+    }
+
+    [Fact]
+    public void Needs_attention_replaces_the_red_failure_box_with_the_action_card()
+    {
+        using var harness = HarnessWithDependents();
+        harness.Queries.Replace(harness.Queries.Tickets[0] with { FailureReason = "fatal: raw technical failure" });
+
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        Assert.Empty(cut.FindAll(".alert-danger"));
+        Assert.Equal(AttentionData.Full().Summary, cut.Find("[data-testid=failure-reason]").TextContent.Trim());
+        Assert.DoesNotContain("raw technical failure", cut.Find("[data-testid=attention-card]").TextContent);
+        Assert.Equal("Action needed", cut.Find("[data-testid=attention-card] h2").TextContent.Trim());
+        Assert.NotNull(cut.Find("[data-testid=attention-steps]"));
+    }
+
+    [Fact]
+    public void Skip_with_dependents_names_the_tickets_it_also_skips_and_confirms_with_them()
+    {
+        using var harness = HarnessWithDependents();
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        Assert.Equal("Also skips #11 Add login, #12 Add logout.", cut.Find("[data-testid=impact-skip-dependents]").TextContent.Trim());
+        Assert.Equal("Unblocks #11 Add login.", cut.Find("[data-testid=impact-skip]").TextContent.Trim());
+        Assert.Equal("Stay blocked: #11 Add login, #12 Add logout.", cut.Find("[data-testid=impact-abort]").TextContent.Trim());
+
+        cut.Find("[data-testid=control-skip-dependents]").Click();
+
+        string confirmation = cut.Find("[data-testid=control-confirm]").TextContent;
+        Assert.Contains("#10 Ticket 10", confirmation);
+        Assert.Contains("#11 Add login", confirmation);
+        Assert.Contains("#12 Add logout", confirmation);
+        Assert.DoesNotContain("Ticket 13", confirmation);
+        Assert.Empty(harness.Control.Calls);
+
+        cut.Find("[data-testid=control-confirm-yes]").Click();
+        Assert.Equal(("skip-ticket", "t1", (SkipDependents?)SkipDependents.Skip), Assert.Single(harness.Control.Calls));
+    }
+
+    [Fact]
+    public void Skip_and_abort_confirmations_name_the_affected_tickets()
+    {
+        using var harness = HarnessWithDependents();
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        cut.Find("[data-testid=control-skip]").Click();
+        Assert.Contains("#11 Add login", cut.Find("[data-testid=control-confirm]").TextContent);
+        cut.Find("[data-testid=control-confirm-no]").Click();
+
+        cut.Find("[data-testid=control-abort]").Click();
+        Assert.Contains("#12 Add logout", cut.Find("[data-testid=control-confirm]").TextContent);
+    }
+
+    [Fact]
+    public void A_ticket_without_dependents_says_so()
+    {
+        using var harness = HarnessWithDependents();
+        harness.Queries.Replace(harness.Queries.Tickets[3] with { Status = TicketRunStatus.NeedsAttention, Attention = AttentionData.Full() });
+
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t4"));
+
+        Assert.Equal("No other tickets depend on this one.", cut.Find("[data-testid=impact-skip-dependents]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void Needs_attention_without_a_structured_reason_falls_back_to_the_generic_guidance()
+    {
+        using var harness = HarnessWithTicket(TicketRunStatus.NeedsAttention);
+        harness.Queries.Replace(harness.Queries.Tickets[0] with { FailureReason = "legacy failure text" });
+
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        Assert.Contains("legacy failure text", cut.Find("[data-testid=attention-details-text]").TextContent);
+        Assert.Equal("Unclassified", cut.Find("[data-testid=attention-card]").GetAttribute("data-code"));
+    }
+
+    [Fact]
+    public void Other_statuses_keep_the_controls_area_with_consequence_lines_and_no_card()
+    {
+        using var harness = HarnessWithTicket(TicketRunStatus.Implementing);
+
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        Assert.Empty(cut.FindAll("[data-testid=attention-card]"));
+        Assert.NotNull(cut.Find("[data-testid=run-controls] [data-testid=control-abort]"));
+        Assert.Equal(4, cut.FindAll("[data-testid=run-controls] .run-controls__consequence").Count);
+    }
+
+    [Fact]
+    public void An_automatic_fix_in_progress_hides_the_buttons_until_asked()
+    {
+        using var harness = HarnessWithDependents();
+        harness.Queries.Replace(harness.Queries.Tickets[0] with { Attention = AttentionData.Pending() });
+
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        Assert.Contains("trying to fix this automatically", cut.Find("[data-testid=attention-auto-fix]").TextContent);
+        Assert.False(cut.Find("details[data-testid=attention-actions-anyway]").HasAttribute("open"));
     }
 }

@@ -42,6 +42,7 @@ public sealed class ImplementationFailureTests
         Assert.Contains("Copilot runtime unavailable.", result.Reason, StringComparison.Ordinal);
         Assert.Equal([StepStatus.Failed, StepStatus.Failed], _fixture.Steps(spec[1]).Select(step => step.Status));
         Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[1]).Status);
+        Assert.Equal(AttentionCode.ImplementationFailed, _fixture.Ticket(spec[1]).Attention!.Code);
     }
 
     private async Task<SeededSpec> SeedImplementingAsync()

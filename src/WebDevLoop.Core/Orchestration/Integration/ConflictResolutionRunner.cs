@@ -66,7 +66,8 @@ public sealed class ConflictResolutionRunner(
         }
         catch (Exception exception) when (exception is SettingsValidationException or PromptRenderingException)
         {
-            return ConflictResolution.Failed($"The conflict resolver prompt cannot be rendered: {exception.Message}");
+            return ConflictResolution.Failed(AttentionReasons.PromptNotRenderable(
+                "Conflict resolver", $"The conflict resolver prompt cannot be rendered: {exception.Message}"));
         }
 
         StepRun step = StartStep(context, attempt, prompt);
@@ -107,7 +108,7 @@ public sealed class ConflictResolutionRunner(
     }
 
     /// <returns>Null when the worktree is a clean checkout of the ticket branch at the reviewed commit; otherwise the problem.</returns>
-    private async Task<string?> EnsureWorktreeAsync(IntegrationContext context, CancellationToken cancellationToken)
+    private async Task<AttentionReason?> EnsureWorktreeAsync(IntegrationContext context, CancellationToken cancellationToken)
     {
         TicketRun ticket = context.Ticket;
         CommitSha reviewed = ticket.LastImplementedSha!.Value;
@@ -121,8 +122,12 @@ public sealed class ConflictResolutionRunner(
 
         return worktree.Status == WorktreeStatus.Clean && worktree.Branch == ticket.BranchName && worktree.Head == reviewed
             ? null
-            : $"Worktree '{context.WorktreePath}' is {worktree.Status} on '{worktree.Branch}' at {worktree.Head?.Value ?? "(missing)"} "
-              + $"instead of a clean checkout of '{ticket.BranchName}' at the reviewed commit {reviewed}.";
+            : AttentionReasons.WorktreeNotClean(
+                context.WorktreePath,
+                ticket.BranchName.Value,
+                $"Worktree '{context.WorktreePath}' is {worktree.Status} on '{worktree.Branch}' at {worktree.Head?.Value ?? "(missing)"} "
+                + $"instead of a clean checkout of '{ticket.BranchName}' at the reviewed commit {reviewed}.")
+                .WithTried("Saved uncommitted changes as a patch, reset the working folder and removed untracked files; it is still not a clean checkout of the reviewed commit.");
     }
 
     private async Task<string> RenderPromptAsync(

@@ -15,7 +15,7 @@ internal sealed class SpecRunJournal(IOutbox outbox, IClock clock)
         outbox.Append(new SpecRunStatusChanged(spec.Id, spec.RepositoryId, previous, next, now));
     }
 
-    public void MarkNeedsAttention(SpecRun spec, string reason)
+    public void MarkNeedsAttention(SpecRun spec, AttentionReason reason)
     {
         DateTimeOffset now = clock.UtcNow;
         SpecRunStatus previous = spec.Status;

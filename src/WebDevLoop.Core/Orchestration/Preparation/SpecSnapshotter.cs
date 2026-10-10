@@ -13,7 +13,7 @@ namespace WebDevLoop.Core.Orchestration.Preparation;
 public sealed class SpecSnapshotter(IGitHubIssues issues, ITicketRunRepository ticketRuns, IIdGenerator ids, IClock clock)
 {
     /// <returns>Null when the snapshot exists afterwards; otherwise why it was rejected (nothing is added).</returns>
-    public async Task<string?> SnapshotAsync(SpecRun run, CancellationToken cancellationToken)
+    public async Task<AttentionReason?> SnapshotAsync(SpecRun run, CancellationToken cancellationToken)
     {
         if ((await ticketRuns.ListBySpecRunAsync(run.Id, cancellationToken)).Count > 0)
         {
@@ -24,8 +24,9 @@ public sealed class SpecSnapshotter(IGitHubIssues issues, ITicketRunRepository t
         IssueSnapshot[] openTickets = graph.Tickets.Where(ticket => ticket.State == IssueState.Open).ToArray();
         if (openTickets.Length == 0)
         {
-            return $"Spec {run.ParentIssue} has no open ticket sub-issues, so there is nothing to implement. "
-                + "WebDevLoop does not split a spec into tickets: add the tickets as sub-issues of the spec on GitHub, then retry the run.";
+            return AttentionReasons.SpecHasNoTickets(
+                $"Spec {run.ParentIssue} has no open ticket sub-issues, so there is nothing to implement. "
+                + "WebDevLoop does not split a spec into tickets: add the tickets as sub-issues of the spec on GitHub, then retry the run.");
         }
 
         DependencyEdge<IssueRef>[] edges = graph.TicketDependencies
@@ -41,7 +42,7 @@ public sealed class SpecSnapshotter(IGitHubIssues issues, ITicketRunRepository t
         }
         catch (DependencyCycleException exception)
         {
-            return $"The ticket dependency graph of spec {run.ParentIssue} contains a cycle: {exception.Message}";
+            return AttentionReasons.TicketDependencyCycle($"The ticket dependency graph of spec {run.ParentIssue} contains a cycle: {exception.Message}");
         }
 
         DateTimeOffset now = clock.UtcNow;

@@ -61,12 +61,17 @@ public sealed class TicketImplementationRunner(
 
         if (await LoadContextAsync(ticket, cancellationToken) is not { } context)
         {
-            return await NeedsAttentionAsync(ticket, ImplementationOutcome.Failed, $"Spec run or repository of ticket '{ticket.Id}' is missing.", cancellationToken);
+            return await NeedsAttentionAsync(
+                ticket,
+                ImplementationOutcome.Failed,
+                AttentionReasons.InternalInconsistency($"Spec run or repository of ticket '{ticket.Id}' is missing.", forTicket: true),
+                cancellationToken);
         }
 
         int firstAttempt = steps.Count(step => step.Kind == StepKind.Implement) + 1;
         int attempts = context.Settings.MaxRetries + 1;
         string? lastFailure = null;
+        string? lastBlocked = null;
         AgentSessionId? resume = assignment.ResumeSessionId is { } interrupted && await IsResumableWorktreeAsync(context, cancellationToken)
             ? interrupted
             : null;
@@ -81,10 +86,14 @@ public sealed class TicketImplementationRunner(
             }
 
             lastFailure = result.RetryableFailure;
+            lastBlocked = result.BlockedMessage;
         }
 
-        return await NeedsAttentionAsync(
-            ticket, ImplementationOutcome.Failed, $"Implementation failed after {attempts} attempt(s): {lastFailure}", cancellationToken);
+        string details = $"Implementation failed after {attempts} attempt(s): {lastFailure}";
+        AttentionReason reason = lastBlocked is null
+            ? AttentionReasons.ImplementationFailed(attempts, lastFailure!).WithDetails(details)
+            : AttentionReasons.ImplementerBlocked(lastBlocked).WithDetails(details);
+        return await NeedsAttentionAsync(ticket, ImplementationOutcome.Failed, reason, cancellationToken);
     }
 
     private async Task<ImplementationContext?> LoadContextAsync(TicketRun ticket, CancellationToken cancellationToken)
@@ -120,7 +129,10 @@ public sealed class TicketImplementationRunner(
         if (await CurrentIntegrationTipAsync(context, cancellationToken) is not { } integrationTip)
         {
             return AttemptResult.Finished(await NeedsAttentionAsync(
-                ticket, ImplementationOutcome.Failed, $"Spec run '{context.Spec.Id}' has no integration tip.", cancellationToken));
+                ticket,
+                ImplementationOutcome.Failed,
+                AttentionReasons.InternalInconsistency($"Spec run '{context.Spec.Id}' has no integration tip.", forTicket: true),
+                cancellationToken));
         }
 
         string prompt;
@@ -131,7 +143,10 @@ public sealed class TicketImplementationRunner(
         catch (Exception exception) when (exception is SettingsValidationException or PromptRenderingException)
         {
             return AttemptResult.Finished(await NeedsAttentionAsync(
-                ticket, ImplementationOutcome.Failed, $"The implementer prompt cannot be rendered: {exception.Message}", cancellationToken));
+                ticket,
+                ImplementationOutcome.Failed,
+                AttentionReasons.PromptNotRenderable("Implementer", $"The implementer prompt cannot be rendered: {exception.Message}"),
+                cancellationToken));
         }
 
         StepRun step = StartStep(context, attempt, prompt, resume);
@@ -155,7 +170,7 @@ public sealed class TicketImplementationRunner(
         {
             FinishStep(step, verdict);
             return await SaveAsync(cancellationToken)
-                ? AttemptResult.Retry(verdict.Failure!)
+                ? AttemptResult.Retry(verdict.Failure!, verdict.BlockedMessage)
                 : AttemptResult.Finished(ImplementationResult.ConcurrencyConflict);
         }
 
@@ -190,7 +205,7 @@ public sealed class TicketImplementationRunner(
         await git.PrepareWorktreeAsync(context.Location, new WorktreeSpec(branch, integrationTip, context.WorktreePath), cancellationToken);
         if (await _verifier.VerifyWorktreeBaseAsync(context.Location, context.WorktreePath, branch, integrationTip, cancellationToken) is { } problem)
         {
-            return new Verdict(StepStatus.Failed, ImplementationOutcome.Failed, problem, null);
+            return new Verdict(StepStatus.Failed, ImplementationOutcome.Failed, problem.Details, null, Attention: problem);
         }
 
         AgentRunResult run = await agents.StartAsync(BuildRequest(context, step, prompt), cancellationToken);
@@ -253,11 +268,12 @@ public sealed class TicketImplementationRunner(
                 return verification.Outcome switch
                 {
                     ImplementationOutcome.Implemented => new Verdict(StepStatus.Succeeded, ImplementationOutcome.Implemented, null, Serialize(report), head),
-                    ImplementationOutcome.IntegrationMergeMissing => new Verdict(StepStatus.NeedsAttention, verification.Outcome, verification.Reason, Serialize(report)),
-                    _ => new Verdict(StepStatus.Failed, verification.Outcome, verification.Reason, Serialize(report)),
+                    ImplementationOutcome.IntegrationMergeMissing => new Verdict(
+                        StepStatus.NeedsAttention, verification.Outcome, verification.Reason, Serialize(report), Attention: verification.Attention),
+                    _ => new Verdict(StepStatus.Failed, verification.Outcome, verification.Reason, Serialize(report), Attention: verification.Attention),
                 };
             case { Report: ImplementationReport report }:
-                return Verdict.Retryable(StepStatus.Failed, $"Implementer reported blocked: {report.Summary}", Serialize(report));
+                return Verdict.Retryable(StepStatus.Failed, $"Implementer reported blocked: {report.Summary}", Serialize(report), report.Summary);
             case { Report: { } other }:
                 return Verdict.Retryable(StepStatus.Failed, $"Implementer returned an unexpected {other.GetType().Name}.", null);
             case { Outcome: AgentRunOutcome.Cancelled }:
@@ -285,28 +301,37 @@ public sealed class TicketImplementationRunner(
             case ImplementationOutcome.Cancelled:
                 return await SaveAsync(cancellationToken) ? new ImplementationResult(outcome, verdict.Failure) : ImplementationResult.ConcurrencyConflict;
             default:
-                return await NeedsAttentionAsync(context.Ticket, outcome, verdict.Failure!, cancellationToken);
+                return await NeedsAttentionAsync(
+                    context.Ticket, outcome, verdict.Attention ?? AttentionReasons.ImplementationFailed(1, verdict.Failure!).WithDetails(verdict.Failure!), cancellationToken);
         }
     }
 
     private void FinishStep(StepRun step, Verdict verdict)
     {
         DateTimeOffset now = clock.UtcNow;
-        step.Finish(verdict.StepStatus, now, verdict.ResultJson, verdict.Failure);
+        if (verdict.StepStatus == StepStatus.NeedsAttention)
+        {
+            step.MarkNeedsAttention(verdict.Attention!, now, verdict.ResultJson);
+        }
+        else
+        {
+            step.Finish(verdict.StepStatus, now, verdict.ResultJson, verdict.Failure);
+        }
+
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
     }
 
     private async Task<ImplementationResult> NeedsAttentionAsync(
         TicketRun ticket,
         ImplementationOutcome outcome,
-        string reason,
+        AttentionReason reason,
         CancellationToken cancellationToken)
     {
         DateTimeOffset now = clock.UtcNow;
         TicketRunStatus previous = ticket.Status;
         ticket.MarkNeedsAttention(reason, now);
         outbox.Append(new TicketRunStatusChanged(ticket.SpecRunId, ticket.Id, previous, TicketRunStatus.NeedsAttention, now));
-        return await SaveAsync(cancellationToken) ? new ImplementationResult(outcome, reason) : ImplementationResult.ConcurrencyConflict;
+        return await SaveAsync(cancellationToken) ? new ImplementationResult(outcome, reason.Details) : ImplementationResult.ConcurrencyConflict;
     }
 
     private async Task<bool> SaveAsync(CancellationToken cancellationToken) =>
@@ -323,15 +348,18 @@ public sealed class TicketImplementationRunner(
         ImplementationOutcome? Outcome,
         string? Failure,
         string? ResultJson,
-        CommitSha? ImplementedHead = null)
+        CommitSha? ImplementedHead = null,
+        AttentionReason? Attention = null,
+        string? BlockedMessage = null)
     {
-        public static Verdict Retryable(StepStatus status, string failure, string? resultJson) => new(status, null, failure, resultJson);
+        public static Verdict Retryable(StepStatus status, string failure, string? resultJson, string? blockedMessage = null) =>
+            new(status, null, failure, resultJson, BlockedMessage: blockedMessage);
     }
 
-    private sealed record AttemptResult(ImplementationResult? Final, string? RetryableFailure)
+    private sealed record AttemptResult(ImplementationResult? Final, string? RetryableFailure, string? BlockedMessage = null)
     {
         public static AttemptResult Finished(ImplementationResult result) => new(result, null);
 
-        public static AttemptResult Retry(string failure) => new(null, failure);
+        public static AttemptResult Retry(string failure, string? blockedMessage) => new(null, failure, blockedMessage);
     }
 }

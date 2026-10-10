@@ -116,7 +116,7 @@ public sealed class IntegrationRecoveryTests
         TicketRun second = f.SeedReviewedTicket(spec, 2, "second.cs");
         f.JournaledPulls.FailNextCreate = new HttpRequestException("503 Service Unavailable");
         await f.IntegrateAsync(first);
-        first.MarkNeedsAttention("Operator paused the ticket.", IntegrationFixture.T0);
+        first.MarkNeedsAttention(AttentionReasons.Unclassified("Operator paused the ticket.", true), IntegrationFixture.T0);
         CommitSha tip = f.LocalTip(spec.IntegrationBranch);
 
         IntegrationResult result = await f.IntegrateAsync(second);

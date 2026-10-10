@@ -18,7 +18,8 @@ public sealed class SpecRunControl(
     IUnitOfWork unitOfWork,
     RunControlOptions options)
 {
-    public async Task<ControlResult> RetryAsync(RunId specRunId, CancellationToken cancellationToken)
+    /// <param name="automatic">WebDevLoop's own retry after a successful remediation rather than the user's command; audited as such.</param>
+    public async Task<ControlResult> RetryAsync(RunId specRunId, CancellationToken cancellationToken, bool automatic = false)
     {
         if (await specRuns.GetAsync(specRunId, cancellationToken) is not { } spec)
         {
@@ -50,7 +51,7 @@ public sealed class SpecRunControl(
         }
 
         journal.MoveSpec(spec, target);
-        journal.Record(ControlAction.Retry, spec.Id, null, target.ToString());
+        journal.Record(automatic ? ControlAction.AutoRetry : ControlAction.Retry, spec.Id, null, target.ToString());
         return await SaveAsync(specRunId, cancellationToken) ? ControlResult.Applied() : Conflict(specRunId);
     }
 

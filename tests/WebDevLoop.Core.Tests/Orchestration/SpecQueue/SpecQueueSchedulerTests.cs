@@ -314,7 +314,7 @@ public sealed class SpecQueueSchedulerTests
         SpecRun dependent = await _fixture.EnqueueAsync(2);
         await _fixture.ScheduleAsync();
         _fixture.Advance(blocker, ToAwaitingMerge);
-        blocker.MarkNeedsAttention("closed unmerged", _fixture.Clock.UtcNow);
+        blocker.MarkNeedsAttention(AttentionReasons.Unclassified("closed unmerged", true), _fixture.Clock.UtcNow);
 
         SpecScheduleResult result = await _fixture.ScheduleAsync();
 

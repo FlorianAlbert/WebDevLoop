@@ -45,6 +45,7 @@ public sealed class IntegrationFaultTests
         Assert.Equal(IntegrationOutcome.Faulted, first.Outcome);
         Assert.Equal(IntegrationOutcome.NeedsAttention, second.Outcome);
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Equal(AttentionCode.IntegrationTemporaryFailure, ticket.Attention!.Code);
         Assert.Contains("503", ticket.FailureReason, StringComparison.Ordinal);
         Assert.Single(_f.Transitions(ticket, TicketRunStatus.NeedsAttention));
     }

@@ -17,6 +17,9 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
 
     public IReadOnlyList<string>? ConflictOnNextSquash { get; set; }
 
+    /// <summary>Makes the next squash report that the source adds nothing to the integration tip.</summary>
+    public bool NoChangesOnNextSquash { get; set; }
+
     public CommitSha Commit(CommitSha[] parents, params string[] files)
     {
         var sha = new CommitSha((++_nextCommit).ToString("x40"));
@@ -159,6 +162,12 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
         {
             ConflictOnNextSquash = null;
             return Task.FromResult(GitMergeResult.Conflicted(conflicted));
+        }
+
+        if (NoChangesOnNextSquash)
+        {
+            NoChangesOnNextSquash = false;
+            return Task.FromResult(GitMergeResult.AlreadyUpToDate(request.IntegrationTip));
         }
 
         CommitSha squash = Commit([request.IntegrationTip], [.. FilesBetween(request.IntegrationTip, request.Source)]);

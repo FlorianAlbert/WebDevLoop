@@ -9,6 +9,9 @@
 
     [Parameter] public int LayerCount { get; set; }
 
+    /// <summary>The plain-language reason of a run that needs attention; preferred over <see cref="FailureReason"/>.</summary>
+    [Parameter] public AttentionReason? Attention { get; set; }
+
     [Parameter] public string? FailureReason { get; set; }
 
     private string Describe() => Status switch
@@ -16,8 +19,11 @@
         SpecRunStatus.ReadyForReview => $"Stack ready for review ({LayerCount} pull requests).",
         SpecRunStatus.AwaitingMerge => $"Awaiting merge of {LayerCount} stacked pull requests into the base branch.",
         SpecRunStatus.Completed => "Merged: the base branch contains the top layer of the stack.",
-        SpecRunStatus.NeedsAttention => $"Needs attention: {FailureReason ?? "the stack was closed unmerged or merge tracking failed"}.",
+        SpecRunStatus.NeedsAttention => $"Needs attention: {NeedsAttentionText()}.",
         SpecRunStatus.Aborted => "Aborted before the stack was merged.",
         _ => "Merge tracking starts once the stack is ready for review.",
     };
+
+    private string NeedsAttentionText() =>
+        (Attention?.Summary ?? FailureReason ?? "the stack was closed unmerged or merge tracking failed").TrimEnd('.', ' ');
 }

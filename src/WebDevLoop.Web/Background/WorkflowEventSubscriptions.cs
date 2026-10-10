@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Attention;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
@@ -30,6 +31,7 @@ public sealed class WorkflowEventSubscriptions(IRunEventBus bus, IServiceScopeFa
         Subscribe<ParentReviewEventHandler>((handler, envelope, token) => handler.HandleAsync(envelope, token));
         Subscribe<TestingEventHandler>((handler, envelope, token) => handler.HandleAsync(envelope, token));
         Subscribe<CompletionEventHandler>((handler, envelope, token) => handler.HandleAsync(envelope, token));
+        Subscribe<AttentionTriageEventHandler>((handler, envelope, token) => handler.HandleAsync(envelope, token));
         return Task.CompletedTask;
     }
 

@@ -67,7 +67,7 @@ internal sealed class AgentStepRecoveryFixture
         return new AgentStepRecoveryService(
             Runtimes,
             LeaseStopper(scope),
-            new InterruptedStepFinisher(workflow, workflow, workflow, Execution.Settings, Review.Agents, Logs, workflow, scope, Clock, Boot, options),
+            new InterruptedStepFinisher(workflow, workflow, workflow, Execution.Settings, Review.Agents, Logs, RunEvents, workflow, scope, Clock, Boot, options),
             new StalledWorkRelauncher(workflow, workflow, workflow, launchers, Clock, Boot, options));
     }
 
@@ -76,6 +76,8 @@ internal sealed class AgentStepRecoveryFixture
         scope ??= Testing.OpenScope();
         return new OrphanedTestLeaseStopper(scope, Testing.Target, scope, Clock, Boot);
     }
+
+    public RecordingRunEvents RunEvents { get; } = new();
 
     public Task<AgentStepRecoveryReport> RecoverAsync() => Service().RecoverAsync(Token);
 

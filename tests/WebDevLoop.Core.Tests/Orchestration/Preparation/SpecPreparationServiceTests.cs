@@ -74,6 +74,7 @@ public sealed class SpecPreparationServiceTests
 
         Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
         Assert.Equal(SpecRunStatus.NeedsAttention, run.Status);
+        Assert.Equal(AttentionCode.TicketDependencyCycle, run.Attention!.Code);
         Assert.Contains("cycle", run.FailureReason);
         Assert.Empty(await TicketRuns.ListBySpecRunAsync(run.Id, Ct));
         Assert.Null(await LocalTipAsync(run.IntegrationBranch));
@@ -90,6 +91,7 @@ public sealed class SpecPreparationServiceTests
 
         Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
         Assert.Equal(SpecRunStatus.NeedsAttention, run.Status);
+        Assert.Equal(AttentionCode.SpecHasNoTickets, run.Attention!.Code);
         Assert.Contains("no open ticket sub-issues", run.FailureReason);
         Assert.Empty(await TicketRuns.ListBySpecRunAsync(run.Id, Ct));
         Assert.Null(await LocalTipAsync(run.IntegrationBranch));
@@ -123,6 +125,26 @@ public sealed class SpecPreparationServiceTests
 
         Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
         Assert.Contains("develop", run.FailureReason);
+        Assert.Equal(AttentionCode.BaseBranchMissing, run.Attention!.Code);
+        Assert.Contains("'develop'", run.Attention.Summary, StringComparison.Ordinal);
+        Assert.Contains(run.Attention.UserSteps, step => step.LinkHref is "/settings#section-general");
+    }
+
+    [Fact]
+    public async Task an_integration_branch_left_by_an_earlier_attempt_needs_attention_with_the_automatic_reset_on_offer()
+    {
+        _fixture.SeedSpec(1);
+        _fixture.SeedTicket(2, spec: 1);
+        SpecRun run = await ActivateAsync(1);
+        CommitSha leftover = _fixture.Git.Commit([], "leftover.txt");
+        await _fixture.Git.UpdateBranchAsync(GitRepositoryLocation.From(_fixture.Repository), run.IntegrationBranch, leftover, null, Ct);
+
+        PreparationOutcome outcome = await _fixture.PrepareAsync(run);
+
+        Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
+        Assert.Equal(AttentionCode.IntegrationBranchExists, run.Attention!.Code);
+        Assert.True(run.Attention.AutoFixPending);
+        Assert.Contains(leftover.Value, run.FailureReason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -145,7 +167,7 @@ public sealed class SpecPreparationServiceTests
         _fixture.SeedTicket(2, spec: 1);
         SpecRun run = await ActivateAsync(1);
         await _fixture.PrepareAsync(run);
-        run.MarkNeedsAttention("parked for the test", _fixture.Clock.UtcNow);
+        run.MarkNeedsAttention(AttentionReasons.Unclassified("parked for the test", true), _fixture.Clock.UtcNow);
         run.TransitionTo(SpecRunStatus.Preparing, _fixture.Clock.UtcNow);
         _fixture.Git.SeedRemoteBranch(SpecWorkflowFixture.Trunk, "moved.txt");
 

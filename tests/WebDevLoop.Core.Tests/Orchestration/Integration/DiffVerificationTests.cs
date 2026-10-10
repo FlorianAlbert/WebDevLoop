@@ -31,6 +31,7 @@ public sealed class DiffVerificationTests
         Assert.Equal(IntegrationOutcome.NeedsAttention, result.Outcome);
         Assert.Contains("Diff verification", result.Reason, StringComparison.Ordinal);
         Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Equal(AttentionCode.DiffVerificationFailed, ticket.Attention!.Code);
         Assert.Equal(IssueState.Open, _f.IssueState(ticket));
         Assert.Empty(_f.CallsOf($"close:{ticket.Issue}"));
         Assert.Empty(_f.Transitions(ticket, TicketRunStatus.Integrated));

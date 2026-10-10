@@ -135,6 +135,7 @@ public sealed class ParentSpecReviewRunnerTests
         Assert.Equal(2, _fixture.Tickets(spec.Id).Count);
         SpecRun needsAttention = _fixture.Spec(spec.Id);
         Assert.Equal(SpecRunStatus.NeedsAttention, needsAttention.Status);
+        Assert.Equal(AttentionCode.NoNewWork, needsAttention.Attention!.Code);
         Assert.Contains($"#{first.Issue.Number}", needsAttention.FailureReason, StringComparison.Ordinal);
     }
 
@@ -152,6 +153,7 @@ public sealed class ParentSpecReviewRunnerTests
         Assert.Equal(TicketRunStatus.Blocked, _fixture.Tickets(spec.Id).Single(ticket => ticket.Id == result.Tickets[0].TicketRunId).Status);
         SpecRun needsAttention = _fixture.Spec(spec.Id);
         Assert.Equal(SpecRunStatus.NeedsAttention, needsAttention.Status);
+        Assert.Equal(AttentionCode.ParentReviewCycleLimit, needsAttention.Attention!.Code);
         Assert.Contains("1 parent-spec review cycle(s)", needsAttention.FailureReason, StringComparison.Ordinal);
     }
 
@@ -165,6 +167,7 @@ public sealed class ParentSpecReviewRunnerTests
 
         Assert.Equal(ParentReviewOutcome.Failed, result.Outcome);
         Assert.Equal(SpecRunStatus.NeedsAttention, _fixture.Spec(spec.Id).Status);
+        Assert.Equal(AttentionCode.ParentReviewFailed, _fixture.Spec(spec.Id).Attention!.Code);
         Assert.Contains("specification review failed", _fixture.Spec(spec.Id).FailureReason, StringComparison.Ordinal);
         Assert.Empty(_fixture.Issues.CreatedDrafts);
     }

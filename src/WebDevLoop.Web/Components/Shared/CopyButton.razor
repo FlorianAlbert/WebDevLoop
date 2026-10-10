@@ -1,0 +1,42 @@
+@implements IDisposable
+@inject IJSRuntime JS
+
+@* Copies Text to the clipboard through the browser API; the outcome is announced to screen readers. *@
+<button type="button" class="btn btn-sm btn-outline-secondary copy-button" aria-label="@AriaLabel" data-testid="copy-button" @onclick="CopyAsync">
+    <Icon Name="@(_state == CopyState.Copied ? "check" : "copy")" Size="14" />
+    <span>@(_state switch { CopyState.Copied => "Copied", CopyState.Failed => "Copy failed", _ => "Copy" })</span>
+</button>
+<span class="visually-hidden" role="status" aria-live="polite" data-testid="copy-status">@(_state switch { CopyState.Copied => "Copied to the clipboard.", CopyState.Failed => "Could not copy. Select the text and copy it by hand.", _ => "" })</span>
+
+@code {
+    private enum CopyState { Idle, Copied, Failed }
+
+    private CopyState _state;
+    private Timer? _reset;
+
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+
+    [Parameter] public string AriaLabel { get; set; } = "Copy to clipboard";
+
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Text);
+            _state = CopyState.Copied;
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException)
+        {
+            _state = CopyState.Failed;
+        }
+
+        _reset?.Dispose();
+        _reset = new Timer(_ => InvokeAsync(() =>
+        {
+            _state = CopyState.Idle;
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(2.5), Timeout.InfiniteTimeSpan);
+    }
+
+    public void Dispose() => _reset?.Dispose();
+}

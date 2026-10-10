@@ -9,14 +9,27 @@
                 <tr data-run-id="@run.Id">
                     <td class="text-body-secondary text-nowrap">#@run.ParentIssueNumber</td>
                     <td>@run.Title</td>
-                    <td class="text-nowrap">
+                    <td class="@(run.Status == SpecRunStatus.NeedsAttention ? "" : "text-nowrap")">
                         <SpecStatusBadge Status="run.Status" />
                         @if (run.Status == SpecRunStatus.WaitingForDependency)
                         {
                             <span class="small text-body-secondary" title="@DisplayNames.Describe(mode)">Mode: @DisplayNames.For(mode)</span>
                         }
+                        @if (run.Status == SpecRunStatus.NeedsAttention)
+                        {
+                            <div class="small mt-1 queue-attention" data-testid="run-attention-@run.Id">@SpecRunDisplay.Note(run, EffectiveDependencyMode)</div>
+                        }
                     </td>
-                    <td class="small text-body-secondary" data-testid="run-note-@run.Id">@SpecRunDisplay.Note(run, EffectiveDependencyMode, Dependencies.GetValueOrDefault(run.Id))</td>
+                    <td class="small text-body-secondary" data-testid="run-note-@run.Id">
+                        @if (run.Status == SpecRunStatus.NeedsAttention)
+                        {
+                            <a href="@UiRoutes.Run(run.Id)">@AttentionDisplay.CallToAction(run.Attention)</a>
+                        }
+                        else
+                        {
+                            @SpecRunDisplay.Note(run, EffectiveDependencyMode, Dependencies.GetValueOrDefault(run.Id))
+                        }
+                    </td>
                     <td class="text-end"><a href="@UiRoutes.Run(run.Id)">Details</a></td>
                 </tr>
             }

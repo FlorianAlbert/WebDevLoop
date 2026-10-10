@@ -1,16 +1,21 @@
 @page "/repositories"
 @inherits LiveComponentBase
+@inject IJSRuntime JS
 
-<PageTitle>Repositories</PageTitle>
-
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h4 mb-0">Repositories</h1>
-    <button type="button" class="btn btn-primary btn-sm" data-testid="show-register" @onclick="() => _showRegister = !_showRegister">Activate repositories</button>
-</div>
+<PageHeader Title="Repositories" Description="The current repository only decides what the Queue page shows; scheduling always covers every enabled repository.">
+    <Actions>
+        <button type="button" class="btn @(_showRegister ? "btn-outline-secondary" : "btn-primary") btn-sm" data-testid="show-register"
+                aria-expanded="@(_showRegister ? "true" : "false")" aria-controls="register-panel" @onclick="() => _showRegister = !_showRegister">
+            <Icon Name="plus" /> Add repository
+        </button>
+    </Actions>
+</PageHeader>
 
 @if (_showRegister)
 {
-    <RepositoryRegistrationForm OnRegistered="HandleRegistered" OnRemoved="HandleRemoved" OnCancel="() => _showRegister = false" />
+    <div id="register-panel">
+        <RepositoryRegistrationForm OnRegistered="HandleRegistered" OnRemoved="HandleRemoved" OnCancel="() => _showRegister = false" />
+    </div>
 }
 
 @if (_message is not null)
@@ -28,68 +33,84 @@ else if (LoadError is not null)
 }
 else if (_repositories.Count == 0)
 {
-    <p class="text-muted">No repositories registered yet. Use “Activate repositories” to pick one.</p>
+    @if (!_showRegister)
+    {
+        <EmptyState Icon="repositories" Title="No repositories yet" Text="No repositories registered yet. Use “Add repository” to pick one." />
+    }
 }
 else
 {
-    <p class="small text-muted">The current repository only decides what the Queue page shows; scheduling always covers every enabled repository.</p>
-    <table class="table table-sm align-middle">
-        <thead>
-            <tr><th>Repository</th><th>Base branch</th><th>Local path</th><th>State</th><th class="text-end">Actions</th></tr>
-        </thead>
-        <tbody>
-            @foreach (RepositoryView repository in _repositories)
-            {
-                bool isCurrent = repository.Id == RepositoryContext.CurrentRepositoryId;
-                <tr data-repo-id="@repository.Id" class="@(isCurrent ? "table-primary" : null)">
-                    <td>
-                        <strong>@repository.Owner/@repository.Name</strong>
-                        @if (isCurrent)
-                        {
-                            <span class="badge text-bg-primary ms-1">Current</span>
-                        }
-                    </td>
-                    <td>@repository.DefaultBaseBranch</td>
-                    <td class="text-break small">@repository.LocalPath</td>
-                    <td>
-                        @if (repository.IsEnabled)
-                        {
-                            <span class="badge text-bg-success">Enabled</span>
-                        }
-                        else
-                        {
-                            <span class="badge text-bg-secondary">Disabled</span>
-                        }
-                    </td>
-                    <td class="text-end text-nowrap">
-                        @if (!isCurrent)
-                        {
-                            <button type="button" class="btn btn-outline-primary btn-sm" data-testid="select-@repository.Id" @onclick="() => RepositoryContext.Select(repository.Id)">Use</button>
-                        }
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="edit-@repository.Id" @onclick="() => ToggleEdit(repository.Id)">Edit</button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="toggle-@repository.Id" @onclick="() => SetEnabledAsync(repository)">@(repository.IsEnabled ? "Disable" : "Enable")</button>
-                        @if (_confirmRemoveId == repository.Id)
-                        {
-                            <button type="button" class="btn btn-danger btn-sm" data-testid="confirm-remove-@repository.Id" @onclick="() => RemoveAsync(repository)">Confirm remove</button>
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="cancel-remove-@repository.Id" @onclick="() => _confirmRemoveId = null">Cancel</button>
-                        }
-                        else
-                        {
-                            <button type="button" class="btn btn-outline-danger btn-sm" data-testid="remove-@repository.Id" @onclick="() => _confirmRemoveId = repository.Id">Remove</button>
-                        }
-                    </td>
-                </tr>
-                @if (_editingId == repository.Id)
+    <SectionCard NoPadding="true">
+        <table class="table align-middle mb-0 repo-table">
+            <thead>
+                <tr><th>Repository</th><th>Base branch</th><th>Local path</th><th>State</th><th class="text-end">Actions</th></tr>
+            </thead>
+            <tbody>
+                @foreach (RepositoryView repository in _repositories)
                 {
-                    <tr>
-                        <td colspan="5" class="bg-body-tertiary">
-                            <RepositoryEditForm Repository="repository" OnSaved="HandleEdited" OnCancel="() => _editingId = null" />
+                    bool isCurrent = repository.Id == RepositoryContext.CurrentRepositoryId;
+                    string fullName = $"{repository.Owner}/{repository.Name}";
+                    bool pending = _pendingIds.Contains(repository.Id);
+                    <tr data-repo-id="@repository.Id" class="@(isCurrent ? "table-primary" : null)">
+                        <td data-label="Repository">
+                            <strong>@fullName</strong>
+                            @if (isCurrent)
+                            {
+                                <StatusPill Variant="StatusVariant.Info" Class="ms-1">Current</StatusPill>
+                            }
+                        </td>
+                        <td data-label="Base branch">@repository.DefaultBaseBranch</td>
+                        <td data-label="Local path">
+                            <span class="repo-path small" title="@repository.LocalPath" data-testid="path-@repository.Id">@repository.LocalPath</span>
+                            <button type="button" class="btn btn-link btn-sm p-0 ms-1" data-testid="copy-path-@repository.Id" aria-label="Copy path of @fullName" @onclick="() => CopyPathAsync(repository)">Copy</button>
+                        </td>
+                        <td data-label="State">
+                            @if (repository.IsEnabled)
+                            {
+                                <StatusPill Variant="StatusVariant.Success" ShowDot="true">Enabled</StatusPill>
+                            }
+                            else
+                            {
+                                <StatusPill Variant="StatusVariant.Neutral" ShowDot="true">Disabled</StatusPill>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="repo-actions">
+                                @if (!isCurrent)
+                                {
+                                    <button type="button" class="btn btn-outline-primary btn-sm" data-testid="select-@repository.Id" aria-label="Use @fullName" @onclick="() => RepositoryContext.Select(repository.Id)">Use</button>
+                                }
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="edit-@repository.Id" aria-label="Edit @fullName" aria-expanded="@(_editingId == repository.Id ? "true" : "false")" @onclick="() => ToggleEdit(repository.Id)">Edit</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="toggle-@repository.Id" disabled="@pending" @onclick="() => SetEnabledAsync(repository)">
+                                    @(pending ? "Saving…" : repository.IsEnabled ? "Disable" : "Enable")
+                                </button>
+                                <span class="repo-actions__danger">
+                                    <button type="button" class="btn btn-link btn-sm text-danger p-0" data-testid="remove-@repository.Id" aria-label="Remove @fullName" disabled="@pending" @onclick="() => StartRemove(repository.Id)">Remove</button>
+                                </span>
+                            </div>
                         </td>
                     </tr>
+                    @if (_confirmRemoveId == repository.Id)
+                    {
+                        <tr>
+                            <td colspan="5">
+                                <RepositoryRemoveConfirm FullName="@fullName" Busy="pending" ConfirmTestId="@($"confirm-remove-{repository.Id}")" CancelTestId="@($"cancel-remove-{repository.Id}")"
+                                                         OnConfirm="() => RemoveAsync(repository)" OnCancel="() => _confirmRemoveId = null" />
+                            </td>
+                        </tr>
+                    }
+                    @if (_editingId == repository.Id)
+                    {
+                        <tr>
+                            <td colspan="5" class="bg-body-tertiary">
+                                <RepositoryEditForm Repository="repository" OnSaved="HandleEdited" OnCancel="() => _editingId = null" />
+                            </td>
+                        </tr>
+                    }
                 }
-            }
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </SectionCard>
 }
 
 @code {
@@ -100,15 +121,69 @@ else
     private int? _editingId;
     private int? _confirmRemoveId;
     private Message? _message;
+    private int _messageVersion;
+    private readonly HashSet<int> _pendingIds = [];
 
     protected override async Task LoadAsync(CancellationToken cancellationToken) =>
         _repositories = await InScopeAsync(services => services.GetRequiredService<IRepositoryQueries>().ListAsync(cancellationToken));
 
-    private void ToggleEdit(int repositoryId) => _editingId = _editingId == repositoryId ? null : repositoryId;
+    private void ToggleEdit(int repositoryId)
+    {
+        _message = null;
+        _editingId = _editingId == repositoryId ? null : repositoryId;
+    }
+
+    private void StartRemove(int repositoryId)
+    {
+        _message = null;
+        _confirmRemoveId = repositoryId;
+    }
+
+    private async Task CopyPathAsync(RepositoryView repository)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", repository.LocalPath);
+            ShowMessage("success", $"Copied the path of {repository.Owner}/{repository.Name}.");
+        }
+        catch (JSException)
+        {
+            ShowMessage("danger", "Could not copy the path.");
+        }
+    }
+
+    private void ShowMessage(string severity, string text)
+    {
+        _message = new(severity, text);
+        int version = ++_messageVersion;
+        if (severity == "success")
+        {
+            _ = DismissLaterAsync(version);
+        }
+    }
+
+    private async Task DismissLaterAsync(int version)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (version == _messageVersion)
+                {
+                    _message = null;
+                    StateHasChanged();
+                }
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
 
     private void HandleRegistered(RepositoryView registered)
     {
-        _message = new("success", $"Activated {registered.Owner}/{registered.Name}.");
+        ShowMessage("success", $"Added {registered.Owner}/{registered.Name}.");
         if (RepositoryContext.CurrentRepositoryId is null)
         {
             RepositoryContext.Select(registered.Id);
@@ -132,22 +207,44 @@ else
     private void HandleEdited()
     {
         _editingId = null;
-        _message = new("success", "Repository updated.");
+        ShowMessage("success", "Repository updated.");
         RepositoryContext.NotifyChanged();
     }
 
     private async Task SetEnabledAsync(RepositoryView repository)
     {
-        CommandResult<RepositoryView> result = await InScopeAsync(services =>
-            services.GetRequiredService<IRepositoryRegistry>().UpdateAsync(repository.Id, new UpdateRepositoryCommand(IsEnabled: !repository.IsEnabled), CancellationToken.None));
+        _message = null;
+        _pendingIds.Add(repository.Id);
+        CommandResult<RepositoryView> result;
+        try
+        {
+            result = await InScopeAsync(services =>
+                services.GetRequiredService<IRepositoryRegistry>().UpdateAsync(repository.Id, new UpdateRepositoryCommand(IsEnabled: !repository.IsEnabled), CancellationToken.None));
+        }
+        finally
+        {
+            _pendingIds.Remove(repository.Id);
+        }
+
         Report(result.IsSuccess, result.IsSuccess ? $"{repository.Name} {(repository.IsEnabled ? "disabled" : "enabled")}." : result.Message);
     }
 
     private async Task RemoveAsync(RepositoryView repository)
     {
-        _confirmRemoveId = null;
-        CommandResult<int> result = await InScopeAsync(services =>
-            services.GetRequiredService<IRepositoryRegistry>().RemoveAsync(repository.Id, CancellationToken.None));
+        _message = null;
+        _pendingIds.Add(repository.Id);
+        CommandResult<int> result;
+        try
+        {
+            result = await InScopeAsync(services =>
+                services.GetRequiredService<IRepositoryRegistry>().RemoveAsync(repository.Id, CancellationToken.None));
+        }
+        finally
+        {
+            _pendingIds.Remove(repository.Id);
+            _confirmRemoveId = null;
+        }
+
         if (result.IsSuccess && RepositoryContext.CurrentRepositoryId == repository.Id)
         {
             RepositoryContext.Select(null);
@@ -158,7 +255,7 @@ else
 
     private void Report(bool success, string? text)
     {
-        _message = new(success ? "success" : "danger", text ?? "The request failed.");
+        ShowMessage(success ? "success" : "danger", text ?? "The request failed.");
         RepositoryContext.NotifyChanged();
     }
 }

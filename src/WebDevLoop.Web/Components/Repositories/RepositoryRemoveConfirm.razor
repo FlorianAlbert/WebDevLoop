@@ -1,0 +1,37 @@
+@* Shared confirmation for both Remove actions; takes focus on the Confirm button so keyboard users land on it. *@
+<div class="alert alert-danger mb-0 mt-2 small" role="alertdialog" aria-label="Confirm removal of @FullName" data-testid="remove-confirmation">
+    <p class="mb-2">
+        <strong>Remove @FullName?</strong>
+        Its local clone is deleted and any queued specs are dropped. A repository that already has runs cannot be removed; disable it instead.
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-danger btn-sm" @ref="_confirmButton" data-testid="@ConfirmTestId" disabled="@Busy" @onclick="OnConfirm">
+            @(Busy ? "Removing…" : "Confirm remove")
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="@CancelTestId" disabled="@Busy" @onclick="OnCancel">Cancel</button>
+    </div>
+</div>
+
+@code {
+    private ElementReference _confirmButton;
+
+    [Parameter, EditorRequired] public string FullName { get; set; } = string.Empty;
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public string ConfirmTestId { get; set; } = "confirm-remove";
+
+    [Parameter] public string CancelTestId { get; set; } = "cancel-remove";
+
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _confirmButton.FocusAsync();
+        }
+    }
+}

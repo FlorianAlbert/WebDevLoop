@@ -4,18 +4,19 @@
 @inject GitHubUserSession Session
 @inject GitHubAppAccess AppAccess
 
-<div class="card card-body mb-3" data-testid="register-form">
+<SectionCard Title="Add repository" Description="Pick from the repositories the GitHub App can reach." Class="mb-3" data-testid="register-form">
     @if (!Session.Status.IsConfigured || !Session.Status.IsSignedIn)
     {
         <div class="alert alert-warning mb-2" role="alert" data-testid="register-signin-required">
             @(Session.Status.IsConfigured ? "Sign in with GitHub" : "Configure the GitHub sign-in") on the
-            <a href="github">GitHub page</a> first: repositories are activated from the ones the GitHub App can reach.
+            <a href="github">GitHub page</a> first: repositories are added from the ones the GitHub App can reach.
         </div>
     }
     else
     {
-        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <input type="search" name="filter" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Filter repositories…" aria-label="Filter repositories"
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+            <label for="register-filter" class="visually-hidden">Filter repositories</label>
+            <input id="register-filter" type="search" name="filter" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Filter repositories…"
                    data-testid="register-filter" @bind="Filter" @bind:event="oninput" />
             <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="register-refresh" disabled="@(_loading || _busy)" @onclick="LoadAsync">
                 @(_loading ? "Loading…" : "Refresh")
@@ -54,23 +55,23 @@
                     @foreach (string fullName in visible)
                     {
                         RepositoryView? registered = FindRegistered(fullName);
-                        <li class="list-group-item d-flex align-items-center gap-2 py-1" data-repo="@fullName" data-active="@((registered is not null).ToString().ToLowerInvariant())">
+                        <li class="list-group-item d-flex flex-wrap align-items-center gap-2 py-2" data-repo="@fullName" data-active="@((registered is not null).ToString().ToLowerInvariant())">
                             <span class="me-auto">@fullName</span>
                             @if (registered is null)
                             {
-                                <button type="button" class="btn btn-primary btn-sm" data-testid="activate" disabled="@_busy" @onclick="() => ActivateAsync(fullName)">Activate</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-testid="activate" aria-label="Add @fullName" disabled="@(_busy)" @onclick="() => ActivateAsync(fullName)">
+                                    @(_pendingName == fullName ? "Adding…" : "Add")
+                                </button>
                             }
                             else
                             {
-                                <span class="badge text-bg-success">Active</span>
+                                <StatusPill Variant="StatusVariant.Success" ShowDot="true">Added</StatusPill>
+                                <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-3" data-testid="remove" aria-label="Remove @fullName" disabled="@_busy" @onclick="() => _confirmRemove = fullName">Remove</button>
                                 @if (_confirmRemove == fullName)
                                 {
-                                    <button type="button" class="btn btn-danger btn-sm" data-testid="confirm-remove" disabled="@_busy" @onclick="() => RemoveAsync(registered)">Confirm remove</button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="cancel-remove" @onclick="() => _confirmRemove = null">Cancel</button>
-                                }
-                                else
-                                {
-                                    <button type="button" class="btn btn-outline-danger btn-sm" data-testid="remove" disabled="@_busy" @onclick="() => _confirmRemove = fullName">Remove</button>
+                                    <div class="w-100">
+                                        <RepositoryRemoveConfirm FullName="@fullName" Busy="_busy" OnConfirm="() => RemoveAsync(registered)" OnCancel="() => _confirmRemove = null" />
+                                    </div>
                                 }
                             }
                         </li>
@@ -79,10 +80,10 @@
             }
         }
     }
-    <div class="mt-2">
+    <div class="mt-3">
         <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="register-close" @onclick="OnCancel">Close</button>
     </div>
-</div>
+</SectionCard>
 
 @code {
     private IReadOnlyList<string>? _candidates;
@@ -92,6 +93,7 @@
     private string? _accessError;
     private bool _loading;
     private bool _busy;
+    private string? _pendingName;
 
     private string Filter { get; set; } = string.Empty;
 
@@ -147,6 +149,7 @@
 
     private async Task ActivateAsync(string fullName)
     {
+        _pendingName = fullName;
         int separator = fullName.IndexOf('/');
         var command = new RegisterRepositoryCommand(fullName[..separator], fullName[(separator + 1)..]);
         await RunAsync(async () =>
@@ -167,7 +170,6 @@
 
     private async Task RemoveAsync(RepositoryView repository)
     {
-        _confirmRemove = null;
         await RunAsync(async () =>
         {
             CommandResult<int> result = await InScopeAsync(services =>
@@ -181,6 +183,8 @@
             _registered.RemoveAll(registered => registered.Id == repository.Id);
             await OnRemoved.InvokeAsync(repository);
         });
+
+        _confirmRemove = null;
     }
 
     private async Task RunAsync(Func<Task> action)
@@ -197,6 +201,7 @@
         }
         finally
         {
+            _pendingName = null;
             _busy = false;
         }
     }

@@ -138,4 +138,43 @@ public sealed class RepositoriesPageTests : UiTestContext
 
         Assert.Contains("No repositories registered", cut.Markup);
     }
+
+    [Fact]
+    public void remove_confirmation_spells_out_the_consequences()
+    {
+        IRenderedComponent<RepositoriesPage> cut = Render<RepositoriesPage>();
+
+        cut.Find("[data-testid=remove-1]").Click();
+
+        string text = cut.Find("[data-testid=remove-confirmation]").TextContent;
+        Assert.Contains("local clone is deleted", text);
+        Assert.Contains("queued specs", text);
+        Assert.Equal("Remove acme/widgets", cut.Find("[data-testid=remove-1]").GetAttribute("aria-label"));
+    }
+
+    [Fact]
+    public void edit_form_has_associated_labels_and_a_heading()
+    {
+        IRenderedComponent<RepositoriesPage> cut = Render<RepositoriesPage>();
+
+        cut.Find("[data-testid=edit-1]").Click();
+
+        Assert.Equal("Editing acme/widgets", cut.Find("[data-testid=edit-heading]").TextContent);
+        Assert.NotNull(cut.Find("label[for=edit-branch-1]"));
+        Assert.Equal("edit-branch-1", cut.Find("input[name=defaultBaseBranch]").Id);
+        Assert.Equal("edit-clone-1", cut.Find("input[name=cloneUrl]").Id);
+    }
+
+    [Fact]
+    public void the_success_message_is_cleared_by_the_next_action()
+    {
+        Registry.UpdateResult = CommandResult<RepositoryView>.Succeeded(ApiData.Repository(1, "widgets", enabled: false));
+        IRenderedComponent<RepositoriesPage> cut = Render<RepositoriesPage>();
+        cut.Find("[data-testid=toggle-1]").Click();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=page-message]")));
+
+        cut.Find("[data-testid=edit-2]").Click();
+
+        Assert.Empty(cut.FindAll("[data-testid=page-message]"));
+    }
 }

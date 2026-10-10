@@ -133,7 +133,39 @@ public sealed class RepositoryActivationTests : UiTestContext
         Assert.Empty(Rows(cut));
     }
 
-    private IRenderedComponent<RepositoriesPage> OpenPicker(bool signedIn)
+    [Fact]
+    public void add_buttons_are_outline_and_name_their_repository()
+    {
+        IRenderedComponent<RepositoriesPage> cut = OpenPicker(signedIn: true);
+
+        AngleSharp.Dom.IElement add = cut.Find("[data-repo='acme/tools'] [data-testid=activate]");
+        Assert.Equal("Add acme/tools", add.GetAttribute("aria-label"));
+        Assert.Contains("btn-outline-primary", add.ClassName);
+        Assert.NotNull(cut.Find("label[for=register-filter]"));
+    }
+
+    [Fact]
+    public void the_picker_remove_shows_the_same_consequences_as_the_table()
+    {
+        IRenderedComponent<RepositoriesPage> cut = OpenPicker(signedIn: true);
+
+        cut.Find("[data-repo='acme/widgets'] [data-testid=remove]").Click();
+
+        Assert.Contains("local clone is deleted", cut.Find("[data-repo='acme/widgets'] [data-testid=remove-confirmation]").TextContent);
+    }
+
+    [Fact]
+    public void header_toggle_exposes_its_open_state_and_hides_the_empty_state_while_open()
+    {
+        Repositories.Repositories.Clear();
+        IRenderedComponent<RepositoriesPage> cut = OpenPicker(signedIn: true, expectRows: false);
+
+        Assert.Equal("true", cut.Find("[data-testid=show-register]").GetAttribute("aria-expanded"));
+        Assert.DoesNotContain("No repositories registered", cut.Markup);
+        Assert.Contains("Add repository", cut.Find("[data-testid=show-register]").TextContent);
+    }
+
+    private IRenderedComponent<RepositoriesPage> OpenPicker(bool signedIn, bool expectRows = true)
     {
         GitHubUserSession session = _github.CreateSession(new MemoryCredentialStore(signedIn ? StubGitHub.SignedIn() : null));
         Services.AddSingleton(session);
@@ -141,7 +173,7 @@ public sealed class RepositoryActivationTests : UiTestContext
 
         IRenderedComponent<RepositoriesPage> cut = Render<RepositoriesPage>();
         cut.Find("[data-testid=show-register]").Click();
-        if (signedIn)
+        if (signedIn && expectRows)
         {
             cut.WaitForAssertion(() => Assert.NotEmpty(Rows(cut)));
         }

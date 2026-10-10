@@ -1,0 +1,65 @@
+.repo-path {
+    display: inline-block;
+    max-width: 22rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+.repo-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .5rem;
+}
+
+.repo-actions__danger {
+    margin-left: .75rem;
+    padding-left: .75rem;
+    border-left: 1px solid var(--bs-border-color);
+}
+
+@media (max-width: 767.98px) {
+    .repo-table, .repo-table tbody, .repo-table tr, .repo-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .repo-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+    }
+
+    .repo-table tr {
+        padding: .75rem;
+        margin-bottom: .75rem;
+        border: 1px solid var(--bs-border-color);
+        border-radius: .5rem;
+    }
+
+    .repo-table td {
+        border: 0;
+        padding: .25rem 0;
+        text-align: left !important;
+    }
+
+    .repo-table td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        font-size: .75rem;
+        color: var(--bs-secondary-color);
+    }
+
+    .repo-path {
+        max-width: 100%;
+    }
+
+    .repo-actions {
+        justify-content: flex-start;
+    }
+}

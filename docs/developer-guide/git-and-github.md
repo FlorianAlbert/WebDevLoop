@@ -266,6 +266,10 @@ See [Orchestration](orchestration.md) for the reconcilers and [Startup and prere
 
 ## GitHub App user sign-in
 
+The [WebDevLoop GitHub App](https://github.com/apps/webdevloop) is public. Its callback URL is `https://localhost:7233/auth/github/callback`, matching the `https` launch profile. Users can install it on their accounts or organizations and select repositories.
+
+Publication does not change the authentication implementation: local instances still need the chosen App's `AppClientId` and `AppClientSecret`. Installation alone does not provide those values. Keep the secret in user secrets or environment variables, never in source or public documentation. Set `WebDevLoop:GitHub:AppSlug` to `webdevloop` for the public App's installation link. Users without its credentials, or needing other callback URLs, can use their own App; see [Getting started](../user-guide/getting-started.md#choose-a-github-app).
+
 WebDevLoop acts as the signed-in **user**, through a GitHub App's user access token (web application flow with PKCE). There is no private key and no installation token. One token is used for the API, Git over HTTPS, and Copilot sessions. What it can reach = the App's permissions ∩ the user's own access ∩ the repositories the App is installed on.
 
 | Piece | Where |
@@ -309,6 +313,7 @@ Details:
 
 - The cookie `WebDevLoop.GitHubSignIn` (HttpOnly, `Lax`, path `/auth/github`, 10 minutes) holds state, PKCE verifier and return URL. It is encrypted with data protection (time-limited protector). `returnUrl` must be a local path.
 - The callback URL sent to GitHub is built from the current request (`scheme://host/auth/github/callback`) and must match a callback URL of the GitHub App.
+- For the public App, sign in from `https://localhost:7233`. The HTTP profile and `127.0.0.1` produce different callback URLs.
 - A callback with `setup_action` and no pending sign-in (GitHub returning after an install) just redirects to the GitHub page.
 - Failures redirect to the GitHub page with an `error` message.
 - Sign-out: `SignOutAsync` forgets the credentials, deletes the file, and revokes the token on GitHub (best effort). `Changed` fires.

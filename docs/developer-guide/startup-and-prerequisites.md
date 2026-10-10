@@ -47,6 +47,7 @@ Only an invalid configuration stops the process. A broken database or a failing 
 ## Configuration
 
 - Section `WebDevLoop`, read by <xref:WebDevLoop.Web.DependencyInjection.WebDevLoopOptions>. Sources are the usual ASP.NET Core ones (`appsettings*.json`, user secrets, environment variables with `__`, command line).
+- The [public WebDevLoop GitHub App](https://github.com/apps/webdevloop) uses `https://localhost:7233/auth/github/callback`. Use the `https` launch profile for it. Installation does not replace local `GitHub:AppClientId`/`GitHub:AppClientSecret` configuration; see [GitHub App user sign-in](git-and-github.md#github-app-user-sign-in).
 - `WebDevLoopOptions.Load` validates every value and throws <xref:WebDevLoop.Web.DependencyInjection.WebDevLoopConfigurationException> with **all** problems in one message.
 - Timer values are in <xref:WebDevLoop.Web.DependencyInjection.WorkflowWorkerOptions>. The full key list with defaults is in the [README](https://github.com/FlorianAlbert/WebDevLoop#configuration).
 - Settings users change at runtime (limits, prompts, models, workspace root, test ports) are **not** here. They live in the database. See [Domain model](domain-model.md).

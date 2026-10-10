@@ -15,9 +15,11 @@ WebDevLoop works on GitHub as you. It uses your sign-in for everything: reading 
 
 ## Sign-in
 
+You can install the [public WebDevLoop GitHub App](https://github.com/apps/webdevloop), or use your own App. The public App's callback URL is `https://localhost:7233/auth/github/callback`, so open WebDevLoop at `https://localhost:7233` to sign in. Local client ID/secret configuration is still required; see [Getting started](getting-started.md#choose-a-github-app).
+
 | State | What you see | What to do |
 | --- | --- | --- |
-| Not configured | "GitHub sign-in is not configured." | Set the GitHub App's client id and secret and restart. See [Getting started](getting-started.md#create-the-github-app). |
+| Not configured | "GitHub sign-in is not configured." | Set the chosen GitHub App's client ID and secret and restart. Installing the App alone is not enough. See [Getting started](getting-started.md#configure-the-local-instance). |
 | Not signed in | A **Sign in with GitHub** button. Other pages show a banner with the same button. | Click it, authorize the App on GitHub, and you come back here. |
 | Signed in | **Signed in as `<login>`** with your avatar and a note about when the sign-in would expire. | Nothing. The sign-in renews itself while WebDevLoop runs. |
 
@@ -31,6 +33,8 @@ The sign-in survives restarts. You only sign in again after a long pause (the re
 ## Repository access
 
 WebDevLoop reaches the repositories that the GitHub App is installed on and that you can access yourself. The page lists them per installation, for example your account or an organization. Each installation shows **All repositories** or the number of selected repositories.
+
+For the public App, start at [github.com/apps/webdevloop](https://github.com/apps/webdevloop) to install it or manage an existing installation. If you use your own App, manage that App instead.
 
 - **Filter repositories** narrows the list.
 - **Refresh** reloads the list. Use it after you changed the access on GitHub.

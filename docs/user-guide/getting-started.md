@@ -13,9 +13,17 @@ This page takes you from a fresh checkout to your first queued spec.
 
 The [Health](health.md) page checks all of this for you.
 
-## Create the GitHub App
+## Choose a GitHub App
 
-WebDevLoop signs in to GitHub with a GitHub App that you own. In short:
+The [public WebDevLoop GitHub App](https://github.com/apps/webdevloop) is available to install on your account or organization. Select the repositories it may use.
+
+Its callback URL is `https://localhost:7233/auth/github/callback`. Use the `https` launch profile and open `https://localhost:7233` to sign in.
+
+Installing the App grants repository access, but does not configure your local instance. The current sign-in flow still needs the App's client ID and client secret. Do not publish or commit the secret. If you do not have credentials for the public App, create your own App instead.
+
+### Create your own GitHub App
+
+Use this option if you need your own credentials or a different callback URL:
 
 1. On GitHub, create a new GitHub App (Settings, Developer settings, GitHub Apps).
 2. Set the callback URL to `https://localhost:7233/auth/github/callback`. Turn the webhook off.
@@ -23,13 +31,23 @@ WebDevLoop signs in to GitHub with a GitHub App that you own. In short:
 4. Note the **Client ID** and create a **client secret**.
 5. Install the App on your account and select the repositories it may use.
 
-Then store the client id and secret as user secrets. Do not commit them:
+### Configure the local instance
+
+Store the client ID and secret of the App you chose as user secrets. Do not commit them:
 
 ```bash
 cd src/WebDevLoop.Web
 dotnet user-secrets set "WebDevLoop:GitHub:AppClientId" "<client id>"
 dotnet user-secrets set "WebDevLoop:GitHub:AppClientSecret" "<client secret>"
 ```
+
+For the public App, also set the installation link:
+
+```bash
+dotnet user-secrets set "WebDevLoop:GitHub:AppSlug" "webdevloop"
+```
+
+For your own App, use its URL name instead.
 
 The full details are in the [README](https://github.com/FlorianAlbert/WebDevLoop#readme) (sections "GitHub sign-in" and "Configuration").
 
@@ -38,10 +56,10 @@ The full details are in the [README](https://github.com/FlorianAlbert/WebDevLoop
 From the repository root:
 
 ```bash
-dotnet run --project src/WebDevLoop.Web
+dotnet run --project src/WebDevLoop.Web --launch-profile https
 ```
 
-This uses the `https` launch profile. Open <https://localhost:7233>. If your browser warns about the development certificate, trust it first with `dotnet dev-certs https --trust`.
+Open <https://localhost:7233>. This address matches the public App's callback URL. If your browser warns about the development certificate, trust it first with `dotnet dev-certs https --trust`.
 
 Until you sign in, every page shows a **Sign in with GitHub** banner, and WebDevLoop stays in diagnostic-only mode. See [Health](health.md).
 

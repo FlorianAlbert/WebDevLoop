@@ -39,7 +39,26 @@ Copilot subscription; commits and pull requests are attributed to you ("via" the
 What the token may do is the intersection of the App's permissions and your own access, limited to the repositories the
 App is installed on, so the installation's repository selection controls which repositories WebDevLoop reaches.
 
-### Create the GitHub App
+### Use the public WebDevLoop GitHub App
+
+The [WebDevLoop GitHub App](https://github.com/apps/webdevloop) is public. Install it on your account or organization
+and select the repositories WebDevLoop may work on.
+
+Its callback URL is `https://localhost:7233/auth/github/callback`. Start the app with the `https` launch profile
+and open `https://localhost:7233` when signing in:
+
+```bash
+dotnet run --project src/WebDevLoop.Web --launch-profile https
+```
+
+Installing the public App grants repository access; it does **not** configure your local WebDevLoop instance.
+The current sign-in flow still requires that App's client ID and client secret in local configuration.
+Do not publish or commit the secret. If you do not have credentials for the public App, create your own App instead.
+For the public App, set `WebDevLoop:GitHub:AppSlug` to `webdevloop` so the installation link points to it.
+
+### Create your own GitHub App
+
+Use your own App if you need your own credentials or a different callback URL.
 
 1. Settings → Developer settings → GitHub Apps → New GitHub App (for an organization: the organization's Developer settings).
 2. **Callback URL:** `https://localhost:7233/auth/github/callback` (add one per address you open WebDevLoop on, e.g. the

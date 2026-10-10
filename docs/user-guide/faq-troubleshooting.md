@@ -9,7 +9,12 @@ WebDevLoop is in diagnostic-only mode. Open [Health](health.md), fix the failed 
 The app uses the .NET development certificate. Trust it once with `dotnet dev-certs https --trust`.
 
 **GitHub shows a callback or redirect URL error when I sign in.**
-The callback URL of your GitHub App must match the address you opened. For `https://localhost:7233` it is `https://localhost:7233/auth/github/callback`. Add one callback URL for every address you use.
+The [public WebDevLoop GitHub App](https://github.com/apps/webdevloop) uses `https://localhost:7233/auth/github/callback`. Start with `dotnet run --project src/WebDevLoop.Web --launch-profile https` and open `https://localhost:7233`, not the HTTP address or `127.0.0.1`.
+
+For your own GitHub App, the callback URL must match the address you opened. Add one callback URL for every address you use. To use a different address with the public App, you need a callback change by its owner, or your own App.
+
+**I installed the public App, but WebDevLoop says sign-in is not configured.**
+Installation grants repository access; it does not supply credentials to your local instance. The current sign-in flow still needs the chosen App's client ID and client secret. If you do not have credentials for the public App, create your own App. See [Getting started](getting-started.md#choose-a-github-app).
 
 **My repository is not in the "Add repository" list.**
 The GitHub App is not installed on it. On the [GitHub](github.md) page click **Manage repository access**, add the repository, then **Refresh**.

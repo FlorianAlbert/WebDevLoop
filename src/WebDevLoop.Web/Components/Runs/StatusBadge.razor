@@ -1,4 +1,4 @@
-<span class="badge @StatusStyles.BadgeClass(Status)" @attributes="AdditionalAttributes">@Status</span>
+<StatusPill Variant="StatusVariants.For(Status)" ShowDot="true" @attributes="AdditionalAttributes">@DisplayNames.Humanize(Status)</StatusPill>
 
 @code {
     [Parameter, EditorRequired] public string Status { get; set; } = string.Empty;

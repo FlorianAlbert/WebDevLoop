@@ -67,9 +67,9 @@ public sealed class QueuePageTests : UiTestContext
 
         var row = cut.Find("[data-lane=Waiting] [data-run-id=r-dep]");
         Assert.Contains("Waiting for dependency", row.TextContent);
-        Assert.Contains("WaitForMerge", row.TextContent);
+        Assert.Contains("Mode: Wait for merge", row.TextContent);
         Assert.Contains("merged", row.TextContent);
-        Assert.Equal("WaitForMerge", cut.Find("[data-testid=dependency-mode]").TextContent.Trim());
+        Assert.Equal("Mode: Wait for merge", cut.Find("[data-testid=dependency-mode]").TextContent.Trim());
     }
 
     [Fact]
@@ -99,7 +99,7 @@ public sealed class QueuePageTests : UiTestContext
 
         IRenderedComponent<QueuePage> cut = Render<QueuePage>();
 
-        Assert.Contains("StackOnTop", cut.Find("[data-run-id=r-dep]").TextContent);
+        Assert.Contains("Stack on top", cut.Find("[data-run-id=r-dep]").TextContent);
     }
 
     [Fact]
@@ -127,8 +127,37 @@ public sealed class QueuePageTests : UiTestContext
         cut.Find("input[name=issueNumber]").Input(input);
         cut.Find("form").Submit();
 
-        Assert.Contains("positive issue number", cut.Find("[data-testid=enqueue-result]").TextContent);
+        Assert.Contains("positive issue number", cut.Find("[data-testid=enqueue-validation]").TextContent);
+        Assert.Equal("true", cut.Find("input[name=issueNumber]").GetAttribute("aria-invalid"));
         Assert.Empty(Enqueuer.Calls);
+    }
+
+    [Theory]
+    [InlineData("#123", 123)]
+    [InlineData(" 7 ", 7)]
+    [InlineData("https://github.com/acme/widgets/issues/55", 55)]
+    [InlineData("https://github.com/acme/widgets/issues/55#issuecomment-1", 55)]
+    public void accepts_hash_prefixed_numbers_and_issue_urls(string input, int expected)
+    {
+        IRenderedComponent<QueuePage> cut = Render<QueuePage>();
+
+        Assert.Equal("numeric", cut.Find("input[name=issueNumber]").GetAttribute("inputmode"));
+        cut.Find("input[name=issueNumber]").Input(input);
+        cut.Find("form").Submit();
+
+        cut.WaitForAssertion(() => Assert.Equal([(1, expected)], Enqueuer.Calls));
+        Assert.Empty(cut.FindAll("[data-testid=enqueue-validation]"));
+    }
+
+    [Fact]
+    public void has_exactly_one_h1_without_a_selected_repository()
+    {
+        Selection.Select(null);
+
+        IRenderedComponent<QueuePage> cut = Render<QueuePage>();
+
+        Assert.Equal("Queue", cut.Find("h1").TextContent.Trim());
+        Assert.Single(cut.FindAll("h1"));
     }
 
     [Theory]

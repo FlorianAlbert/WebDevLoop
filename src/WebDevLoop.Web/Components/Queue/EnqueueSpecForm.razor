@@ -3,16 +3,29 @@
 @inherits ScopedComponentBase
 @inject DiagnosticReadiness Readiness
 
-<form class="row g-2 align-items-center" @onsubmit="SubmitAsync">
+<form class="row g-2 align-items-start" @onsubmit="SubmitAsync" novalidate>
     <div class="col-auto">
         <label class="col-form-label col-form-label-sm" for="enqueue-issue">Queue parent spec issue</label>
     </div>
     <div class="col-auto">
-        <input id="enqueue-issue" name="issueNumber" type="number" min="1" class="form-control form-control-sm" placeholder="Issue #"
+        <input id="enqueue-issue" name="issueNumber" type="text" inputmode="numeric" autocomplete="off"
+               class="form-control form-control-sm @(_validation is null ? null : "is-invalid")" placeholder="#123 or issue URL"
+               aria-describedby="enqueue-help@(_validation is null ? null : " enqueue-error")" aria-invalid="@(_validation is null ? null : "true")"
                @bind="_issueNumber" @bind:event="oninput" disabled="@IsDisabled" />
+        @if (_validation is not null)
+        {
+            <div id="enqueue-error" class="invalid-feedback d-block" data-testid="enqueue-validation">@_validation</div>
+        }
+        <div id="enqueue-help" class="form-text">Issue number, <code>#123</code> or a GitHub issue URL.</div>
     </div>
     <div class="col-auto">
-        <button type="submit" class="btn btn-primary btn-sm" data-testid="enqueue-submit" disabled="@(IsDisabled || _submitting)">Queue</button>
+        <button type="submit" class="btn btn-primary btn-sm" data-testid="enqueue-submit" disabled="@(IsDisabled || _submitting)" aria-busy="@(_submitting ? "true" : null)">
+            @if (_submitting)
+            {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            @(_submitting ? "Queueing…" : "Queue")
+        </button>
     </div>
     @if (IsDisabled)
     {
@@ -37,6 +50,7 @@
     private sealed record Feedback(string Severity, string Message, string? RunId = null);
 
     private string? _issueNumber;
+    private string? _validation;
     private bool _submitting;
     private Feedback? _result;
 
@@ -55,12 +69,14 @@
             return;
         }
 
-        if (!int.TryParse(_issueNumber, out int issueNumber) || issueNumber <= 0)
+        if (!TryParseIssue(_issueNumber, out int issueNumber))
         {
-            _result = new Feedback("warning", "Enter a positive issue number.");
+            _validation = "Enter a positive issue number, for example 123, #123 or a GitHub issue URL.";
+            _result = null;
             return;
         }
 
+        _validation = null;
         _submitting = true;
         try
         {
@@ -81,6 +97,30 @@
         {
             _submitting = false;
         }
+    }
+
+    /// <summary>Accepts "123", "#123" and issue URLs such as https://github.com/owner/repo/issues/123.</summary>
+    internal static bool TryParseIssue(string? input, out int issueNumber)
+    {
+        issueNumber = 0;
+        string text = (input ?? string.Empty).Trim();
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) && uri.Scheme is "http" or "https")
+        {
+            string[] segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            int index = Array.FindIndex(segments, segment => segment.Equals("issues", StringComparison.OrdinalIgnoreCase));
+            text = index >= 0 && index + 1 < segments.Length ? segments[index + 1] : string.Empty;
+        }
+        else
+        {
+            text = text.TrimStart('#');
+        }
+
+        return int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out issueNumber) && issueNumber > 0;
     }
 
     private static Feedback Describe(int issueNumber, EnqueueResult result) => result.Outcome switch

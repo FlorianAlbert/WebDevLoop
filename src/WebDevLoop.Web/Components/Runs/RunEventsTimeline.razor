@@ -4,7 +4,7 @@
     <h2 class="h5">Events</h2>
     @if (Events.Count == 0)
     {
-        <p class="text-muted">No events recorded.</p>
+        <p class="text-body-secondary">No events recorded.</p>
     }
     else
     {
@@ -12,7 +12,7 @@
             @foreach (RunEventView runEvent in Events.OrderByDescending(e => e.OccurredAt).ThenByDescending(e => e.Id).Take(Limit))
             {
                 <li data-testid="run-event">
-                    <time>@runEvent.OccurredAt.ToString("u")</time>
+                    <AppDateTime Value="runEvent.OccurredAt" Mode="DateTimeDisplay.Absolute" />
                     <strong>@runEvent.Type</strong>
                     @if (runEvent.TicketRunId is { } ticket)
                     {

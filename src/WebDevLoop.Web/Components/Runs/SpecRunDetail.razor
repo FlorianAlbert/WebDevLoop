@@ -2,24 +2,27 @@
 @inherits LiveDetailPageBase
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Api
+@using WebDevLoop.Web.Components.Layout
 @using WebDevLoop.Web.Components.Tickets
 
-<PageTitle>@(_spec?.Title ?? "Spec run")</PageTitle>
+<PageHeader Title="@(_spec?.Title ?? (IsNotFound ? "Spec run not found" : "Spec run"))" DocumentTitle="@(_spec?.Title ?? "Spec run")" />
 
 @if (IsNotFound)
 {
-    <p class="alert alert-warning" data-testid="not-found">Spec run '@Id' was not found.</p>
+    <EmptyState Icon="search" Title="Spec run not found" data-testid="not-found">
+        <ChildContent>Spec run '@Id' does not exist or was removed.</ChildContent>
+        <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Queue">Back to queue</a></Action>
+    </EmptyState>
 }
 else if (_spec is not null)
 {
-    <h1>@_spec.Title</h1>
     <p>
         <StatusBadge Status="@_spec.Status.ToString()" data-testid="spec-status" />
         <span class="ms-2">Spec issue #@_spec.ParentIssueNumber</span>
         <span class="ms-2">Queue position @_spec.QueuePosition</span>
         @if (_spec.DependencyModeUsed is { } mode)
         {
-            <span class="ms-2" data-testid="dependency-mode">Dependency mode: @mode</span>
+            <span class="ms-2" data-testid="dependency-mode">Mode: @DisplayNames.For(mode)</span>
         }
     </p>
     @if (_spec.FailureReason is { } failure)
@@ -33,7 +36,7 @@ else if (_spec is not null)
         <dt class="col-sm-3">Cycles</dt>
         <dd class="col-sm-9">Parent review @_spec.ReviewCycle, tester @_spec.TestCycle</dd>
         <dt class="col-sm-3">Created</dt>
-        <dd class="col-sm-9">@_spec.CreatedAt.ToString("u")</dd>
+        <dd class="col-sm-9"><AppDateTime Value="_spec.CreatedAt" /></dd>
     </dl>
 
     <SpecBlockersPanel Blockers="_blockers" />

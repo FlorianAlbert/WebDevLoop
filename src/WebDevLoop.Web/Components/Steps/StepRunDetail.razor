@@ -4,16 +4,19 @@
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Api
 @using WebDevLoop.Web.Components.Runs
+@using WebDevLoop.Web.Components.Layout
 
-<PageTitle>@(_step is null ? "Step" : $"{_step.Kind} step")</PageTitle>
+<PageHeader Title="@(_step is null ? (IsNotFound ? "Step not found" : "Step") : $"{_step.Kind} step")" />
 
 @if (IsNotFound)
 {
-    <p class="alert alert-warning" data-testid="not-found">Step '@Id' was not found.</p>
+    <EmptyState Icon="search" Title="Step not found" data-testid="not-found">
+        <ChildContent>Step '@Id' does not exist or was removed.</ChildContent>
+        <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Queue">Back to queue</a></Action>
+    </EmptyState>
 }
 else if (_step is not null)
 {
-    <h1>@_step.Kind step</h1>
     <p>
         <StatusBadge Status="@_step.Status.ToString()" data-testid="step-status" />
         <a class="ms-2" href="/runs/@_step.SpecRunId" data-testid="spec-link">Spec run @_step.SpecRunId</a>
@@ -29,7 +32,7 @@ else if (_step is not null)
 
     <dl class="row">
         <dt class="col-sm-3">Role</dt>
-        <dd class="col-sm-9" data-testid="step-role">@(_step.AgentRole?.ToString() ?? "none (app-run step)")</dd>
+        <dd class="col-sm-9" data-testid="step-role">@(_step.AgentRole is { } agentRole ? DisplayNames.For(agentRole) : "none (app-run step)")</dd>
         <dt class="col-sm-3">Model</dt>
         <dd class="col-sm-9" data-testid="step-model">@StepModelText.For(_step)</dd>
         <dt class="col-sm-3">Attempt</dt>
@@ -41,7 +44,7 @@ else if (_step is not null)
         <dt class="col-sm-3">Prompt hash</dt>
         <dd class="col-sm-9"><code>@_step.InputPromptHash</code></dd>
         <dt class="col-sm-3">Started / completed / timeout</dt>
-        <dd class="col-sm-9">@Format(_step.StartedAt) / @Format(_step.CompletedAt) / @Format(_step.TimeoutAt)</dd>
+        <dd class="col-sm-9"><AppDateTime Value="_step.StartedAt" /> / <AppDateTime Value="_step.CompletedAt" /> / <AppDateTime Value="_step.TimeoutAt" /></dd>
     </dl>
 
     <RunControlsArea Scope="step" />
@@ -80,6 +83,4 @@ else if (_step is not null)
         _step = step;
         _policy = step.AgentRole is { } role ? RolePolicySummary.For(role) : null;
     }
-
-    private static string Format(DateTimeOffset? value) => value?.ToString("u") ?? "–";
 }

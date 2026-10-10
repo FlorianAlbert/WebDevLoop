@@ -4,20 +4,25 @@
 @using WebDevLoop.Infrastructure.Prerequisites
 @inject DiagnosticReadiness Readiness
 
-<PageTitle>Health</PageTitle>
+<PageHeader Title="Health" Description="Prerequisite checks that decide whether the mutating workflow may run.">
+    <Actions>
+        <button type="button" class="btn btn-outline-primary btn-sm" data-testid="recheck" disabled="@_isChecking" aria-busy="@(_isChecking ? "true" : null)" @onclick="RecheckAsync">
+            @if (_isChecking)
+            {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            @(_isChecking ? "Checking…" : "Re-check")
+        </button>
+    </Actions>
+</PageHeader>
 
-<h1>Health</h1>
-
-<div class="d-flex align-items-center gap-3 mb-3">
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
     <span>Readiness mode:</span>
-    <span class="badge @ModeBadgeClass" data-testid="readiness-mode">@ModeText</span>
+    <StatusPill Variant="@ModeVariant" ShowDot="true" data-testid="readiness-mode">@ModeText</StatusPill>
     @if (_snapshot.EvaluatedAt is { } evaluatedAt)
     {
-        <small class="text-muted" data-testid="evaluated-at">Checked @evaluatedAt.ToString("u")</small>
+        <small class="text-body-secondary" data-testid="evaluated-at">Checked <AppDateTime Value="evaluatedAt" /></small>
     }
-    <button type="button" class="btn btn-outline-primary btn-sm" data-testid="recheck" disabled="@_isChecking" @onclick="RecheckAsync">
-        @(_isChecking ? "Checking…" : "Re-check")
-    </button>
 </div>
 
 @if (_snapshot.Mode == ReadinessMode.DiagnosticOnly)
@@ -31,31 +36,41 @@
 
 @if (_snapshot.Report is null)
 {
-    <p class="text-muted" data-testid="not-evaluated">The prerequisites have not been evaluated yet. Use Re-check to run them now.</p>
+    <EmptyState Icon="search" Title="Not evaluated yet" data-testid="not-evaluated">
+        The prerequisites have not been evaluated yet. Use Re-check to run them now.
+    </EmptyState>
 }
 else
 {
-    <table class="table table-sm align-middle" data-testid="checks">
-        <thead>
-            <tr>
-                <th>Check</th>
-                <th>Status</th>
-                <th>Details</th>
-                <th>Remediation</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (PrerequisiteCheck check in OrderedChecks)
-            {
-                <tr data-testid="check" data-status="@check.Status">
-                    <td>@check.Name</td>
-                    <td><span class="badge @StatusBadgeClass(check.Status)">@check.Status</span></td>
-                    <td>@check.Message</td>
-                    <td>@check.Remediation</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <SectionCard NoPadding="true">
+        <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0" data-testid="checks">
+                <thead>
+                    <tr>
+                        <th scope="col">Status</th>
+                        <th scope="col">Check</th>
+                        <th scope="col">Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (PrerequisiteCheck check in OrderedChecks)
+                    {
+                        <tr data-testid="check" data-status="@check.Status">
+                            <td class="text-nowrap"><StatusPill Variant="@StatusVariantFor(check.Status)" ShowDot="true">@check.Status</StatusPill></td>
+                            <td>@check.Name</td>
+                            <td class="text-break">
+                                <div title="@check.Message">@Shorten(check.Message)</div>
+                                @if (check.Status != PrerequisiteStatus.Passed && !string.IsNullOrWhiteSpace(check.Remediation))
+                                {
+                                    <div class="small text-body-secondary mt-1" data-testid="remediation"><strong>Fix:</strong> @check.Remediation</div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </SectionCard>
 }
 
 @code {
@@ -64,7 +79,7 @@ else
 
     private string ModeText => _snapshot.Mode == ReadinessMode.Operational ? "Operational" : "Diagnostic-only";
 
-    private string ModeBadgeClass => _snapshot.Mode == ReadinessMode.Operational ? "text-bg-success" : "text-bg-danger";
+    private StatusVariant ModeVariant => _snapshot.Mode == ReadinessMode.Operational ? StatusVariant.Success : StatusVariant.Danger;
 
     // Failures first so the actionable items are never below the fold.
     private IEnumerable<PrerequisiteCheck> OrderedChecks =>
@@ -85,10 +100,20 @@ else
         }
     }
 
-    private static string StatusBadgeClass(PrerequisiteStatus status) => status switch
+    private static StatusVariant StatusVariantFor(PrerequisiteStatus status) => status switch
     {
-        PrerequisiteStatus.Passed => "text-bg-success",
-        PrerequisiteStatus.Warning => "text-bg-warning",
-        _ => "text-bg-danger",
+        PrerequisiteStatus.Passed => StatusVariant.Success,
+        PrerequisiteStatus.Warning => StatusVariant.Warning,
+        _ => StatusVariant.Danger,
     };
+
+    private static readonly System.Text.RegularExpressions.Regex PathPattern = new(@"(?<![\w.])(?:~|/)[^\s'""]+(?:/[^\s'""]+){3,}", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>Collapses the middle of long absolute paths ("/a/b/…/y/z"); the full text stays available as a tooltip.</summary>
+    private static string Shorten(string message) => PathPattern.Replace(message, match =>
+    {
+        string[] parts = match.Value.TrimEnd('.', ',').Split('/');
+        string trailing = match.Value[match.Value.TrimEnd('.', ',').Length..];
+        return parts.Length <= 5 ? match.Value : $"{string.Join('/', parts.Take(parts[0].Length == 0 ? 3 : 2))}/…/{string.Join('/', parts.TakeLast(2))}{trailing}";
+    });
 }

@@ -1,11 +1,15 @@
 @page "/queue"
 @inherits LiveComponentBase
 
-<PageTitle>Queue</PageTitle>
+<PageHeader Title="@(_repository is null ? "Queue" : $"Queue · {_repository.Owner}/{_repository.Name}")" DocumentTitle="Queue" />
 
 @if (!IsLoaded)
 {
-    <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading…</span></div>
+    <div class="placeholder-glow" role="status" aria-busy="true">
+        <span class="placeholder col-12 mb-2" style="height: 3rem"></span>
+        <span class="placeholder col-12" style="height: 8rem"></span>
+        <span class="visually-hidden">Loading…</span>
+    </div>
 }
 else if (LoadError is not null)
 {
@@ -13,20 +17,19 @@ else if (LoadError is not null)
 }
 else if (_repository is null)
 {
-    <div class="alert alert-secondary">
-        Select a repository in the top bar to see its queue, or <a href="@UiRoutes.Repositories">register one</a>.
-    </div>
+    <EmptyState Icon="inbox" Title="No repository selected" Text="Select a repository in the sidebar to see its queue, or register one.">
+        <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Repositories">Register a repository</a></Action>
+    </EmptyState>
 }
 else
 {
     <div class="d-flex flex-wrap align-items-baseline gap-3 mb-3">
-        <h1 class="h4 mb-0">Queue · @_repository.Owner/@_repository.Name</h1>
-        <span class="small text-muted" data-testid="active-slots">
+        <span class="small text-body-secondary" data-testid="active-slots">
             Active slots <strong>@ActiveCount@(_settings is null ? "" : $" / {_settings.MaxActiveSpecsPerRepo}")</strong>
         </span>
         @if (_settings is not null)
         {
-            <span class="badge text-bg-light border" title="Dependency mode" data-testid="dependency-mode">@_settings.SpecDependencyMode</span>
+            <span class="small text-body-secondary" title="@DisplayNames.Describe(_settings.SpecDependencyMode)" data-testid="dependency-mode">Mode: @DisplayNames.For(_settings.SpecDependencyMode)</span>
         }
     </div>
 
@@ -36,7 +39,7 @@ else
 
     @if (_runs.Count == 0)
     {
-        <p class="text-muted">Nothing queued for this repository yet.</p>
+        <EmptyState Icon="inbox" Title="Nothing queued yet" Text="Queue a parent spec issue above to get started." />
     }
 
     @foreach (SpecRunLane lane in Enum.GetValues<SpecRunLane>())
@@ -47,13 +50,10 @@ else
             continue;
         }
 
-        <section class="card mb-3" data-lane="@lane">
-            <div class="card-header py-1 d-flex justify-content-between">
-                <strong>@SpecRunLanes.Title(lane)</strong>
-                <span class="badge text-bg-light border">@laneRuns.Count</span>
-            </div>
-            <SpecRunTable Runs="laneRuns" Dependencies="_dependencies" EffectiveDependencyMode="EffectiveMode" />
-        </section>
+        <SectionCard Title="@SpecRunLanes.Title(lane)" Class="mb-3" NoPadding="true" data-lane="@lane">
+            <Actions><StatusPill>@laneRuns.Count</StatusPill></Actions>
+            <ChildContent><SpecRunTable Runs="laneRuns" Dependencies="_dependencies" EffectiveDependencyMode="EffectiveMode" /></ChildContent>
+        </SectionCard>
     }
 }
 

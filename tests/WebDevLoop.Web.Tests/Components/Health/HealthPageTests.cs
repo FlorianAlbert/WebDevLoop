@@ -73,6 +73,31 @@ public sealed class HealthPageTests : BunitContext
         Assert.Equal(2, _validator.Calls);
     }
 
+    [Fact]
+    public async Task remediation_is_only_shown_for_checks_that_did_not_pass()
+    {
+        PrerequisiteCheck passedWithHint = new("Disk", PrerequisiteStatus.Passed, "ok", "Should stay hidden.");
+
+        IRenderedComponent<HealthPage> page = await RenderAsync(passedWithHint, MissingSkill);
+
+        Assert.DoesNotContain("Should stay hidden.", page.Markup);
+        Assert.Single(page.FindAll("[data-testid=remediation]"));
+        Assert.Equal("Status", page.FindAll("th")[0].TextContent.Trim());
+        Assert.Single(page.FindAll("h1"));
+        Assert.NotEmpty(page.FindAll(".table-responsive"));
+    }
+
+    [Fact]
+    public async Task long_paths_are_shortened_with_the_full_text_as_tooltip()
+    {
+        PrerequisiteCheck check = new("Worktrees", PrerequisiteStatus.Failed, "Cannot write /home/user/dev/projects/app/worktrees/branch.", null);
+
+        IRenderedComponent<HealthPage> page = await RenderAsync(check);
+
+        Assert.Contains("/home/user/…/worktrees/branch.", page.Find("[data-testid=check] td:last-child div").TextContent);
+        Assert.Contains("/home/user/dev/projects/app", page.Find("[data-testid=check] td:last-child div").GetAttribute("title"));
+    }
+
     private static void AssertCheckFailed(IRenderedComponent<HealthPage> page, string name)
     {
         AngleSharp.Dom.IElement row = page.FindAll("[data-testid=check]").Single(candidate => candidate.TextContent.Contains(name));

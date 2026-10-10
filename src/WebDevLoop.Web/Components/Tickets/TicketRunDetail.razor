@@ -4,17 +4,20 @@
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Api
 @using WebDevLoop.Web.Components.Runs
+@using WebDevLoop.Web.Components.Layout
 @using WebDevLoop.Web.Components.Steps
 
-<PageTitle>@(_ticket?.Title ?? "Ticket run")</PageTitle>
+<PageHeader Title="@(_ticket is null ? (IsNotFound ? "Ticket run not found" : "Ticket run") : $"#{_ticket.IssueNumber} {_ticket.Title}")" DocumentTitle="@(_ticket?.Title ?? "Ticket run")" />
 
 @if (IsNotFound)
 {
-    <p class="alert alert-warning" data-testid="not-found">Ticket run '@Id' was not found.</p>
+    <EmptyState Icon="search" Title="Ticket run not found" data-testid="not-found">
+        <ChildContent>Ticket run '@Id' does not exist or was removed.</ChildContent>
+        <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Queue">Back to queue</a></Action>
+    </EmptyState>
 }
 else if (_ticket is not null)
 {
-    <h1>#@_ticket.IssueNumber @_ticket.Title</h1>
     <p>
         <StatusBadge Status="@_ticket.Status.ToString()" data-testid="ticket-status" />
         <a class="ms-2" href="/runs/@_ticket.SpecRunId" data-testid="spec-link">Spec run @_ticket.SpecRunId</a>

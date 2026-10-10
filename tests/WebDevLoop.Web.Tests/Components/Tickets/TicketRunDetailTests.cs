@@ -115,7 +115,7 @@ public sealed class TicketRunDetailTests
         harness.Queries.Replace(Views.Ticket("t1", 10, TicketRunStatus.FixingReviewFindings, reviewIteration: 3));
         await harness.Bus.PublishAsync(Events.TicketStatus("run-1", "t1", TicketRunStatus.Reviewing, TicketRunStatus.FixingReviewFindings));
 
-        cut.WaitForAssertion(() => Assert.Equal("FixingReviewFindings", cut.Find("[data-testid=ticket-status]").TextContent.Trim()));
+        cut.WaitForAssertion(() => Assert.Equal("Fixing review findings", cut.Find("[data-testid=ticket-status]").TextContent.Trim()));
         Assert.Equal("3", cut.Find("[data-testid=review-iteration]").TextContent.Trim());
     }
 

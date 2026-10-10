@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Queries;
+using WebDevLoop.Web.Components.Shared;
 
 namespace WebDevLoop.Web.Components.Queue;
 
@@ -13,13 +14,13 @@ public static partial class SpecRunDisplay
         return string.Concat(spaced[..1], spaced[1..].ToLowerInvariant());
     }
 
-    public static string BadgeClass(SpecRunStatus status) => SpecRunLanes.For(status) switch
+    public static StatusVariant Variant(SpecRunStatus status) => SpecRunLanes.For(status) switch
     {
-        SpecRunLane.Active => "text-bg-primary",
-        SpecRunLane.AwaitingMerge => "text-bg-info",
-        SpecRunLane.NeedsAttention => "text-bg-danger",
-        SpecRunLane.Waiting => "text-bg-secondary",
-        _ => status == SpecRunStatus.Aborted ? "text-bg-dark" : "text-bg-success",
+        SpecRunLane.Active => StatusVariant.Info,
+        SpecRunLane.AwaitingMerge => StatusVariant.Info,
+        SpecRunLane.NeedsAttention => StatusVariant.Warning,
+        SpecRunLane.Waiting => StatusVariant.Neutral,
+        _ => status == SpecRunStatus.Aborted ? StatusVariant.Danger : StatusVariant.Success,
     };
 
     /// <summary>A short explanation of what a non-running spec is waiting for; <c>null</c> when there is nothing to add.</summary>

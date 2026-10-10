@@ -9,7 +9,7 @@
     @foreach (RunControlCommand command in Commands)
     {
         <button type="button" class="btn btn-sm @(command.IsDestructive ? "btn-outline-danger" : "btn-outline-primary")"
-                data-testid="control-@command.Key" disabled="@(!CanRun(command))" @onclick="() => RequestAsync(command)">
+                data-testid="control-@command.Key" disabled="@(!CanRun(command))" aria-busy="@(_running ? "true" : null)" @onclick="() => RequestAsync(command)">
             @command.Label
         </button>
     }
@@ -26,7 +26,13 @@
 {
     <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 py-2 px-2 small mt-2 mb-0" role="alertdialog" data-testid="control-confirm">
         <span>@pending.Confirmation</span>
-        <button type="button" class="btn btn-sm btn-danger" data-testid="control-confirm-yes" disabled="@_running" @onclick="ConfirmAsync">@pending.Label</button>
+        <button type="button" class="btn btn-sm btn-danger" data-testid="control-confirm-yes" disabled="@_running" aria-busy="@(_running ? "true" : null)" @onclick="ConfirmAsync">
+            @if (_running)
+            {
+                <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+            }
+            @(_running ? "Working…" : pending.Label)
+        </button>
         <button type="button" class="btn btn-sm btn-secondary" data-testid="control-confirm-no" @onclick="Cancel">Cancel</button>
     </div>
 }

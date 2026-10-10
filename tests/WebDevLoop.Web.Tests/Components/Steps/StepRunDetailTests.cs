@@ -34,7 +34,7 @@ public sealed class StepRunDetailTests
 
         Assert.Contains("Review", cut.Find("h1").TextContent);
         Assert.Equal("Running", cut.Find("[data-testid=step-status]").TextContent.Trim());
-        Assert.Contains("ReviewerSpecification", cut.Find("[data-testid=step-role]").TextContent);
+        Assert.Contains("Reviewer – specification", cut.Find("[data-testid=step-role]").TextContent);
         Assert.Equal("gpt-recorded (xhigh)", cut.Find("[data-testid=step-model]").TextContent.Trim());
         Assert.Contains("copilot-session-1", cut.Find("[data-testid=copilot-session]").TextContent);
         Assert.Equal("/tickets/t1", cut.Find("[data-testid=ticket-link]").GetAttribute("href"));

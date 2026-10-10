@@ -13,12 +13,12 @@
             @foreach (IntegrationSagaCheckpoint checkpoint in Enum.GetValues<IntegrationSagaCheckpoint>())
             {
                 string state = checkpoint < Saga.Checkpoint ? "done" : checkpoint == Saga.Checkpoint ? "current" : "pending";
-                <li class="list-inline-item badge @StateClass(state)" data-testid="saga-step-@checkpoint" data-state="@state">@checkpoint</li>
+                <li class="list-inline-item" data-testid="saga-step-@checkpoint" data-state="@state"><StatusPill Variant="StateVariant(state)">@DisplayNames.Humanize(checkpoint.ToString())</StatusPill></li>
             }
         </ol>
         <p class="small mb-0">
             Stack branch <code>@Saga.StackBranch</code>@(Saga.PullRequestNumber is { } pr ? $", PR #{pr}" : "").
-            Updated @Saga.UpdatedAt.ToString("u").
+            Updated <AppDateTime Value="Saga.UpdatedAt" />.
         </p>
         @if (Saga.LastError is { } error)
         {
@@ -30,10 +30,10 @@
 @code {
     [Parameter] public IntegrationSagaView? Saga { get; set; }
 
-    private static string StateClass(string state) => state switch
+    private static StatusVariant StateVariant(string state) => state switch
     {
-        "done" => "text-bg-success",
-        "current" => "text-bg-primary",
-        _ => "text-bg-light border",
+        "done" => StatusVariant.Success,
+        "current" => StatusVariant.Info,
+        _ => StatusVariant.Neutral,
     };
 }

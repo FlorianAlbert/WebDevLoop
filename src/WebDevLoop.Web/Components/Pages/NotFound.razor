@@ -3,6 +3,9 @@
 
 <PageHeader Title="Page not found" DocumentTitle="Not found" />
 
-<EmptyState Icon="search" Text="Sorry, the content you are looking for does not exist.">
-    <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Dashboard">Back to dashboard</a></Action>
+<EmptyState Icon="search" Title="This page does not exist" Text="Sorry, the content you are looking for does not exist or was moved.">
+    <Action>
+        <a class="btn btn-primary btn-sm" href="@UiRoutes.Dashboard">Go to dashboard</a>
+        <a class="btn btn-outline-secondary btn-sm ms-2" href="@UiRoutes.Queue">Back to queue</a>
+    </Action>
 </EmptyState>

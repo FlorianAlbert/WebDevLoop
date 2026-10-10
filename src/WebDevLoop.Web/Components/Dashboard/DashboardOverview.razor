@@ -1,12 +1,14 @@
 @inherits LiveComponentBase
 
-<PageTitle>Dashboard</PageTitle>
-
-<h1 class="h4 mb-3">Dashboard</h1>
+<PageHeader Title="Dashboard" Description="Active, waiting and finished specs across your repositories." />
 
 @if (!IsLoaded)
 {
-    <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading…</span></div>
+    <div class="placeholder-glow" role="status" aria-busy="true">
+        <span class="placeholder col-12 mb-2" style="height: 4rem"></span>
+        <span class="placeholder col-12" style="height: 8rem"></span>
+        <span class="visually-hidden">Loading…</span>
+    </div>
 }
 else if (LoadError is not null)
 {
@@ -14,15 +16,15 @@ else if (LoadError is not null)
 }
 else if (_overviews.Count == 0)
 {
-    <div class="alert alert-secondary">
-        No repositories registered yet. <a href="@UiRoutes.Repositories">Register a repository</a> to start queueing specs.
-    </div>
+    <EmptyState Icon="inbox" Title="No repositories registered yet" Text="Register a repository to start queueing specs.">
+        <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Repositories">Register a repository</a></Action>
+    </EmptyState>
 }
 else
 {
     @foreach (RunAlert alert in Alerts(SpecRunLane.NeedsAttention))
     {
-        <div class="alert alert-danger py-2 d-flex justify-content-between align-items-center" role="alert" data-alert="NeedsAttention">
+        <div class="alert alert-warning py-2 d-flex justify-content-between align-items-center" role="alert" data-alert="NeedsAttention">
             <span>
                 <strong>Needs attention:</strong> @alert.RepositoryName #@alert.Run.ParentIssueNumber “@alert.Run.Title”
                 @if (alert.Run.FailureReason is { } reason)
@@ -45,19 +47,21 @@ else
         </div>
     }
 
-    <div class="d-flex flex-wrap gap-2 mb-3">
+    <div class="d-flex flex-wrap gap-3 mb-3" role="list" aria-label="Spec counts by status">
         @foreach (SpecRunLane lane in Enum.GetValues<SpecRunLane>())
         {
-            <span class="badge text-bg-light border fs-6 fw-normal">
-                @SpecRunLanes.Title(lane) <strong data-testid="count-@lane">@Count(lane)</strong>
-            </span>
+            int count = Count(lane);
+            <div class="card px-3 py-2 @(lane == SpecRunLane.NeedsAttention && count > 0 ? "border-warning" : null)" role="listitem" data-stat="@lane">
+                <div class="small text-body-secondary">@SpecRunLanes.Title(lane)</div>
+                <div class="fs-4 fw-semibold tabular @(lane == SpecRunLane.NeedsAttention && count > 0 ? "text-warning-emphasis" : null)" data-testid="count-@lane">@count</div>
+            </div>
         }
     </div>
 
     <div class="row g-3">
         @foreach (RepositoryOverview overview in _overviews)
         {
-            <div class="col-12 col-xl-6">
+            <div class="col-12 @(_overviews.Count > 1 ? "col-xl-6" : null)">
                 <RepositoryLane Overview="overview" />
             </div>
         }

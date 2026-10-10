@@ -1,11 +1,11 @@
 <section class="my-3" data-testid="role-policy">
-    <h2 class="h5">Role policy: @Policy.Role</h2>
+    <h2 class="h5">Role policy: @DisplayNames.For(Policy.Role)</h2>
     <dl class="row mb-0">
         <dt class="col-sm-3">Allowed capabilities</dt>
         <dd class="col-sm-9">
             @foreach (var capability in Policy.AllowedCapabilities)
             {
-                <span class="badge text-bg-light border me-1">@capability</span>
+                <StatusPill Class="me-1">@capability</StatusPill>
             }
         </dd>
         <dt class="col-sm-3">Denied commands</dt>

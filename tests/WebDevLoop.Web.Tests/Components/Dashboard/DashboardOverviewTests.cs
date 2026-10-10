@@ -24,6 +24,29 @@ public sealed class DashboardOverviewTests : UiTestContext
         ApiData.SpecRun(id, repositoryId, status, 1) with { ParentIssueNumber = issue, Title = $"Spec {issue}", FailureReason = failure };
 
     [Fact]
+    public void counters_are_plain_tiles_and_needs_attention_is_highlighted_only_when_positive()
+    {
+        IRenderedComponent<DashboardOverview> none = Render<DashboardOverview>();
+        Assert.Empty(none.FindAll("[data-stat] a, [data-stat] button"));
+        Assert.DoesNotContain("border-warning", none.Find("[data-stat=NeedsAttention]").ClassName);
+
+        Runs.SpecRuns.Add(Run("r-attn", SpecRunStatus.NeedsAttention));
+        IRenderedComponent<DashboardOverview> some = Render<DashboardOverview>();
+        Assert.Contains("border-warning", some.Find("[data-stat=NeedsAttention]").ClassName);
+    }
+
+    [Fact]
+    public void a_single_repository_lane_uses_the_full_width()
+    {
+        Repositories.Repositories.RemoveAt(1);
+
+        IRenderedComponent<DashboardOverview> cut = Render<DashboardOverview>();
+
+        Assert.Single(cut.FindAll("h1"));
+        Assert.DoesNotContain("col-xl-6", cut.Markup);
+    }
+
+    [Fact]
     public void shows_an_alert_for_every_spec_that_is_awaiting_merge()
     {
         Runs.SpecRuns.Add(Run("r-merge", SpecRunStatus.AwaitingMerge, issue: 21));
@@ -46,7 +69,7 @@ public sealed class DashboardOverviewTests : UiTestContext
         IRenderedComponent<DashboardOverview> cut = Render<DashboardOverview>();
 
         var alert = Assert.Single(cut.FindAll("[data-alert=NeedsAttention]"));
-        Assert.Contains("alert-danger", alert.ClassName);
+        Assert.Contains("alert-warning", alert.ClassName);
         Assert.Contains("#23", alert.TextContent);
         Assert.Contains("Parent review cycle limit reached", alert.TextContent);
     }
@@ -66,7 +89,7 @@ public sealed class DashboardOverviewTests : UiTestContext
         Assert.Equal("2 / 2", widgets.QuerySelector("[data-testid=slots]")!.TextContent.Trim());
         Assert.Equal(["r-1", "r-2", "r-3"], widgets.QuerySelectorAll("[data-run-id]").Select(row => row.GetAttribute("data-run-id")!).ToArray());
         Assert.Equal("1 / 2", cut.Find("[data-repo-lane='2'] [data-testid=slots]").TextContent.Trim());
-        Assert.Equal("WaitForMerge", widgets.QuerySelector("[data-testid=dependency-mode]")!.TextContent.Trim());
+        Assert.Equal("Mode: Wait for merge", widgets.QuerySelector("[data-testid=dependency-mode]")!.TextContent.Trim());
     }
 
     [Fact]
@@ -115,14 +138,15 @@ public sealed class DashboardOverviewTests : UiTestContext
     }
 
     [Fact]
-    public void opening_a_queue_switches_the_context_and_navigates_without_touching_scheduling()
+    public void opening_a_queue_is_a_link_that_switches_the_context_without_touching_scheduling()
     {
         IRenderedComponent<DashboardOverview> cut = Render<DashboardOverview>();
 
-        cut.Find("[data-repo-lane='2'] [data-testid=open-queue]").Click();
+        var link = cut.Find("[data-repo-lane='2'] a[data-testid=open-queue]");
+        Assert.Equal("/queue", link.GetAttribute("href"));
+        link.Click();
 
         Assert.Equal(2, Selection.CurrentRepositoryId);
-        Assert.EndsWith("/queue", Services.GetRequiredService<NavigationManager>().Uri);
         Assert.Empty(Enqueuer.Calls);
     }
 

@@ -81,10 +81,42 @@ public sealed class SpecPreparationServiceTests
     }
 
     [Fact]
+    public async Task spec_without_open_ticket_sub_issues_needs_attention_instead_of_reaching_review()
+    {
+        _fixture.SeedSpec(1);
+        SpecRun run = await ActivateAsync(1);
+
+        PreparationOutcome outcome = await _fixture.PrepareAsync(run);
+
+        Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
+        Assert.Equal(SpecRunStatus.NeedsAttention, run.Status);
+        Assert.Contains("no open ticket sub-issues", run.FailureReason);
+        Assert.Empty(await TicketRuns.ListBySpecRunAsync(run.Id, Ct));
+        Assert.Null(await LocalTipAsync(run.IntegrationBranch));
+        Assert.Empty(_fixture.Agents.Started);
+        Assert.DoesNotContain(_fixture.Store.PendingEvents, e => e is SpecRunStatusChanged { To: SpecRunStatus.Running });
+    }
+
+    [Fact]
+    public async Task spec_whose_sub_issues_are_all_closed_needs_attention()
+    {
+        _fixture.SeedSpec(1);
+        _fixture.SeedTicket(2, spec: 1);
+        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(2), IssueCloseReason.Completed, Ct);
+        SpecRun run = await ActivateAsync(1);
+
+        PreparationOutcome outcome = await _fixture.PrepareAsync(run);
+
+        Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
+        Assert.Contains("no open ticket sub-issues", run.FailureReason);
+    }
+
+    [Fact]
     public async Task missing_trunk_on_the_remote_needs_attention()
     {
         _fixture.GlobalSettings.BaseBranch = new BranchName("develop");
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(2, spec: 1);
         SpecRun run = await ActivateAsync(1);
 
         PreparationOutcome outcome = await _fixture.PrepareAsync(run);

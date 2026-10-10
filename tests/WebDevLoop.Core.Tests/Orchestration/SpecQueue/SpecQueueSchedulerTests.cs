@@ -126,7 +126,9 @@ public sealed class SpecQueueSchedulerTests
     {
         _fixture.ConfigureQueue(maxActiveSpecs: 2, SpecDependencyMode.StackOnTop);
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(11, spec: 1);
         _fixture.SeedSpec(2, 1);
+        _fixture.SeedTicket(12, spec: 2);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
         SpecRun dependent = await _fixture.EnqueueAsync(2);
         await _fixture.ScheduleAsync();
@@ -256,7 +258,9 @@ public sealed class SpecQueueSchedulerTests
     {
         _fixture.ConfigureQueue(maxActiveSpecs: 1, SpecDependencyMode.StackOnTop);
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(11, spec: 1);
         _fixture.SeedSpec(2, 1);
+        _fixture.SeedTicket(12, spec: 2);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
         SpecRun dependent = await _fixture.EnqueueAsync(2);
         await _fixture.ScheduleAsync();
@@ -303,7 +307,9 @@ public sealed class SpecQueueSchedulerTests
     {
         _fixture.ConfigureQueue(maxActiveSpecs: 1, SpecDependencyMode.StackOnTop);
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(11, spec: 1);
         _fixture.SeedSpec(2, 1);
+        _fixture.SeedTicket(12, spec: 2);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
         SpecRun dependent = await _fixture.EnqueueAsync(2);
         await _fixture.ScheduleAsync();

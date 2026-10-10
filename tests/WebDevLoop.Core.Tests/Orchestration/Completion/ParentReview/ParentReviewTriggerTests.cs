@@ -56,6 +56,19 @@ public sealed class ParentReviewTriggerTests
     }
 
     [Fact]
+    public async Task A_spec_without_any_ticket_never_starts_the_parent_review()
+    {
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app");
+
+        ParentReviewStartOutcome outcome = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(ParentReviewStartOutcome.NoTickets, outcome);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        await DeliverCommittedAsync();
+        Assert.Empty(_fixture.Launcher.Launched);
+    }
+
+    [Fact]
     public async Task Skipped_tickets_count_as_complete()
     {
         SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []), (3, []));

@@ -6,7 +6,8 @@ Copilot agents on run-scoped branches, has every ticket reviewed (coding standar
 squash-merges each ticket into a run-scoped integration branch and publishes it as one layer of a stacked draft PR stack,
 runs a parent review and a tester agent against the integrated app, marks the stack ready, and completes once a human
 merged it. The app is the coordinator: state, queueing, Git/GitHub mutations, and recovery are app logic; agents only
-explore, implement, review, resolve conflicts, and test locally.
+explore, implement, review, resolve conflicts, and test locally. WebDevLoop does not split a spec into tickets: the spec must
+already have open sub-issues, otherwise the run needs attention (add the sub-issues, then retry).
 
 ## Prerequisites
 

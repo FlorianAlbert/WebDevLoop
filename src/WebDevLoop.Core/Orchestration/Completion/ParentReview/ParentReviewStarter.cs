@@ -12,6 +12,9 @@ public enum ParentReviewStartOutcome
     /// <summary>The spec is not <c>Running</c> (e.g. already in parent review); nothing was done.</summary>
     NotRunning,
 
+    /// <summary>The spec has no tickets at all, so there is nothing to review; a vacuous "all done" must not start the review.</summary>
+    NoTickets,
+
     /// <summary>Some ticket is not done yet (integrated, skipped, or aborted).</summary>
     TicketsOutstanding,
 
@@ -37,6 +40,11 @@ public sealed class ParentReviewStarter(ISpecRunRepository specRuns, ITicketRunR
         }
 
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken);
+        if (tickets.Count == 0)
+        {
+            return ParentReviewStartOutcome.NoTickets;
+        }
+
         if (!tickets.All(IsComplete))
         {
             return ParentReviewStartOutcome.TicketsOutstanding;

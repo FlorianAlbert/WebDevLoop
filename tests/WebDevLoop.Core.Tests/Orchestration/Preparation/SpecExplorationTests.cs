@@ -121,6 +121,7 @@ public sealed class SpecExplorationTests
     {
         var fixture = new SpecWorkflowFixture(explorationEnabled: false);
         fixture.SeedSpec(1);
+        fixture.SeedTicket(2, spec: 1);
         SpecRun run = await fixture.EnqueueAsync(1);
         await fixture.ScheduleAsync();
 

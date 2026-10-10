@@ -164,31 +164,31 @@ Checklist:
 - One topic per PR; keep the diff focused. Describe what changed and why.
 - The build must be warning-free and all tests green.
 - Do not commit secrets: GitHub App client secrets live in user secrets or environment variables, never in `appsettings.json`.
-- Generated files stay out of git: `docs/_site/`, `docs/api/*.yml`, `docs/rest-api/*.json` (see `.gitignore`).
+- Generated files stay out of git: `docfx/_site/`, `docfx/api/*.yml`, `docfx/rest-api/*.json` (see `.gitignore`).
 
 ## Build the documentation
 
-The docs live in `docs/` and are built with [DocFX](https://dotnet.github.io/docfx/).
+The product docs live in `docfx/` and are built with [DocFX](https://dotnet.github.io/docfx/). Agent configuration and architecture decisions live separately in `docs/` and are not published to the site.
 
 | Path | Content |
 | --- | --- |
-| `docs/docfx.json` | DocFX config: metadata from the three src projects (`net11.0`), content globs, output `_site`. |
-| `docs/toc.yml`, `docs/index.md` | Top navigation and home page. |
-| `docs/user-guide/` | Guide for users of the app. |
-| `docs/developer-guide/` | This guide. Each folder has a `toc.yml`. |
-| `docs/api/` | **Generated** code reference (YAML). Do not edit. |
-| `docs/rest-api/` | REST API reference. `webdevloop.swagger.json` is **generated** from the OpenAPI document (`/openapi/v1.json`). |
-| `docs/tools/` | `generate-openapi.sh` starts the app, downloads the OpenAPI document and converts it with `OpenApiToSwagger.cs` (DocFX reads Swagger 2.0, the app serves OpenAPI 3). |
-| `docs/templates/webdevloop/` | Styling on top of the DocFX `modern` template: the colours of the app, mermaid theme, click-to-enlarge diagrams. |
+| `docfx/docfx.json` | DocFX config: metadata from the three src projects (`net11.0`), content globs, output `_site`. |
+| `docfx/toc.yml`, `docfx/index.md` | Top navigation and home page. |
+| `docfx/user-guide/` | Guide for users of the app. |
+| `docfx/developer-guide/` | This guide. Each folder has a `toc.yml`. |
+| `docfx/api/` | **Generated** code reference (YAML). Do not edit. |
+| `docfx/rest-api/` | REST API reference. `webdevloop.swagger.json` is **generated** from the OpenAPI document (`/openapi/v1.json`). |
+| `docfx/tools/` | `generate-openapi.sh` starts the app, downloads the OpenAPI document and converts it with `OpenApiToSwagger.cs` (DocFX reads Swagger 2.0, the app serves OpenAPI 3). |
+| `docfx/templates/webdevloop/` | Styling on top of the DocFX `modern` template: the colours of the app, mermaid theme, click-to-enlarge diagrams. |
 
 Build and preview:
 
 ```bash
 dotnet tool install -g docfx        # once
-cd docs
-docfx metadata docfx.json           # extracts the C# API into docs/api (needs the .NET SDK to build the projects)
+cd docfx
+docfx metadata docfx.json           # extracts the C# API into docfx/api (needs the .NET SDK to build the projects)
 tools/generate-openapi.sh           # writes rest-api/webdevloop.swagger.json (builds and starts the app briefly)
-docfx build docfx.json              # builds docs/_site
+docfx build docfx.json              # builds docfx/_site
 docfx serve _site                   # preview on http://localhost:8080
 ```
 
@@ -198,12 +198,12 @@ Writing rules:
 
 - Add each new page to the folder's `toc.yml`.
 - Link to other pages with relative links (`[Web API](web-api.md)`).
-- Link to a type in the code reference with an xref: `<xref:WebDevLoop.Core.Agents.AgentRunRequest>`. The uid is the full namespace and type name. Generic types use a backtick and arity, for example <xref:WebDevLoop.Web.Api.Contracts.RunControlResponse`1>. Check the uid exists as a file in `docs/api/` (for example `docs/api/WebDevLoop.Core.Agents.AgentRunRequest.yml`).
+- Link to a type in the code reference with an xref: `<xref:WebDevLoop.Core.Agents.AgentRunRequest>`. The uid is the full namespace and type name. Generic types use a backtick and arity, for example <xref:WebDevLoop.Web.Api.Contracts.RunControlResponse`1>. Check the uid exists as a file in `docfx/api/` (for example `docfx/api/WebDevLoop.Core.Agents.AgentRunRequest.yml`).
 - Draw diagrams with fenced `mermaid` blocks. Keep them small and accurate to the code. DocFX renders them.
 - Read the `docfx build` output: an `InvalidXrefs` or `InvalidFileLink` warning means a wrong uid or path.
 - XML doc comments in C# become the code reference. Razor components appear there too.
 
-The site is published to GitHub Pages by a GitHub Actions workflow (see `.github/workflows/`). It installs DocFX, runs the metadata, OpenAPI and build steps above, and deploys `docs/_site`. The workflow is `.github/workflows/docs.yml`; it runs on every push to `main` that touches the docs or the source.
+The site is published to GitHub Pages by a GitHub Actions workflow (see `.github/workflows/`). It installs DocFX, runs the metadata, OpenAPI and build steps above, and deploys `docfx/_site`. The workflow is `.github/workflows/docs.yml`; it runs on every push to `main` that touches the product docs or the source.
 
 ## Where to look in the code
 
@@ -215,6 +215,6 @@ The site is published to GitHub Pages by a GitHub Actions workflow (see `.github
 | API and UI tests, end-to-end scenario | `tests/WebDevLoop.Web.Tests/Api/`, `Components/`, `Workflow/` |
 | Architecture rule | `tests/WebDevLoop.Core.Tests/SolutionArchitectureTests.cs` |
 | Test-target supervisor (product code) | `src/WebDevLoop.Infrastructure/TestHost/` |
-| Docs | `docs/docfx.json`, `docs/developer-guide/` |
+| Product docs | `docfx/docfx.json`, `docfx/developer-guide/` |
 
 Related: [Web UI](web-ui.md), [Web API](web-api.md), [Persistence and events](persistence-and-events.md).

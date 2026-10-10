@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - docs/**
+      - docfx/**
       - src/**
       - Directory.Build.props
       - Directory.Packages.props
@@ -35,21 +35,21 @@ jobs:
         run: dotnet tool install -g docfx --version 2.81.0
 
       - name: Generate the code reference (XML comments)
-        working-directory: docs
+        working-directory: docfx
         run: docfx metadata docfx.json
 
       - name: Generate the REST API reference (OpenAPI)
-        run: docs/tools/generate-openapi.sh
+        run: docfx/tools/generate-openapi.sh
 
       - name: Build the site
-        working-directory: docs
+        working-directory: docfx
         run: docfx build docfx.json
 
       - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: docs/_site
+          path: docfx/_site
 
   deploy:
     needs: build

@@ -145,7 +145,8 @@ src/
     Api/ Components/ Background/ DependencyInjection/ GitHubAuth/ Resources/Prompts/
 tests/
   WebDevLoop.Core.Tests/  WebDevLoop.Infrastructure.Tests/  WebDevLoop.Web.Tests/
-docs/                            this DocFX site
+docfx/                           this DocFX site
+docs/                            agent configuration and architecture decisions
 ```
 
 ## Where to look in the code

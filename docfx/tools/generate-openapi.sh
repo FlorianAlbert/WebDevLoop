@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Starts WebDevLoop with an empty data directory, downloads its OpenAPI document and converts it to
-# docs/rest-api/webdevloop.swagger.json (Swagger 2.0, the format DocFX renders).
+# docfx/rest-api/webdevloop.swagger.json (Swagger 2.0, the format DocFX renders).
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -30,6 +30,6 @@ for _ in $(seq 1 60); do
 done
 [[ -s "$work/openapi.json" ]] || { cat "$log"; echo "No OpenAPI document received" >&2; exit 1; }
 
-mkdir -p "$root/docs/rest-api"
-dotnet run "$root/docs/tools/OpenApiToSwagger.cs" "$work/openapi.json" "$root/docs/rest-api/webdevloop.swagger.json"
-echo "Wrote docs/rest-api/webdevloop.swagger.json"
+mkdir -p "$root/docfx/rest-api"
+dotnet run "$root/docfx/tools/OpenApiToSwagger.cs" "$work/openapi.json" "$root/docfx/rest-api/webdevloop.swagger.json"
+echo "Wrote docfx/rest-api/webdevloop.swagger.json"

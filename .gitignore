@@ -487,7 +487,7 @@ $RECYCLE.BIN/
 *.swp
 
 # DocFX
-docs/_site/
-docs/api/*.yml
-docs/api/.manifest
-docs/rest-api/*.json
+docfx/_site/
+docfx/api/*.yml
+docfx/api/.manifest
+docfx/rest-api/*.json

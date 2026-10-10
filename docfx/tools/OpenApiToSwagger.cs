@@ -1,7 +1,7 @@
 #:package Microsoft.OpenApi@3.10.0
 
 // Converts the OpenAPI 3.x document served by WebDevLoop into the Swagger 2.0 file that DocFX can render.
-// Usage: dotnet run docs/tools/OpenApiToSwagger.cs <input.json> <output.swagger.json>
+// Usage: dotnet run docfx/tools/OpenApiToSwagger.cs <input.json> <output.swagger.json>
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.OpenApi;

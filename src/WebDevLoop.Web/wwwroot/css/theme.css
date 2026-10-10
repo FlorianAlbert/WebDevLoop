@@ -495,12 +495,6 @@ code, kbd, pre, samp, .font-mono {
     .app-content { padding: var(--wdl-space-5) var(--wdl-space-6); }
 }
 
-/* Error UI */
-#blazor-error-ui {
-    background: var(--wdl-warning-bg);
-    color: var(--wdl-warning-fg);
-}
-
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;

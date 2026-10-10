@@ -16,8 +16,8 @@
     </main>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+<div id="blazor-error-ui" role="alert" data-nosnippet>
+    <span class="error-ui__message"><strong>Something went wrong.</strong> Reload the page to carry on.</span>
+    <a href="." class="reload btn btn-outline-secondary btn-sm">Reload</a>
+    <button type="button" class="dismiss" aria-label="Dismiss"><Icon Name="close" Size="16" /></button>
 </div>

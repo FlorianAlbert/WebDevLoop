@@ -1,20 +1,53 @@
+/* Blazor shows this bar by setting display:block when an unhandled error occurs. */
 #blazor-error-ui {
-    color-scheme: light only;
-    background: lightyellow;
-    bottom: 0;
-    box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.2);
-    box-sizing: border-box;
     display: none;
-    left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
     position: fixed;
-    width: 100%;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 1000;
+    box-sizing: border-box;
+    padding: var(--wdl-space-3) 3.25rem var(--wdl-space-3) var(--wdl-space-4);
+    background: var(--wdl-danger-bg);
+    color: var(--wdl-danger-fg);
+    border-top: 1px solid var(--wdl-danger-dot);
+    font-size: var(--wdl-text-sm);
 }
 
+    #blazor-error-ui .error-ui__message {
+        margin-right: var(--wdl-space-3);
+    }
+
+    #blazor-error-ui .reload {
+        --bs-btn-color: var(--wdl-danger-fg);
+        --bs-btn-border-color: var(--wdl-danger-dot);
+        --bs-btn-hover-color: var(--wdl-danger-fg);
+        --bs-btn-hover-bg: transparent;
+        --bs-btn-hover-border-color: var(--wdl-danger-fg);
+        --bs-btn-active-color: var(--wdl-danger-fg);
+        --bs-btn-active-bg: transparent;
+        --bs-btn-active-border-color: var(--wdl-danger-fg);
+        vertical-align: baseline;
+    }
+
     #blazor-error-ui .dismiss {
-        cursor: pointer;
         position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
+        right: var(--wdl-space-3);
+        top: 50%;
+        transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        border: 0;
+        border-radius: var(--wdl-radius-sm);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    #blazor-error-ui .dismiss:hover {
+        background: rgba(var(--wdl-accent-rgb), 0.12);
     }

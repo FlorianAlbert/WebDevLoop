@@ -1,31 +1,43 @@
-﻿<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
+<script type="module" src="@Assets["Components/Layout/ReconnectModal.razor.js"]"></script>
 
-<dialog id="components-reconnect-modal" data-nosnippet>
-    <div class="components-reconnect-container">
-        <div class="components-rejoining-animation" aria-hidden="true">
-            <div></div>
-            <div></div>
+@* Blazor sets one components-reconnect-* state class on this dialog; the CSS shows only the parts that belong to that state. *@
+<dialog id="components-reconnect-modal" class="reconnect-dialog" aria-label="Connection status" data-nosnippet>
+    <div class="reconnect-card">
+        <span class="reconnect-icon reconnect-icon--busy components-reconnect-busy-visible" aria-hidden="true"></span>
+        <span class="reconnect-icon reconnect-icon--problem components-reconnect-problem-visible"><Icon Name="alert" Size="24" /></span>
+        <span class="reconnect-icon reconnect-icon--paused components-pause-visible"><Icon Name="info" Size="24" /></span>
+
+        <div class="reconnect-body" role="status" aria-live="polite">
+            <h2 class="reconnect-title components-reconnect-first-attempt-visible components-reconnect-repeated-attempt-visible">Reconnecting…</h2>
+            <h2 class="reconnect-title components-reconnect-failed-visible">Can't reach the server</h2>
+            <h2 class="reconnect-title components-pause-visible">Session paused</h2>
+            <h2 class="reconnect-title components-resume-failed-visible">Couldn't resume the session</h2>
+            <h2 class="reconnect-title components-reconnect-rejected-visible">This session has ended</h2>
+
+            <p class="reconnect-text components-reconnect-first-attempt-visible">
+                The connection to WebDevLoop was lost. Trying to reconnect.
+            </p>
+            <p class="reconnect-text components-reconnect-repeated-attempt-visible">
+                Still can't reach the server. Trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
+            </p>
+            <p class="reconnect-text components-reconnect-failed-visible">
+                Check that WebDevLoop is still running, then try again. If that doesn't help, reload the page.
+            </p>
+            <p class="reconnect-text components-pause-visible">
+                The server paused this session. Resume to carry on where you left off.
+            </p>
+            <p class="reconnect-text components-resume-failed-visible">
+                Try again, or reload the page if that doesn't help.
+            </p>
+            <p class="reconnect-text components-reconnect-rejected-visible">
+                The server no longer knows this session. Reloading the page to start a new one.
+            </p>
         </div>
-        <p class="components-reconnect-first-attempt-visible">
-            Rejoining the server...
-        </p>
-        <p class="components-reconnect-repeated-attempt-visible">
-            Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
-        </p>
-        <p class="components-reconnect-failed-visible">
-            Failed to rejoin.<br />Please retry or reload the page.
-        </p>
-        <button id="components-reconnect-button" class="components-reconnect-failed-visible">
-            Retry
-        </button>
-        <p class="components-pause-visible">
-            The session has been paused by the server.
-        </p>
-        <p class="components-resume-failed-visible">
-            Failed to resume the session.<br />Please retry or reload the page.
-        </p>
-        <button id="components-resume-button" class="components-pause-visible components-resume-failed-visible">
-            Resume
-        </button>
+
+        <div class="reconnect-actions">
+            <button type="button" id="components-reconnect-button" class="btn btn-primary btn-sm components-reconnect-failed-visible">Try again</button>
+            <button type="button" id="components-resume-button" class="btn btn-primary btn-sm components-pause-visible components-resume-failed-visible">Resume</button>
+            <button type="button" id="components-reload-button" class="btn btn-outline-secondary btn-sm components-reconnect-failed-visible components-resume-failed-visible components-reconnect-rejected-visible">Reload page</button>
+        </div>
     </div>
 </dialog>

@@ -1,0 +1,15 @@
+@* Inline SVG icon (Lucide-style, 24x24 stroke icons). Decorative: always aria-hidden. *@
+@if (IconPaths.TryGet(Name, out string? markup))
+{
+    <svg xmlns="http://www.w3.org/2000/svg" class="icon @Class" width="@Size" height="@Size" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">@((MarkupString)markup!)</svg>
+}
+
+@code {
+    /// <summary>Icon name, see <see cref="IconPaths.Names"/> (e.g. "plus", "refresh", "trash").</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = string.Empty;
+
+    [Parameter] public int Size { get; set; } = 16;
+
+    [Parameter] public string? Class { get; set; }
+}

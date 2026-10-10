@@ -1,0 +1,27 @@
+@* The single h1 of a page. Also sets the document title as "<title> · WebDevLoop". *@
+<PageTitle>@PageTitles.Format(DocumentTitle ?? Title)</PageTitle>
+
+<header class="page-header">
+    <div class="page-header__text">
+        <h1 class="page-header__title" tabindex="-1">@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Description))
+        {
+            <p class="page-header__description">@Description</p>
+        }
+    </div>
+    @if (Actions is not null)
+    {
+        <div class="page-header__actions">@Actions</div>
+    }
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Description { get; set; }
+
+    /// <summary>Document title when it should differ from <see cref="Title"/>; the app-name suffix is added automatically.</summary>
+    [Parameter] public string? DocumentTitle { get; set; }
+
+    [Parameter] public RenderFragment? Actions { get; set; }
+}

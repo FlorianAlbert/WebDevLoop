@@ -1,0 +1,61 @@
+@inject IJSRuntime JS
+
+<div class="theme-toggle" role="group" aria-label="Color theme">
+    @foreach ((string mode, string label, string icon) in Options)
+    {
+        <button type="button" class="theme-toggle__option" aria-pressed="@(_mode == mode ? "true" : "false")" title="@label theme" aria-label="@label theme"
+                @onclick="() => SetAsync(mode)" data-theme="@mode">
+            <Icon Name="@icon" Size="14" /><span>@label</span>
+        </button>
+    }
+</div>
+
+@code {
+    private static readonly (string Mode, string Label, string Icon)[] Options =
+    [
+        ("system", "System", "monitor"),
+        ("light", "Light", "sun"),
+        ("dark", "Dark", "moon"),
+    ];
+
+    private string _mode = "system";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            string stored = await JS.InvokeAsync<string>("wdlTheme.get");
+            if (stored != _mode)
+            {
+                _mode = stored;
+                StateHasChanged();
+            }
+        }
+        catch (JSException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private async Task SetAsync(string mode)
+    {
+        _mode = mode;
+        try
+        {
+            await JS.InvokeVoidAsync("wdlTheme.set", mode);
+        }
+        catch (JSException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+}

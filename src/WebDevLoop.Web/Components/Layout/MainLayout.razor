@@ -2,13 +2,19 @@
 @using WebDevLoop.Web.Components.Dashboard
 @using WebDevLoop.Web.Components.GitHub
 
-<NavMenu />
+<a class="skip-link" href="#main-content">Skip to content</a>
 
-<main class="container-xl py-3">
-    <GitHubSignInBanner />
-    <DiagnosticBanner />
-    @Body
-</main>
+<div class="app-shell">
+    <NavMenu />
+
+    <main id="main-content" class="app-main" tabindex="-1">
+        <div class="app-content">
+            <GitHubSignInBanner />
+            <DiagnosticBanner />
+            @Body
+        </div>
+    </main>
+</div>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.

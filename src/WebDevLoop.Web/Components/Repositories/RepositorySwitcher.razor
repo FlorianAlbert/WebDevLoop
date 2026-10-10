@@ -5,11 +5,13 @@
 }
 else if (_repositories.Count == 0)
 {
-    <a class="btn btn-outline-light btn-sm" href="@UiRoutes.Repositories">Register a repository</a>
+    <label for="repository-switcher" class="visually-hidden">Repository</label>
+    <a id="repository-switcher" class="btn btn-outline-primary btn-sm" href="@UiRoutes.Repositories">Add a repository</a>
 }
 else
 {
-    <select class="form-select form-select-sm" aria-label="Current repository" title="Current repository (view context only)"
+    <label for="repository-switcher" class="app-context__label">Repository</label>
+    <select id="repository-switcher" class="form-select form-select-sm" title="Current repository (view context only)"
             value="@RepositoryContext.CurrentRepositoryId" @onchange="OnChanged">
         <option value="">No repository selected</option>
         @foreach (RepositoryView repository in _repositories)

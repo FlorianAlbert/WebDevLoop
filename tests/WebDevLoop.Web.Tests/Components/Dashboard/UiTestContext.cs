@@ -34,6 +34,7 @@ public abstract class UiTestContext : BunitContext
 
     protected UiTestContext()
     {
+        JSInterop.Mode = JSRuntimeMode.Loose;
         Readiness = new DiagnosticReadiness(Validator, new FakeClock());
         Readiness.RefreshAsync(CancellationToken.None).GetAwaiter().GetResult();
         Services.AddSingleton<IRepositoryRegistry>(Registry);

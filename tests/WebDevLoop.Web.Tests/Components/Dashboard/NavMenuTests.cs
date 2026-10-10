@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.JSInterop;
 using WebDevLoop.Web.Components.Layout;
 
 namespace WebDevLoop.Web.Tests.Components.Dashboard;
@@ -13,6 +14,34 @@ public sealed class NavMenuTests : UiTestContext
         string[] hrefs = cut.FindAll("a.nav-link").Select(link => link.GetAttribute("href")!).ToArray();
 
         Assert.Equal(["/", "/repositories", "/queue", "/settings", "/github", "/health"], hrefs);
+    }
+
+    [Fact]
+    public void mobile_toggle_opens_and_closes_the_panel_and_reflects_state_in_aria_expanded()
+    {
+        IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+        var toggle = cut.Find("button.app-nav-toggle");
+
+        Assert.Equal("false", toggle.GetAttribute("aria-expanded"));
+        Assert.DoesNotContain("is-open", cut.Find("#main-nav").ClassList);
+
+        toggle.Click();
+        Assert.Equal("true", cut.Find("button.app-nav-toggle").GetAttribute("aria-expanded"));
+        Assert.Contains("is-open", cut.Find("#main-nav").ClassList);
+
+        cut.Find("button.app-nav-toggle").Click();
+        Assert.Equal("false", cut.Find("button.app-nav-toggle").GetAttribute("aria-expanded"));
+    }
+
+    [Fact]
+    public void choosing_a_destination_closes_the_mobile_panel()
+    {
+        IRenderedComponent<NavMenu> cut = Render<NavMenu>();
+        cut.Find("button.app-nav-toggle").Click();
+
+        cut.Find("a.nav-link").Click();
+
+        Assert.DoesNotContain("is-open", cut.Find("#main-nav").ClassList);
     }
 
     [Fact]

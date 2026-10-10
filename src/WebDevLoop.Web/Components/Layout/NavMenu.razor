@@ -1,24 +1,40 @@
 @using WebDevLoop.Web.Components.Repositories
 
-<nav class="navbar navbar-expand-md navbar-dark bg-dark py-1">
-    <div class="container-xl">
-        <a class="navbar-brand fw-semibold" href="@UiRoutes.Dashboard">WebDevLoop</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-nav" aria-controls="main-nav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
+<aside class="app-sidebar">
+    <div class="app-sidebar__bar">
+        <a class="app-brand" href="@UiRoutes.Dashboard">
+            <img class="app-brand__mark" src="favicon.svg" alt="" width="28" height="28" />
+            <span>WebDevLoop</span>
+        </a>
+        <button class="app-nav-toggle" type="button" aria-controls="main-nav" aria-expanded="@(_open ? "true" : "false")"
+                aria-label="Toggle navigation" @onclick="Toggle">
+            <Icon Name="@(_open ? "close" : "menu")" Size="20" />
         </button>
-        <div class="collapse navbar-collapse" id="main-nav">
-            <ul class="navbar-nav me-auto">
-                <li class="nav-item"><NavLink class="nav-link" href="@UiRoutes.Dashboard" Match="NavLinkMatch.All">Dashboard</NavLink></li>
-                <li class="nav-item"><NavLink class="nav-link" href="@UiRoutes.Repositories">Repositories</NavLink></li>
-                <li class="nav-item"><NavLink class="nav-link" href="@UiRoutes.Queue">Queue</NavLink></li>
-                <li class="nav-item"><NavLink class="nav-link" href="@UiRoutes.Settings">Settings</NavLink></li>
-                <li class="nav-item"><NavLink class="nav-link" href="@UiRoutes.GitHub">GitHub</NavLink></li>
-                <li class="nav-item"><NavLink class="nav-link" href="@UiRoutes.Health">Health</NavLink></li>
+    </div>
+    <div id="main-nav" class="app-sidebar__panel @(_open ? "is-open" : null)">
+        <div class="app-context">
+            <RepositorySwitcher />
+        </div>
+        <nav aria-label="Main">
+            <ul class="app-nav" @onclick="Close">
+                <li><NavLink class="nav-link" href="@UiRoutes.Dashboard" Match="NavLinkMatch.All"><Icon Name="dashboard" /> Dashboard</NavLink></li>
+                <li><NavLink class="nav-link" href="@UiRoutes.Repositories"><Icon Name="repositories" /> Repositories</NavLink></li>
+                <li><NavLink class="nav-link" href="@UiRoutes.Queue"><Icon Name="queue" /> Queue</NavLink></li>
+                <li><NavLink class="nav-link" href="@UiRoutes.Settings"><Icon Name="settings" /> Settings</NavLink></li>
+                <li><NavLink class="nav-link" href="@UiRoutes.GitHub"><Icon Name="github" /> GitHub</NavLink></li>
+                <li><NavLink class="nav-link" href="@UiRoutes.Health"><Icon Name="health" /> Health</NavLink></li>
             </ul>
-            <div class="d-flex align-items-center gap-2 text-light small">
-                <span>Repository</span>
-                <RepositorySwitcher />
-            </div>
+        </nav>
+        <div class="app-sidebar__footer">
+            <ThemeToggle />
         </div>
     </div>
-</nav>
+</aside>
+
+@code {
+    private bool _open;
+
+    private void Toggle() => _open = !_open;
+
+    private void Close() => _open = false;
+}

@@ -1,0 +1,32 @@
+@if (Href is not null)
+{
+    <a class="btn btn-@Variant btn-sm icon-button @Class" href="@Href" aria-label="@Label" title="@Label" @attributes="AdditionalAttributes"><Icon Name="@Icon" /></a>
+}
+else
+{
+    <button type="@Type" class="btn btn-@Variant btn-sm icon-button @Class" aria-label="@Label" title="@Label" disabled="@Disabled"
+            @onclick="OnClick" @attributes="AdditionalAttributes"><Icon Name="@Icon" /></button>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    /// <summary>Accessible name, also used as the tooltip.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    /// <summary>Bootstrap button variant, e.g. "outline-secondary", "outline-danger", "primary".</summary>
+    [Parameter] public string Variant { get; set; } = "outline-secondary";
+
+    /// <summary>When set, renders a link instead of a button.</summary>
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public string Type { get; set; } = "button";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

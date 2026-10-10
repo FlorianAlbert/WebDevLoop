@@ -1,0 +1,47 @@
+<section class="card section-card @Class" id="@Id" aria-labelledby="@(HasTitle ? TitleId : null)" @attributes="AdditionalAttributes">
+    @if (HasTitle || Actions is not null)
+    {
+        <div class="section-card__header">
+            <div>
+                @if (HasTitle)
+                {
+                    <h2 class="section-card__title" id="@TitleId">@Title</h2>
+                }
+                @if (!string.IsNullOrWhiteSpace(Description))
+                {
+                    <p class="section-card__description">@Description</p>
+                }
+            </div>
+            @if (Actions is not null)
+            {
+                <div class="d-flex flex-wrap align-items-center gap-2">@Actions</div>
+            }
+        </div>
+    }
+    <div class="@(NoPadding ? null : "section-card__body")">@ChildContent</div>
+</section>
+
+@code {
+    private readonly string _generatedId = $"section-{Guid.NewGuid():N}";
+
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public string? Description { get; set; }
+
+    [Parameter] public string? Id { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Removes the body padding, e.g. for tables that should reach the card edges.</summary>
+    [Parameter] public bool NoPadding { get; set; }
+
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private bool HasTitle => !string.IsNullOrWhiteSpace(Title);
+
+    private string TitleId => (Id ?? _generatedId) + "-title";
+}

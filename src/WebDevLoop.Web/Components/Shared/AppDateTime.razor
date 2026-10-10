@@ -1,0 +1,25 @@
+@inject IServiceProvider Services
+
+@if (Value is { } value)
+{
+    TimeProvider time = Services.GetService(typeof(TimeProvider)) as TimeProvider ?? TimeProvider.System;
+    TimeZoneInfo zone = time.LocalTimeZone;
+    string exact = DateTimeFormats.Absolute(value, zone);
+    string text = Mode == DateTimeDisplay.Absolute ? exact : DateTimeFormats.Relative(value, time.GetUtcNow(), zone);
+    <time datetime="@value.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture)" title="@exact" @attributes="AdditionalAttributes">@text</time>
+}
+else
+{
+    <span class="text-body-secondary">@Placeholder</span>
+}
+
+@code {
+    [Parameter] public DateTimeOffset? Value { get; set; }
+
+    /// <summary>Relative ("2 min ago", falling back to the absolute format after a week) or Absolute.</summary>
+    [Parameter] public DateTimeDisplay Mode { get; set; } = DateTimeDisplay.Relative;
+
+    [Parameter] public string Placeholder { get; set; } = "—";
+
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

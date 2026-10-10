@@ -1,0 +1,40 @@
+<div class="empty-state @Class" @attributes="AdditionalAttributes">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <span class="empty-state__icon"><Icon Name="@Icon" Size="32" /></span>
+    }
+    @if (!string.IsNullOrWhiteSpace(Title))
+    {
+        <p class="empty-state__title">@Title</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(Text))
+    {
+        <p class="empty-state__text">@Text</p>
+    }
+    @if (ChildContent is not null)
+    {
+        <p class="empty-state__text">@ChildContent</p>
+    }
+    @if (Action is not null)
+    {
+        <div class="empty-state__action">@Action</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Icon { get; set; } = "inbox";
+
+    [Parameter] public string? Title { get; set; }
+
+    [Parameter] public string? Text { get; set; }
+
+    /// <summary>Additional rich description rendered below <see cref="Text"/>.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Primary call to action, e.g. a button or link.</summary>
+    [Parameter] public RenderFragment? Action { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

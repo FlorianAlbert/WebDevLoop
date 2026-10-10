@@ -3,7 +3,7 @@ using WebDevLoop.Core.Domain;
 namespace WebDevLoop.Core.Orchestration.Results;
 
 /// <summary>
-/// Troubleshooter result. <see cref="Summary"/> is the diagnosis the user reads on the "Action needed" card, and
+/// Troubleshooter result. <see cref="AgentReport.Summary"/> is the diagnosis the user reads on the "Action needed" card, and
 /// <see cref="ActionsTaken"/> becomes part of "What WebDevLoop tried". <see cref="Outcome"/> <c>resolved</c> is only a claim.
 /// </summary>
 public sealed record TroubleshooterReport : AgentReport

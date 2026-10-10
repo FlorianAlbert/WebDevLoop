@@ -1,0 +1,26 @@
+- name: Overview
+  href: index.md
+- name: Getting started
+  href: getting-started.md
+- name: Dashboard
+  href: dashboard.md
+- name: Repositories
+  href: repositories.md
+- name: Queue
+  href: queue.md
+- name: Spec runs
+  href: runs.md
+- name: Tickets and steps
+  href: tickets-and-steps.md
+- name: Needs attention
+  href: needs-attention.md
+- name: Settings
+  href: settings.md
+- name: GitHub
+  href: github.md
+- name: Health
+  href: health.md
+- name: FAQ and troubleshooting
+  href: faq-troubleshooting.md
+- name: Glossary
+  href: glossary.md

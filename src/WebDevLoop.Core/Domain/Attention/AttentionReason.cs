@@ -28,7 +28,7 @@ public enum AttentionActionKind
 /// <summary>One button of the "Action needed" card and what pressing it causes, in one plain sentence.</summary>
 public sealed record AttentionAction(AttentionActionKind Kind, string Label, string Consequence);
 
-/// <summary>A numbered step for the user; <see cref="Command"/> is shown in a copy-able code block and <see cref="Link"/> as a link.</summary>
+/// <summary>A numbered step for the user; <paramref name="Command"/> is shown in a copy-able code block and <paramref name="LinkHref"/> as a link labelled <paramref name="LinkLabel"/>.</summary>
 public sealed record AttentionStep(string Text, string? Command = null, string? LinkLabel = null, string? LinkHref = null);
 
 /// <summary>

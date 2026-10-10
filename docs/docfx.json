@@ -1,0 +1,70 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "../src",
+          "files": [
+            "WebDevLoop.Core/WebDevLoop.Core.csproj",
+            "WebDevLoop.Infrastructure/WebDevLoop.Infrastructure.csproj",
+            "WebDevLoop.Web/WebDevLoop.Web.csproj"
+          ]
+        }
+      ],
+      "dest": "api",
+      "properties": {
+        "TargetFramework": "net11.0"
+      }
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "api/**.yml",
+          "api/index.md"
+        ]
+      },
+      {
+        "files": [
+          "user-guide/**.md",
+          "user-guide/toc.yml",
+          "developer-guide/**.md",
+          "developer-guide/toc.yml",
+          "toc.yml",
+          "index.md"
+        ]
+      },
+      {
+        "files": [
+          "rest-api/**.swagger.json",
+          "rest-api/toc.yml",
+          "rest-api/index.md"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "user-guide/images/**",
+          "images/**"
+        ]
+      }
+    ],
+    "output": "_site",
+    "globalMetadata": {
+      "_appName": "WebDevLoop",
+      "_appTitle": "WebDevLoop Docs",
+      "_enableSearch": true,
+      "_appLogoPath": "images/logo.svg",
+      "_appFaviconPath": "images/favicon.svg",
+      "_appFooter": "WebDevLoop documentation",
+      "_enableNewTab": true
+    },
+    "template": [
+      "default",
+      "modern",
+      "templates/webdevloop"
+    ]
+  }
+}

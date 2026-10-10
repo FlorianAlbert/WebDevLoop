@@ -1,0 +1,24 @@
+- name: Overview
+  href: index.md
+- name: Domain model
+  href: domain-model.md
+- name: Run lifecycle
+  href: run-lifecycle.md
+- name: Orchestration
+  href: orchestration.md
+- name: Agents
+  href: agents.md
+- name: Persistence and events
+  href: persistence-and-events.md
+- name: Git and GitHub
+  href: git-and-github.md
+- name: Copilot runtime
+  href: copilot-runtime.md
+- name: Startup and prerequisites
+  href: startup-and-prerequisites.md
+- name: Web UI
+  href: web-ui.md
+- name: Web API
+  href: web-api.md
+- name: Testing and contributing
+  href: testing-and-contributing.md

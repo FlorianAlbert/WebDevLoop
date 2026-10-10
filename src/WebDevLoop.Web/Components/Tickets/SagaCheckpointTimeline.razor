@@ -1,15 +1,14 @@
 @using WebDevLoop.Core.Domain
 @using WebDevLoop.Core.Queries
 
-<section class="my-3" data-testid="saga">
-    <h2 class="h5">Integration saga</h2>
+<SectionCard Title="Integration saga" data-testid="saga">
     @if (Saga is null)
     {
-        <p class="text-muted">No integration has started for this ticket.</p>
+        <p class="quiet-note">No integration has started for this ticket.</p>
     }
     else
     {
-        <ol class="list-inline">
+        <ol class="list-inline mb-2">
             @foreach (IntegrationSagaCheckpoint checkpoint in Enum.GetValues<IntegrationSagaCheckpoint>())
             {
                 string state = checkpoint < Saga.Checkpoint ? "done" : checkpoint == Saga.Checkpoint ? "current" : "pending";
@@ -25,7 +24,7 @@
             <p class="alert alert-danger mt-2" data-testid="saga-error">@error</p>
         }
     }
-</section>
+</SectionCard>
 
 @code {
     [Parameter] public IntegrationSagaView? Saga { get; set; }

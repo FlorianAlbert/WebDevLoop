@@ -35,7 +35,9 @@ public sealed class SpecRunDetailTests
 
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "nope"));
 
-        Assert.Contains("not found", cut.Find("[data-testid=not-found]").TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not found", cut.Find("h1").TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("does not exist", cut.Find("[data-testid=not-found]").TextContent);
+        Assert.DoesNotContain("not found", cut.Find("[data-testid=not-found]").TextContent, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -98,7 +100,7 @@ public sealed class SpecRunDetailTests
         harness.Queries.Saga("t1", IntegrationSagaCheckpoint.PrCreated);
         await harness.Bus.PublishAsync(Events.SagaAdvanced("run-1", "t1", IntegrationSagaCheckpoint.PrCreated));
 
-        cut.WaitForAssertion(() => Assert.Equal("PrCreated", cut.Find("[data-testid=saga-checkpoint-t1]").TextContent.Trim()));
+        cut.WaitForAssertion(() => Assert.Equal("Pr created", cut.Find("[data-testid=saga-checkpoint-t1]").TextContent.Trim()));
     }
 
     [Fact]
@@ -134,7 +136,7 @@ public sealed class SpecRunDetailTests
 
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
 
-        Assert.Contains("nothing", cut.Find("[data-testid=spec-blockers]").TextContent);
+        Assert.Contains("Not blocked", cut.Find("[data-testid=spec-blockers]").TextContent);
     }
 
     [Fact]

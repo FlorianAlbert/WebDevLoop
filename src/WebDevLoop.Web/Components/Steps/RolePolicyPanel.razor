@@ -1,26 +1,37 @@
-<section class="my-3" data-testid="role-policy">
-    <h2 class="h5">Role policy: @DisplayNames.For(Policy.Role)</h2>
-    <dl class="row mb-0">
-        <dt class="col-sm-3">Allowed capabilities</dt>
-        <dd class="col-sm-9">
-            @foreach (var capability in Policy.AllowedCapabilities)
+@using WebDevLoop.Web.Components.Runs
+<SectionCard Title="@($"Role policy: {DisplayNames.For(Policy.Role)}")" data-testid="role-policy">
+    <dl class="fact-list">
+        <dt class="fact-list__label">Allowed capabilities</dt>
+        <dd class="fact-list__value" data-testid="policy-capabilities">
+            <ul class="chip-list">
+                @foreach (var capability in Policy.AllowedCapabilities)
+                {
+                    <li><StatusPill>@RunDisplay.Capability(capability)</StatusPill></li>
+                }
+            </ul>
+        </dd>
+        <dt class="fact-list__label">Denied commands</dt>
+        <dd class="fact-list__value" data-testid="policy-denied">
+            @if (Policy.DeniedCommands.Count == 0)
             {
-                <StatusPill Class="me-1">@capability</StatusPill>
+                <span class="text-body-secondary">None</span>
+            }
+            else
+            {
+                <ul class="chip-list">
+                    @foreach (string command in Policy.DeniedCommands)
+                    {
+                        <li><code class="chip">@command</code></li>
+                    }
+                </ul>
             }
         </dd>
-        <dt class="col-sm-3">Denied commands</dt>
-        <dd class="col-sm-9">
-            @foreach (string command in Policy.DeniedCommands)
-            {
-                <code class="me-2">@command</code>
-            }
-        </dd>
-        <dt class="col-sm-3">GitHub token</dt>
-        <dd class="col-sm-9">@Policy.TokenAccess</dd>
-        <dt class="col-sm-3">Report tool</dt>
-        <dd class="col-sm-9"><code>@Policy.ReportTool</code></dd>
+        <dt class="fact-list__label">GitHub token</dt>
+        <dd class="fact-list__value" data-testid="policy-token">@RunDisplay.TokenAccess(Policy.TokenAccess)</dd>
+        <dt class="fact-list__label">Report tool</dt>
+        <dd class="fact-list__value"><code>@Policy.ReportTool</code></dd>
     </dl>
-</section>
+</SectionCard>
 
 @code {
     [Parameter, EditorRequired] public RolePolicySummary Policy { get; set; } = default!;

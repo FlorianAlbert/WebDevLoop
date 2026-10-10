@@ -1,8 +1,7 @@
-<section class="my-3" data-testid="structured-report-section">
-    <h2 class="h5">Structured result</h2>
+<SectionCard Title="Structured result" data-testid="structured-report-section">
     @if (_report is null)
     {
-        <p class="text-muted" data-testid="no-report">No structured result has been recorded yet.</p>
+        <p class="quiet-note" data-testid="no-report">No structured result has been recorded yet.</p>
     }
     else
     {
@@ -23,7 +22,7 @@
             </p>
             @if (_report.Findings.Count > 0)
             {
-                <ul class="list-group mb-2">
+                <ul class="list-group mb-3">
                     @foreach (ReportFinding finding in _report.Findings)
                     {
                         <li class="list-group-item" data-testid="report-finding">
@@ -34,7 +33,7 @@
                             }
                             @if (finding.File is { } file)
                             {
-                                <code class="ms-2">@file@(finding.Line is { } line ? $":{line}" : "")</code>
+                                <code class="ms-2 text-break">@file@(finding.Line is { } line ? $":{line}" : "")</code>
                             }
                             @if (finding.Description is { } description)
                             {
@@ -42,7 +41,7 @@
                             }
                             @if (finding.Recommendation is { } recommendation)
                             {
-                                <div class="small text-muted">Recommendation: @recommendation</div>
+                                <div class="small text-body-secondary">Recommendation: @recommendation</div>
                             }
                         </li>
                     }
@@ -51,10 +50,10 @@
         </div>
         <details>
             <summary>Raw JSON</summary>
-            <pre class="small" data-testid="report-json">@_report.PrettyJson</pre>
+            <pre class="small mt-2 mb-0 overflow-auto" data-testid="report-json">@_report.PrettyJson</pre>
         </details>
     }
-</section>
+</SectionCard>
 
 @code {
     private StepReport? _report;

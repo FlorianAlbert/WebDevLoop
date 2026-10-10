@@ -1,18 +1,17 @@
 @using WebDevLoop.Core.Queries
 
-<section class="my-3" data-testid="run-events">
-    <h2 class="h5">Events</h2>
+<SectionCard Title="Events" data-testid="run-events">
     @if (Events.Count == 0)
     {
-        <p class="text-body-secondary">No events recorded.</p>
+        <p class="quiet-note" data-testid="no-events">No events recorded.</p>
     }
     else
     {
-        <ul class="list-unstyled small">
+        <ul class="list-unstyled small mb-0">
             @foreach (RunEventView runEvent in Events.OrderByDescending(e => e.OccurredAt).ThenByDescending(e => e.Id).Take(Limit))
             {
-                <li data-testid="run-event">
-                    <AppDateTime Value="runEvent.OccurredAt" Mode="DateTimeDisplay.Absolute" />
+                <li class="d-flex flex-wrap align-items-baseline gap-2 py-1" data-testid="run-event">
+                    <span class="text-body-secondary"><AppDateTime Value="runEvent.OccurredAt" Mode="DateTimeDisplay.Absolute" /></span>
                     <strong>@runEvent.Type</strong>
                     @if (runEvent.TicketRunId is { } ticket)
                     {
@@ -22,7 +21,7 @@
             }
         </ul>
     }
-</section>
+</SectionCard>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<RunEventView> Events { get; set; } = [];

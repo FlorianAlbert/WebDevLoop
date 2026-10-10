@@ -9,7 +9,7 @@
     @foreach (RunControlCommand command in Commands)
     {
         <button type="button" class="btn btn-sm @(command.IsDestructive ? "btn-outline-danger" : "btn-outline-primary")"
-                data-testid="control-@command.Key" disabled="@(!CanRun(command))" aria-busy="@(_running ? "true" : null)" @onclick="() => RequestAsync(command)">
+                data-testid="control-@command.Key" disabled="@(!CanRun(command))" title="@DisabledReason(command)" aria-description="@DisabledReason(command)" aria-busy="@(_running ? "true" : null)" @onclick="() => RequestAsync(command)">
             @command.Label
         </button>
     }
@@ -68,6 +68,11 @@
     private bool IsDiagnosticOnly => Readiness.Current.Mode != ReadinessMode.Operational;
 
     private bool CanRun(RunControlCommand command) => command.IsAvailable && !IsDiagnosticOnly && !_running;
+
+    private string? DisabledReason(RunControlCommand command) =>
+        CanRun(command) || _running ? null
+        : !command.IsAvailable ? command.UnavailableReason
+        : "Workflow actions are disabled in diagnostic-only mode.";
 
     private Task RequestAsync(RunControlCommand command)
     {

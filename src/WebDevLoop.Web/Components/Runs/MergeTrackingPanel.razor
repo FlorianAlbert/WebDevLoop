@@ -1,9 +1,8 @@
 @using WebDevLoop.Core.Domain
 
-<section class="my-3" data-testid="merge-tracking">
-    <h2 class="h5">Merge tracking</h2>
+<SectionCard Title="Merge tracking" data-testid="merge-tracking">
     <p class="mb-0">@Describe()</p>
-</section>
+</SectionCard>
 
 @code {
     [Parameter, EditorRequired] public SpecRunStatus Status { get; set; }

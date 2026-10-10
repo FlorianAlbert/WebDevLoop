@@ -19,15 +19,17 @@
 
     [Parameter] public EventCallback OnChanged { get; set; }
 
+    private const string SkipUnavailable = "Skipping is only available while the ticket is blocked, ready or needs attention.";
+
     private TicketRunId Id => new(Ticket.Id);
 
     private bool IsSkippable => Ticket.Status is TicketRunStatus.Blocked or TicketRunStatus.Ready or TicketRunStatus.NeedsAttention;
 
     private IReadOnlyList<RunControlCommand> Commands =>
     [
-        new("retry", "Retry", Ticket.Status == TicketRunStatus.NeedsAttention, null, (control, token) => control.RetryTicketAsync(Id, token)),
-        new("skip", "Skip", IsSkippable, SkipConfirmation, (control, token) => control.SkipTicketAsync(Id, SkipDependents.Unblock, token)),
-        new("skip-dependents", "Skip with dependents", IsSkippable, SkipDependentsConfirmation, (control, token) => control.SkipTicketAsync(Id, SkipDependents.Skip, token)),
-        new("abort", "Abort ticket", !Ticket.Status.IsTerminal(), AbortConfirmation, (control, token) => control.AbortTicketAsync(Id, token)),
+        new("retry", "Retry", Ticket.Status == TicketRunStatus.NeedsAttention, "Retry is only available when the ticket needs attention.", null, (control, token) => control.RetryTicketAsync(Id, token)),
+        new("skip", "Skip", IsSkippable, SkipUnavailable, SkipConfirmation, (control, token) => control.SkipTicketAsync(Id, SkipDependents.Unblock, token)),
+        new("skip-dependents", "Skip with dependents", IsSkippable, SkipUnavailable, SkipDependentsConfirmation, (control, token) => control.SkipTicketAsync(Id, SkipDependents.Skip, token)),
+        new("abort", "Abort ticket", !Ticket.Status.IsTerminal(), "This ticket has already finished.", AbortConfirmation, (control, token) => control.AbortTicketAsync(Id, token)),
     ];
 }

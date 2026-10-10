@@ -1,17 +1,14 @@
 @* Hosts the run's control buttons (SpecRunControls / TicketRunControls) as ChildContent. *@
-<section class="card my-3" data-testid="run-controls">
-    <div class="card-body">
-        <h2 class="h6 card-title">Controls</h2>
-        @if (ChildContent is not null)
-        {
-            @ChildContent
-        }
-        else
-        {
-            <p class="text-muted mb-0" data-testid="controls-placeholder">No run controls are available for this @Scope.</p>
-        }
-    </div>
-</section>
+<SectionCard Title="Controls" data-testid="run-controls">
+    @if (ChildContent is not null)
+    {
+        @ChildContent
+    }
+    else
+    {
+        <p class="quiet-note" data-testid="controls-placeholder">No run controls are available for this @Scope.</p>
+    }
+</SectionCard>
 
 @code {
     /// <summary>Names what the controls act on, e.g. "spec run".</summary>

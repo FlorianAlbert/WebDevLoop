@@ -13,7 +13,7 @@
 
     private IReadOnlyList<RunControlCommand> Commands =>
     [
-        new("retry", "Retry", Spec.Status == SpecRunStatus.NeedsAttention, null, (control, token) => control.RetrySpecAsync(new RunId(Spec.Id), token)),
-        new("abort", "Abort run", !Spec.Status.IsTerminal(), AbortConfirmation, (control, token) => control.AbortSpecAsync(new RunId(Spec.Id), token)),
+        new("retry", "Retry", Spec.Status == SpecRunStatus.NeedsAttention, "Retry is only available when the run needs attention.", null, (control, token) => control.RetrySpecAsync(new RunId(Spec.Id), token)),
+        new("abort", "Abort run", !Spec.Status.IsTerminal(), "This run has already finished.", AbortConfirmation, (control, token) => control.AbortSpecAsync(new RunId(Spec.Id), token)),
     ];
 }

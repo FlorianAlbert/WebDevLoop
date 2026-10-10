@@ -6,46 +6,56 @@
 @using WebDevLoop.Web.Components.Runs
 @using WebDevLoop.Web.Components.Layout
 
-<PageHeader Title="@(_step is null ? (IsNotFound ? "Step not found" : "Step") : $"{_step.Kind} step")" />
+<PageHeader Title="@(_step is null ? (IsNotFound ? "Step not found" : "Step") : $"{DisplayNames.Humanize(_step.Kind.ToString())} step")" />
 
 @if (IsNotFound)
 {
-    <EmptyState Icon="search" Title="Step not found" data-testid="not-found">
+    <EmptyState Icon="search" Title="Nothing to show here" data-testid="not-found">
         <ChildContent>Step '@Id' does not exist or was removed.</ChildContent>
         <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Queue">Back to queue</a></Action>
     </EmptyState>
 }
 else if (_step is not null)
 {
-    <p>
+    <div class="detail-summary">
         <StatusBadge Status="@_step.Status.ToString()" data-testid="step-status" />
-        <a class="ms-2" href="/runs/@_step.SpecRunId" data-testid="spec-link">Spec run @_step.SpecRunId</a>
+        <a href="/runs/@_step.SpecRunId" data-testid="spec-link">Spec run @_step.SpecRunId</a>
         @if (_step.TicketRunId is { } ticketId)
         {
-            <a class="ms-2" href="/tickets/@ticketId" data-testid="ticket-link">Ticket run @ticketId</a>
+            <a href="/tickets/@ticketId" data-testid="ticket-link">Ticket run @ticketId</a>
         }
-    </p>
+    </div>
     @if (_step.FailureReason is { } failure)
     {
         <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
     }
 
-    <dl class="row">
-        <dt class="col-sm-3">Role</dt>
-        <dd class="col-sm-9" data-testid="step-role">@(_step.AgentRole is { } agentRole ? DisplayNames.For(agentRole) : "none (app-run step)")</dd>
-        <dt class="col-sm-3">Model</dt>
-        <dd class="col-sm-9" data-testid="step-model">@StepModelText.For(_step)</dd>
-        <dt class="col-sm-3">Attempt</dt>
-        <dd class="col-sm-9">@_step.Attempt</dd>
-        <dt class="col-sm-3">Copilot session</dt>
-        <dd class="col-sm-9" data-testid="copilot-session"><code>@(_step.CopilotSessionId ?? "–")</code></dd>
-        <dt class="col-sm-3">Branch / worktree</dt>
-        <dd class="col-sm-9"><code>@(_step.BranchName ?? "–")</code> <code>@(_step.WorktreePath ?? "")</code></dd>
-        <dt class="col-sm-3">Prompt hash</dt>
-        <dd class="col-sm-9"><code>@_step.InputPromptHash</code></dd>
-        <dt class="col-sm-3">Started / completed / timeout</dt>
-        <dd class="col-sm-9"><AppDateTime Value="_step.StartedAt" /> / <AppDateTime Value="_step.CompletedAt" /> / <AppDateTime Value="_step.TimeoutAt" /></dd>
-    </dl>
+    <SectionCard Title="Details" data-testid="step-details">
+        <dl class="fact-list">
+            <dt class="fact-list__label">Role</dt>
+            <dd class="fact-list__value" data-testid="step-role">@(_step.AgentRole is { } agentRole ? DisplayNames.For(agentRole) : "None (app-run step)")</dd>
+            <dt class="fact-list__label">Model</dt>
+            <dd class="fact-list__value" data-testid="step-model">@StepModelText.For(_step)</dd>
+            <dt class="fact-list__label">Attempt</dt>
+            <dd class="fact-list__value">@_step.Attempt</dd>
+            <dt class="fact-list__label">Copilot session</dt>
+            <dd class="fact-list__value" data-testid="copilot-session"><ShortHash Value="@_step.CopilotSessionId" /></dd>
+            <dt class="fact-list__label">Branch</dt>
+            <dd class="fact-list__value" data-testid="step-branch">@if (_step.BranchName is { } branch) { <code>@branch</code> } else { <span class="text-body-secondary">–</span> }</dd>
+            <dt class="fact-list__label">Worktree</dt>
+            <dd class="fact-list__value" data-testid="step-worktree">@if (_step.WorktreePath is { } worktree) { <code>@worktree</code> } else { <span class="text-body-secondary">–</span> }</dd>
+            <dt class="fact-list__label">Prompt hash</dt>
+            <dd class="fact-list__value" data-testid="step-prompt-hash"><ShortHash Value="@_step.InputPromptHash" /></dd>
+            <dt class="fact-list__label">Started</dt>
+            <dd class="fact-list__value" data-testid="step-started"><AppDateTime Value="_step.StartedAt" /></dd>
+            <dt class="fact-list__label">Completed</dt>
+            <dd class="fact-list__value" data-testid="step-completed"><AppDateTime Value="_step.CompletedAt" /></dd>
+            <dt class="fact-list__label">Timeout</dt>
+            <dd class="fact-list__value" data-testid="step-timeout">
+                @if (RunDisplay.Timeout(_step.StartedAt, _step.TimeoutAt) is { } timeout) { <span>@timeout</span> } else { <span class="text-body-secondary">–</span> }
+            </dd>
+        </dl>
+    </SectionCard>
 
     <RunControlsArea Scope="step" />
 

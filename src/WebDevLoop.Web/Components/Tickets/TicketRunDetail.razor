@@ -11,53 +11,57 @@
 
 @if (IsNotFound)
 {
-    <EmptyState Icon="search" Title="Ticket run not found" data-testid="not-found">
+    <EmptyState Icon="search" Title="Nothing to show here" data-testid="not-found">
         <ChildContent>Ticket run '@Id' does not exist or was removed.</ChildContent>
         <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Queue">Back to queue</a></Action>
     </EmptyState>
 }
 else if (_ticket is not null)
 {
-    <p>
+    <div class="detail-summary">
         <StatusBadge Status="@_ticket.Status.ToString()" data-testid="ticket-status" />
-        <a class="ms-2" href="/runs/@_ticket.SpecRunId" data-testid="spec-link">Spec run @_ticket.SpecRunId</a>
+        <a href="/runs/@_ticket.SpecRunId" data-testid="spec-link">Spec run @_ticket.SpecRunId</a>
         @if (_ticket.PullRequestNumber is { } pr)
         {
-            <span class="ms-2" data-testid="ticket-pr">PR #@pr@(_ticket.StackPosition is { } position ? $" (stack layer {position})" : "")</span>
+            <span data-testid="ticket-pr">PR #@pr@(_ticket.StackPosition is { } position ? $" (stack layer {position})" : "")</span>
         }
-    </p>
+    </div>
     @if (_ticket.FailureReason is { } failure)
     {
         <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
     }
 
-    <dl class="row">
-        <dt class="col-sm-3">Branch</dt>
-        <dd class="col-sm-9" data-testid="ticket-branch"><code>@_ticket.BranchName</code></dd>
-        <dt class="col-sm-3">Worktree</dt>
-        <dd class="col-sm-9" data-testid="ticket-worktree"><code>@(_ticket.WorktreePath ?? "not created")</code></dd>
-        <dt class="col-sm-3">Attempt</dt>
-        <dd class="col-sm-9">@_ticket.Attempt</dd>
-        <dt class="col-sm-3">Review iteration</dt>
-        <dd class="col-sm-9" data-testid="review-iteration">@_ticket.ReviewIteration</dd>
-        <dt class="col-sm-3">Last implemented</dt>
-        <dd class="col-sm-9"><code>@(_ticket.LastImplementedSha ?? "–")</code></dd>
-        <dt class="col-sm-3">Integrated commit</dt>
-        <dd class="col-sm-9"><code>@(_ticket.IntegratedCommitSha ?? "–")</code></dd>
-        <dt class="col-sm-3">Blocked by</dt>
-        <dd class="col-sm-9" data-testid="ticket-blockers">
-            @if (_blockers.Count == 0)
-            {
-                <span class="text-muted">nothing</span>
-            }
-            @foreach (TicketBlocker blocker in _blockers)
-            {
-                <span class="me-2 @(blocker.IsSatisfied ? "text-success" : "")">
-                    <a href="/tickets/@blocker.TicketRunId">@(blocker.Issue is { } issue ? $"#{issue}" : blocker.TicketRunId)</a> (@(blocker.Status?.ToString() ?? "unknown"))
-                </span>
-            }
-        </dd>
-    </dl>
+    <SectionCard Title="Details" data-testid="ticket-details">
+        <dl class="fact-list">
+            <dt class="fact-list__label">Branch</dt>
+            <dd class="fact-list__value" data-testid="ticket-branch"><code>@_ticket.BranchName</code></dd>
+            <dt class="fact-list__label">Worktree</dt>
+            <dd class="fact-list__value" data-testid="ticket-worktree">
+                @if (_ticket.WorktreePath is { } worktree) { <code>@worktree</code> } else { <span class="text-body-secondary">Not created</span> }
+            </dd>
+            <dt class="fact-list__label">Attempt</dt>
+            <dd class="fact-list__value">@_ticket.Attempt</dd>
+            <dt class="fact-list__label">Review iteration</dt>
+            <dd class="fact-list__value" data-testid="review-iteration">@_ticket.ReviewIteration</dd>
+            <dt class="fact-list__label">Last implemented</dt>
+            <dd class="fact-list__value"><ShortHash Value="@_ticket.LastImplementedSha" /></dd>
+            <dt class="fact-list__label">Integrated commit</dt>
+            <dd class="fact-list__value"><ShortHash Value="@_ticket.IntegratedCommitSha" /></dd>
+            <dt class="fact-list__label">Blocked by</dt>
+            <dd class="fact-list__value" data-testid="ticket-blockers">
+                @if (_blockers.Count == 0)
+                {
+                    <span class="text-body-secondary">Nothing</span>
+                }
+                @foreach (TicketBlocker blocker in _blockers)
+                {
+                    <span class="me-3 d-inline-block @(blocker.IsSatisfied ? "text-success" : "")">
+                        <a href="/tickets/@blocker.TicketRunId">@(blocker.Issue is { } issue ? $"#{issue}" : blocker.TicketRunId)</a> (@(blocker.Status is { } status ? DisplayNames.Humanize(status.ToString()) : "unknown"))
+                    </span>
+                }
+            </dd>
+        </dl>
+    </SectionCard>
 
     <RunControlsArea Scope="ticket run">
         <TicketRunControls Ticket="_ticket" OnChanged="RefreshAsync" />

@@ -2,23 +2,22 @@
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Components.Runs
 
-<section class="my-3" data-testid="steps">
-    <h2 class="h5">Steps</h2>
+<SectionCard Title="Steps" data-testid="steps">
     @if (Steps.Count == 0)
     {
-        <p class="text-muted">No steps yet.</p>
+        <p class="quiet-note">No steps yet.</p>
     }
     else
     {
         <div class="table-responsive">
-        <table class="table table-sm align-middle">
+        <table class="table table-sm align-middle mb-0 detail-table detail-table--wide">
             <thead><tr><th>Step</th><th>Role</th><th>Model</th><th>Status</th><th>Attempt</th><th>Review iteration</th><th>Findings</th></tr></thead>
             <tbody>
                 @foreach (StepRunView step in Steps)
                 {
                     StepReport? report = StepReportParser.TryParse(step.StructuredResultJson);
                     <tr data-testid="step-row-@step.Id">
-                        <td><a href="/steps/@step.Id" data-testid="step-link-@step.Id">@step.Kind</a></td>
+                        <td><a href="/steps/@step.Id" data-testid="step-link-@step.Id">@DisplayNames.Humanize(step.Kind.ToString())</a></td>
                         <td data-testid="step-role-@step.Id">@(step.AgentRole is { } agentRole ? DisplayNames.For(agentRole) : "–")</td>
                         <td data-testid="step-model-@step.Id">@StepModelText.For(step)</td>
                         <td><StatusBadge Status="@step.Status.ToString()" data-testid="@($"step-status-{step.Id}")" /></td>
@@ -31,7 +30,7 @@
         </table>
         </div>
     }
-</section>
+</SectionCard>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<StepRunView> Steps { get; set; } = [];

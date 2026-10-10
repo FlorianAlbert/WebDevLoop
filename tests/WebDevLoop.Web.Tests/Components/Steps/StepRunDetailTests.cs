@@ -36,7 +36,7 @@ public sealed class StepRunDetailTests
         Assert.Equal("Running", cut.Find("[data-testid=step-status]").TextContent.Trim());
         Assert.Contains("Reviewer – specification", cut.Find("[data-testid=step-role]").TextContent);
         Assert.Equal("gpt-recorded (xhigh)", cut.Find("[data-testid=step-model]").TextContent.Trim());
-        Assert.Contains("copilot-session-1", cut.Find("[data-testid=copilot-session]").TextContent);
+        Assert.Equal("copilot-session-1", cut.Find("[data-testid=copilot-session] code").GetAttribute("title"));
         Assert.Equal("/tickets/t1", cut.Find("[data-testid=ticket-link]").GetAttribute("href"));
         Assert.Equal("/runs/run-1", cut.Find("[data-testid=spec-link]").GetAttribute("href"));
     }
@@ -79,9 +79,24 @@ public sealed class StepRunDetailTests
         var cut = Render(harness);
 
         string policy = cut.Find("[data-testid=role-policy]").TextContent;
-        Assert.Contains("CreateLocalCommit", policy);
+        Assert.Contains("Create local commit", policy);
+        Assert.DoesNotContain("CreateLocalCommit", policy);
+        Assert.DoesNotContain("ReadOnlyIfRequired", policy);
         Assert.Contains("git push", policy);
         Assert.Contains("report_implementation", policy);
+        Assert.Contains(cut.FindAll("[data-testid=policy-denied] code.chip"), chip => chip.TextContent.Contains("git push"));
+    }
+
+    [Fact]
+    public void Started_completed_and_timeout_are_separate_rows()
+    {
+        using var harness = HarnessWithStep(Views.Step("s1") with { TimeoutAt = Views.Now.AddMinutes(45) });
+
+        var cut = Render(harness);
+
+        Assert.NotEmpty(cut.FindAll("[data-testid=step-started] time"));
+        Assert.Empty(cut.FindAll("[data-testid=step-completed] time"));
+        Assert.Equal("45 min", cut.Find("[data-testid=step-timeout]").TextContent.Trim());
     }
 
     [Fact]

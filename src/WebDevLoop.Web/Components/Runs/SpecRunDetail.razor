@@ -9,35 +9,41 @@
 
 @if (IsNotFound)
 {
-    <EmptyState Icon="search" Title="Spec run not found" data-testid="not-found">
+    <EmptyState Icon="search" Title="Nothing to show here" data-testid="not-found">
         <ChildContent>Spec run '@Id' does not exist or was removed.</ChildContent>
         <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Queue">Back to queue</a></Action>
     </EmptyState>
 }
 else if (_spec is not null)
 {
-    <p>
+    <div class="detail-summary">
         <StatusBadge Status="@_spec.Status.ToString()" data-testid="spec-status" />
-        <span class="ms-2">Spec issue #@_spec.ParentIssueNumber</span>
-        <span class="ms-2">Queue position @_spec.QueuePosition</span>
+        <span>Spec issue #@_spec.ParentIssueNumber</span>
+        <span>Queue position @_spec.QueuePosition</span>
         @if (_spec.DependencyModeUsed is { } mode)
         {
-            <span class="ms-2" data-testid="dependency-mode">Mode: @DisplayNames.For(mode)</span>
+            <span data-testid="dependency-mode">Mode: @DisplayNames.For(mode)</span>
         }
-    </p>
+    </div>
     @if (_spec.FailureReason is { } failure)
     {
         <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
     }
 
-    <dl class="row">
-        <dt class="col-sm-3">Integration branch</dt>
-        <dd class="col-sm-9" data-testid="integration-branch"><code>@_spec.IntegrationBranch</code> (base <code>@(_spec.BaseBranch ?? "–")</code>, tip <code>@(_spec.IntegrationTipSha ?? "–")</code>)</dd>
-        <dt class="col-sm-3">Cycles</dt>
-        <dd class="col-sm-9">Parent review @_spec.ReviewCycle, tester @_spec.TestCycle</dd>
-        <dt class="col-sm-3">Created</dt>
-        <dd class="col-sm-9"><AppDateTime Value="_spec.CreatedAt" /></dd>
-    </dl>
+    <SectionCard Title="Details" data-testid="spec-details">
+        <dl class="fact-list">
+            <dt class="fact-list__label">Integration branch</dt>
+            <dd class="fact-list__value" data-testid="integration-branch"><code>@_spec.IntegrationBranch</code></dd>
+            <dt class="fact-list__label">Base branch</dt>
+            <dd class="fact-list__value">@if (_spec.BaseBranch is { } baseBranch) { <code>@baseBranch</code> } else { <span class="text-body-secondary">–</span> }</dd>
+            <dt class="fact-list__label">Integration tip</dt>
+            <dd class="fact-list__value" data-testid="integration-tip"><ShortHash Value="@_spec.IntegrationTipSha" /></dd>
+            <dt class="fact-list__label">Cycles</dt>
+            <dd class="fact-list__value">Parent review @_spec.ReviewCycle, tester @_spec.TestCycle</dd>
+            <dt class="fact-list__label">Created</dt>
+            <dd class="fact-list__value"><AppDateTime Value="_spec.CreatedAt" /></dd>
+        </dl>
+    </SectionCard>
 
     <SpecBlockersPanel Blockers="_blockers" />
 

@@ -2,15 +2,14 @@
 @using WebDevLoop.Web.Components.Layout
 @using WebDevLoop.Web.Components.Queue
 
-<section class="my-3" data-testid="spec-blockers">
-    <h2 class="h5">Blocked by specs</h2>
+<SectionCard Title="Blocked by specs" data-testid="spec-blockers">
     @if (Blockers.Count == 0)
     {
-        <p class="text-muted">nothing</p>
+        <p class="quiet-note">Not blocked by any spec.</p>
     }
     else
     {
-        <ul class="list-unstyled">
+        <ul class="list-unstyled mb-0">
             @foreach (SpecDependencyView blocker in Blockers)
             {
                 string key = blocker.BlockingSpecRunId ?? $"issue-{blocker.IssueNumber}";
@@ -23,14 +22,14 @@
                     else
                     {
                         <span>#@blocker.IssueNumber</span>
-                        <span class="text-muted">(not tracked by this app)</span>
+                        <span class="text-body-secondary">(not tracked by this app)</span>
                     }
                     <span class="small">— @(blocker.IsSatisfied ? "merged" : "waiting")</span>
                 </li>
             }
         </ul>
     }
-</section>
+</SectionCard>
 
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<SpecDependencyView> Blockers { get; set; } = [];

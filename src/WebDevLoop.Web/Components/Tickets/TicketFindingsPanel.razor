@@ -1,15 +1,14 @@
 @using WebDevLoop.Core.Queries
 @using WebDevLoop.Web.Components.Steps
 
-<section class="my-3" data-testid="findings">
-    <h2 class="h5">Review findings</h2>
+<SectionCard Title="Review findings" data-testid="findings" NoPadding="@(_findings.Count > 0)">
     @if (_findings.Count == 0)
     {
-        <p class="text-muted">No findings reported.</p>
+        <p class="quiet-note">No findings reported.</p>
     }
     else
     {
-        <ul class="list-group">
+        <ul class="list-group list-group-flush">
             @foreach ((StepRunView step, ReportFinding finding) in _findings)
             {
                 <li class="list-group-item" data-testid="finding">
@@ -22,20 +21,20 @@
                     {
                         <code class="ms-2">@file@(finding.Line is { } line ? $":{line}" : "")</code>
                     }
-                    <a class="ms-2 small" href="/steps/@step.Id">@step.Kind step</a>
+                    <a class="ms-2 small" href="/steps/@step.Id">@DisplayNames.Humanize(step.Kind.ToString()) step</a>
                     @if (finding.Description is { } description)
                     {
                         <div class="small">@description</div>
                     }
                     @if (finding.Recommendation is { } recommendation)
                     {
-                        <div class="small text-muted">Recommendation: @recommendation</div>
+                        <div class="small text-body-secondary">Recommendation: @recommendation</div>
                     }
                 </li>
             }
         </ul>
     }
-</section>
+</SectionCard>
 
 @code {
     private IReadOnlyList<(StepRunView Step, ReportFinding Finding)> _findings = [];

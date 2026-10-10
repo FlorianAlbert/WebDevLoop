@@ -38,6 +38,8 @@ public sealed class SpecRunControlsTests
 
         Assert.True(cut.Find("[data-testid=control-retry]").HasAttribute("disabled"));
         Assert.False(cut.Find("[data-testid=control-abort]").HasAttribute("disabled"));
+        Assert.Contains("needs attention", cut.Find("[data-testid=control-retry]").GetAttribute("title"));
+        Assert.Null(cut.Find("[data-testid=control-abort]").GetAttribute("title"));
     }
 
     [Fact]

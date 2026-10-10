@@ -1,0 +1,14 @@
+@if (string.IsNullOrEmpty(Value))
+{
+    <span class="text-body-secondary">–</span>
+}
+else
+{
+    <code title="@Value" @attributes="AdditionalAttributes">@RunDisplay.ShortHash(Value)</code>
+}
+
+@code {
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

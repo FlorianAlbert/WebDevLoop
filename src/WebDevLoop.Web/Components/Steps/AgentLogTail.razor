@@ -5,15 +5,14 @@
 @inject IAgentLogReader Logs
 @inject IAgentLogNotifications LogNotifications
 
-<section class="my-3" data-testid="log-tail">
-    <h2 class="h5">Agent log</h2>
+<SectionCard Title="Agent log" data-testid="log-tail">
     @if (_hidden > 0)
     {
-        <p class="small text-muted" data-testid="log-hidden">@_hidden earlier entries not shown.</p>
+        <p class="small text-body-secondary" data-testid="log-hidden">@_hidden earlier entries not shown.</p>
     }
     @if (_entries.Count == 0)
     {
-        <p class="text-muted" data-testid="log-empty">No agent output yet.</p>
+        <p class="quiet-note" data-testid="log-empty">No agent output yet.</p>
     }
     else
     {
@@ -21,14 +20,14 @@
             @foreach (AgentLogView entry in _entries)
             {
                 <div data-testid="log-entry" data-kind="@entry.Kind" class="@(KindClass(entry.Kind))">
-                    <span class="text-muted">@entry.At.ToString("HH:mm:ss")</span>
-                    <span class="badge text-bg-light">@entry.Kind</span>
+                    <span class="text-body-secondary">@entry.At.ToString("HH:mm:ss")</span>
+                    <span class="badge bg-body-secondary text-body border">@DisplayNames.Humanize(entry.Kind.ToString())</span>
                     <span style="white-space: pre-wrap">@entry.Text</span>
                 </div>
             }
         </div>
     }
-</section>
+</SectionCard>
 
 @code {
     private readonly List<AgentLogView> _entries = [];
@@ -162,7 +161,7 @@
     private static string KindClass(AgentLogKind kind) => kind switch
     {
         AgentLogKind.Error or AgentLogKind.PermissionDenied => "text-danger",
-        AgentLogKind.Reasoning => "text-muted fst-italic",
+        AgentLogKind.Reasoning => "text-body-secondary fst-italic",
         _ => string.Empty,
     };
 

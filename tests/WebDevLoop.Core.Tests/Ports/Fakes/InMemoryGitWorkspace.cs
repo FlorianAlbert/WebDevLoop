@@ -10,6 +10,7 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
     private readonly Dictionary<BranchName, CommitSha> _local = [];
     private readonly Dictionary<BranchName, CommitSha> _remote = [];
     private readonly Dictionary<string, (TicketWorktree Worktree, WorktreeStatus Status)> _worktrees = [];
+    private readonly Dictionary<string, WorktreeChanges> _worktreeChanges = [];
     private int _nextCommit;
 
     public bool IsCloned { get; private set; }
@@ -46,6 +47,13 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
     public void DeleteWorktree(string path) => _worktrees.Remove(path);
 
     public void SetWorktreeStatus(string path, WorktreeStatus status) => _worktrees[path] = (_worktrees[path].Worktree, status);
+
+    /// <summary>Makes the worktree dirty with the given content until <see cref="CleanWorktreeAsync"/> runs.</summary>
+    public void SetWorktreeChanges(string path, WorktreeChanges changes)
+    {
+        SetWorktreeStatus(path, WorktreeStatus.Dirty);
+        _worktreeChanges[path] = changes;
+    }
 
     public IReadOnlyList<CommitSha> ParentsOf(CommitSha commit) => _commits[commit].Parents;
 
@@ -115,6 +123,21 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
         Task.FromResult(_worktrees.TryGetValue(worktreePath, out var entry)
             ? new WorktreeInspection(entry.Status, entry.Worktree.Branch, entry.Worktree.Head)
             : new WorktreeInspection(WorktreeStatus.Missing, null, null));
+
+    public Task<WorktreeChanges> GetWorktreeChangesAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken) =>
+        Task.FromResult(_worktreeChanges.GetValueOrDefault(worktreePath) ?? new WorktreeChanges(string.Empty, [], [], []));
+
+    public Task<WorktreeCleanResult> CleanWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken)
+    {
+        WorktreeChanges changes = _worktreeChanges.GetValueOrDefault(worktreePath) ?? new WorktreeChanges(string.Empty, [], [], []);
+        _worktreeChanges.Remove(worktreePath);
+        if (_worktrees.TryGetValue(worktreePath, out var entry))
+        {
+            _worktrees[worktreePath] = (entry.Worktree, WorktreeStatus.Clean);
+        }
+
+        return Task.FromResult(new WorktreeCleanResult([.. changes.UntrackedFiles, .. changes.IgnoredFiles]));
+    }
 
     public Task<GitMergeResult> MergeIntoWorktreeAsync(TicketWorktree worktree, CommitSha source, string message, CancellationToken cancellationToken)
     {

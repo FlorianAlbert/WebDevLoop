@@ -110,6 +110,12 @@ public sealed class ReconciliationPassTests
 
         public Task<PushOutcome> PushAsync(GitRepositoryLocation repo, RefPush push, CancellationToken cancellationToken) => inner.PushAsync(repo, push, cancellationToken);
 
+        public Task<WorktreeChanges> GetWorktreeChangesAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken) =>
+            inner.GetWorktreeChangesAsync(repo, worktreePath, cancellationToken);
+
+        public Task<WorktreeCleanResult> CleanWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken) =>
+            inner.CleanWorktreeAsync(repo, worktreePath, cancellationToken);
+
         public Task<WorktreeCleanupResult> CleanupWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken) =>
             inner.CleanupWorktreeAsync(repo, worktreePath, cancellationToken);
     }

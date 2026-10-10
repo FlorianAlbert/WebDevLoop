@@ -21,6 +21,7 @@ namespace WebDevLoop.Core.Orchestration.Integration;
 public sealed class ConflictResolutionRunner(
     ITicketRunRepository ticketRuns,
     IStepRunRepository stepRuns,
+    IRunEventRepository runEvents,
     IGitWorkspace git,
     IAgentRunner agents,
     PromptRenderer prompts,
@@ -34,6 +35,7 @@ public sealed class ConflictResolutionRunner(
     private const string NoChangedFiles = "(none)";
 
     private readonly TicketBranchVerifier _verifier = new(git);
+    private readonly WorktreeRemediator _remediator = new(git, runEvents, clock);
 
     /// <param name="integrationTip">The tip the squash conflicted with; the resolved branch must contain it.</param>
     internal async Task<ConflictResolution> ResolveAsync(
@@ -109,6 +111,7 @@ public sealed class ConflictResolutionRunner(
     {
         TicketRun ticket = context.Ticket;
         CommitSha reviewed = ticket.LastImplementedSha!.Value;
+        await _remediator.RemediateAsync(context.Spec.Id, ticket.Id, context.Location, context.Layout, context.WorktreePath, cancellationToken);
         WorktreeInspection worktree = await git.InspectWorktreeAsync(context.Location, context.WorktreePath, cancellationToken);
         if (worktree.Status == WorktreeStatus.Missing)
         {

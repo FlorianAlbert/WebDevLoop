@@ -46,6 +46,96 @@ internal static class GitWorktrees
         return new WorktreeInspection(StatusOf(worktree, linked), branch, head);
     }
 
+    public static WorktreeChanges Changes(Repository repo, string path)
+    {
+        if (Find(repo, path) is not { } worktree)
+        {
+            return new WorktreeChanges(string.Empty, [], [], []);
+        }
+
+        using Repository linked = worktree.WorktreeRepository;
+        var tracked = new List<string>();
+        var untracked = new List<string>();
+        var ignored = new List<string>();
+        foreach (StatusEntry entry in linked.RetrieveStatus(FullStatus))
+        {
+            List<string> bucket = entry.State switch
+            {
+                FileStatus.Ignored => ignored,
+                FileStatus.NewInWorkdir => untracked,
+                _ => tracked,
+            };
+            bucket.Add(entry.FilePath);
+        }
+
+        string patch = tracked.Count > 0 && linked.Head.Tip is { } tip
+            ? linked.Diff.Compare<Patch>(tip.Tree, DiffTargets.Index | DiffTargets.WorkingDirectory).Content
+            : string.Empty;
+        return new WorktreeChanges(patch, tracked, untracked, ignored);
+    }
+
+    /// <summary>Hard-resets tracked files, then deletes untracked and ignored files (<c>git clean -fdx</c>) inside this worktree only.</summary>
+    public static WorktreeCleanResult Clean(Repository repo, string path)
+    {
+        if (Find(repo, path) is not { } worktree)
+        {
+            return new WorktreeCleanResult([]);
+        }
+
+        using Repository linked = worktree.WorktreeRepository;
+        if (linked.Head.Tip is { } tip)
+        {
+            linked.Reset(ResetMode.Hard, tip);
+        }
+
+        string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        var removed = new List<string>();
+        foreach (StatusEntry entry in linked.RetrieveStatus(FullStatus).Where(e => e.State is FileStatus.Ignored or FileStatus.NewInWorkdir))
+        {
+            string full = Path.GetFullPath(Path.Combine(root, entry.FilePath));
+            if (!full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (Directory.Exists(full) && !IsSymbolicLink(full))
+            {
+                // A nested repository is somebody else's checkout, like git clean without a second -f.
+                if (!Directory.Exists(Path.Combine(full, ".git")) && !File.Exists(Path.Combine(full, ".git")))
+                {
+                    Directory.Delete(full, recursive: true);
+                    removed.Add(entry.FilePath);
+                }
+            }
+            else if (File.Exists(full) || IsSymbolicLink(full))
+            {
+                File.Delete(full);
+                RemoveEmptyParents(full, root);
+                removed.Add(entry.FilePath);
+            }
+        }
+
+        return new WorktreeCleanResult(removed);
+    }
+
+    private static readonly StatusOptions FullStatus = new()
+    {
+        IncludeUntracked = true,
+        IncludeIgnored = true,
+        RecurseUntrackedDirs = true,
+        RecurseIgnoredDirs = true,
+    };
+
+    private static bool IsSymbolicLink(string path) => new FileInfo(path).LinkTarget is not null;
+
+    private static void RemoveEmptyParents(string file, string root)
+    {
+        for (string? dir = Path.GetDirectoryName(file); dir is not null && dir != root && !Directory.EnumerateFileSystemEntries(dir).Any(); dir = Path.GetDirectoryName(dir))
+        {
+            Directory.Delete(dir);
+        }
+    }
+
     /// <summary>Removes a clean, unlocked worktree directory and its metadata. Branches and remote refs are never deleted.</summary>
     public static WorktreeCleanupResult Cleanup(Repository repo, string path)
     {

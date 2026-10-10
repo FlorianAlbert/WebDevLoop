@@ -2,6 +2,7 @@ using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Orchestration.Integration;
 using WebDevLoop.Core.Orchestration.Results;
+using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Integration;
@@ -94,6 +95,21 @@ public sealed class ConflictResolutionTests
         Assert.Equal(IntegrationOutcome.NeedsAttention, result.Outcome);
         Assert.Contains("does not contain the integration tip", result.Reason, StringComparison.Ordinal);
         Assert.Equal(["squash"], _f.Journal.Calls.Skip(callsBefore));
+    }
+
+    [Fact]
+    public async Task A_worktree_left_dirty_by_test_artefacts_is_cleaned_automatically_before_the_resolver_runs()
+    {
+        (SpecRun spec, TicketRun ticket, _) = await SeedConflictingTicketAsync();
+        _f.Git.SetWorktreeChanges(ticket.WorktreePath!, new WorktreeChanges(string.Empty, [], ["__pycache__/calc.pyc"], []));
+        _f.ScriptResolver(spec);
+
+        IntegrationResult result = await _f.IntegrateAsync(ticket);
+
+        Assert.Equal(IntegrationOutcome.Integrated, result.Outcome);
+        Assert.Equal(AgentRole.ConflictResolver, Assert.Single(_f.Agents.Started).Role);
+        RunEvent remediation = Assert.Single(await ((IRunEventRepository)_f.Store).ListBySpecRunAsync(spec.Id, IntegrationFixture.Token), e => e.Type == WorktreeRemediator.RunEventType);
+        Assert.Equal(ticket.Id, remediation.TicketRunId);
     }
 
     /// <summary>Two tickets branched from the same base; the first is integrated, and squashing the second conflicts.</summary>

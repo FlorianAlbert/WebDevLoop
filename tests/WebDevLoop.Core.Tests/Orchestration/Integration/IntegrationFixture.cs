@@ -73,7 +73,7 @@ internal sealed class IntegrationFixture
         var git = new JournalingGitWorkspace(Git, Journal);
         var issues = new JournalingGitHubIssues(Issues, Journal);
         var conflicts = new ConflictResolutionRunner(
-            Store, Store, git, Agents, new PromptRenderer(), Store, unitOfWork, Ids, Clock, new IntegrationOptions(SkillsRoot));
+            Store, Store, Store, git, Agents, new PromptRenderer(), Store, unitOfWork, Ids, Clock, new IntegrationOptions(SkillsRoot));
         var steps = new IntegrationSagaSteps(Store, Store, Store, git, JournaledPulls, issues, conflicts, Store, unitOfWork, Clock);
         return new IntegrationSagaRunner(Store, Store, Store, Store, Store, Settings, Gate, steps, Store, unitOfWork, Clock);
     }

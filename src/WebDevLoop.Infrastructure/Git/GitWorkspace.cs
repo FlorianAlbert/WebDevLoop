@@ -79,6 +79,18 @@ public sealed class GitWorkspace : IGitWorkspace
         return WithRepositoryAsync(repo, git => GitWorktrees.Inspect(git, path), cancellationToken);
     }
 
+    public Task<WorktreeChanges> GetWorktreeChangesAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken)
+    {
+        string path = _paths.Confine(worktreePath);
+        return WithRepositoryAsync(repo, git => GitWorktrees.Changes(git, path), cancellationToken);
+    }
+
+    public Task<WorktreeCleanResult> CleanWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken)
+    {
+        string path = _paths.Confine(worktreePath);
+        return WithRepositoryAsync(repo, git => GitWorktrees.Clean(git, path), cancellationToken);
+    }
+
     public Task<GitMergeResult> MergeIntoWorktreeAsync(TicketWorktree worktree, CommitSha source, string message, CancellationToken cancellationToken)
     {
         string path = _paths.Confine(worktree.Path);

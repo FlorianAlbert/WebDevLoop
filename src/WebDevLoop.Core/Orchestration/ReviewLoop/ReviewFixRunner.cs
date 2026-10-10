@@ -21,6 +21,7 @@ namespace WebDevLoop.Core.Orchestration.ReviewLoop;
 public sealed class ReviewFixRunner(
     ITicketRunRepository ticketRuns,
     IStepRunRepository stepRuns,
+    IRunEventRepository runEvents,
     IGitWorkspace git,
     IAgentRunner agents,
     PromptRenderer prompts,
@@ -35,6 +36,7 @@ public sealed class ReviewFixRunner(
     private const AgentRole Role = AgentRole.Implementer;
 
     private readonly TicketBranchVerifier _verifier = new(git);
+    private readonly WorktreeRemediator _remediator = new(git, runEvents, clock);
     private readonly ReviewLoopJournal _journal = new(stepRuns, outbox, clock);
 
     /// <param name="context">The ticket must be <c>Reviewing</c> with a validated <see cref="TicketRun.LastImplementedSha"/>.</param>
@@ -226,6 +228,7 @@ public sealed class ReviewFixRunner(
     {
         BranchName branch = context.Ticket.BranchName;
         CommitSha reviewed = context.Ticket.LastImplementedSha!.Value;
+        await _remediator.RemediateAsync(context.Spec.Id, context.Ticket.Id, context.Location, context.Layout, context.WorktreePath, cancellationToken);
         WorktreeInspection worktree = await git.InspectWorktreeAsync(context.Location, context.WorktreePath, cancellationToken);
         bool usable = worktree is { Status: WorktreeStatus.Clean, Head: { } head }
             && worktree.Branch == branch

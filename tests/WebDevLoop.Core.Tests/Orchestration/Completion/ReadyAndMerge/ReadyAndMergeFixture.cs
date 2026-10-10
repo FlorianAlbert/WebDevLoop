@@ -155,7 +155,7 @@ internal sealed class ReadyAndMergeFixture
         TicketRun ticket = await ImplementAsync(spec, ticketNumber);
         ticket.TransitionTo(TicketRunStatus.Integrating, Clock.UtcNow);
         var conflicts = new ConflictResolutionRunner(
-            Store, Store, Git, new ScriptedAgentRunner(), new PromptRenderer(), Store, Store, Ids, Clock, new IntegrationOptions(SkillsRoot));
+            Store, Store, Store, Git, new ScriptedAgentRunner(), new PromptRenderer(), Store, Store, Ids, Clock, new IntegrationOptions(SkillsRoot));
         var steps = new IntegrationSagaSteps(Store, Store, Store, Git, Pulls, Issues, conflicts, Store, Store, Clock);
         var saga = new IntegrationSagaRunner(Store, Store, Store, Store, Store, Settings, Gate, steps, Store, Store, Clock);
 

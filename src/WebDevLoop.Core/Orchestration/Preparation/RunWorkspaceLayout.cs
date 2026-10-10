@@ -11,6 +11,7 @@ public sealed class RunWorkspaceLayout
     private const string RunsDirectoryName = "runs";
     private const string NotesDirectoryName = "notes";
     private const string ExplorerCheckoutDirectoryName = "explore";
+    private const string WorktreeBackupsDirectoryName = "worktree-backups";
 
     private RunWorkspaceLayout(RunId runId, string runDirectory)
     {
@@ -27,6 +28,9 @@ public sealed class RunWorkspaceLayout
 
     /// <summary>Read-only checkout of the integration tip the explorer works in.</summary>
     public string ExplorerCheckoutDirectory => Path.Combine(RunDirectory, ExplorerCheckoutDirectoryName);
+
+    /// <summary>Patches of tracked changes removed from ticket worktrees, one subfolder per ticket.</summary>
+    public string WorktreeBackupsDirectory => Path.Combine(RunDirectory, WorktreeBackupsDirectoryName);
 
     public BranchName ExplorerBranch => new($"webdevloop/{RunId}/explore");
 

@@ -55,6 +55,7 @@ internal sealed class ReviewLoopFixture
         var fixes = new ReviewFixRunner(
             scope,
             scope,
+            RunEvents,
             Git,
             Agents,
             new PromptRenderer(),
@@ -124,6 +125,8 @@ internal sealed class ReviewLoopFixture
             await Handler().HandleAsync(new EventEnvelope(++messageId, workflowEvent), Token);
         }
     }
+
+    public RecordingRunEvents RunEvents { get; } = new();
 
     public TicketRun Ticket(TicketRunId id) => Execution.Ticket(id);
 

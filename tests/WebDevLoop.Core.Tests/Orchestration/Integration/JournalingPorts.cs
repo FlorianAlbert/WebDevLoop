@@ -49,6 +49,12 @@ internal sealed class JournalingGitWorkspace(IGitWorkspace inner, ExternalCallJo
     public Task<PushOutcome> PushAsync(GitRepositoryLocation repo, RefPush push, CancellationToken cancellationToken) =>
         Journal($"push:{push.Branch}", () => inner.PushAsync(repo, push, cancellationToken));
 
+    public Task<WorktreeChanges> GetWorktreeChangesAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken) =>
+        inner.GetWorktreeChangesAsync(repo, worktreePath, cancellationToken);
+
+    public Task<WorktreeCleanResult> CleanWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken) =>
+        Journal($"clean-worktree:{worktreePath}", () => inner.CleanWorktreeAsync(repo, worktreePath, cancellationToken));
+
     public Task<WorktreeCleanupResult> CleanupWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken) =>
         Journal($"cleanup-worktree:{worktreePath}", () => inner.CleanupWorktreeAsync(repo, worktreePath, cancellationToken));
 

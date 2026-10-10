@@ -1,6 +1,8 @@
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Orchestration.ReviewLoop;
+using WebDevLoop.Core.Orchestration.TicketExecution;
+using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
 namespace WebDevLoop.Core.Tests.Orchestration.ReviewLoop;
@@ -31,5 +33,23 @@ public sealed class FixSessionFallbackTests
         Assert.Equal(StepStatus.Succeeded, fix.Status);
         Assert.Equal(fresh.SessionId.Value, fix.CopilotSessionId);
         Assert.Equal(fix.Id, fresh.StepRunId);
+    }
+
+    [Fact]
+    public async Task a_worktree_made_dirty_by_test_artefacts_is_cleaned_automatically_before_the_fix_turn()
+    {
+        SeededSpec spec = await _fixture.SeedReviewingAsync(1);
+        string worktree = _fixture.Ticket(spec[1]).WorktreePath!;
+        _fixture.Git.SetWorktreeChanges(worktree, new WorktreeChanges(string.Empty, [], ["__pycache__/calc.cpython-312.pyc"], []));
+        _fixture.Issues(FindingAxis.CodingStandards, ReviewLoopFixture.StandardsFinding).Clean(FindingAxis.Specification)
+            .Fix()
+            .Clean(FindingAxis.CodingStandards).Clean(FindingAxis.Specification);
+
+        ReviewLoopResult result = await _fixture.RunLoopAsync(spec, 1);
+
+        Assert.Equal(ReviewLoopResult.Integrating, result);
+        Assert.Equal(StepStatus.Succeeded, Assert.Single(_fixture.Steps(spec[1], StepKind.Fix)).Status);
+        RunEvent remediation = Assert.Single(_fixture.RunEvents.All, runEvent => runEvent.Type == WorktreeRemediator.RunEventType);
+        Assert.Equal(spec[1], remediation.TicketRunId);
     }
 }

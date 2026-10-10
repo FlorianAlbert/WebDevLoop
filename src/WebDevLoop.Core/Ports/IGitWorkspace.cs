@@ -32,6 +32,15 @@ public interface IGitWorkspace
 
     Task<WorktreeInspection> InspectWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken);
 
+    /// <summary>Lists tracked, untracked and ignored differences of a worktree; empty for a missing worktree.</summary>
+    Task<WorktreeChanges> GetWorktreeChangesAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Equivalent of <c>git reset --hard HEAD</c> plus <c>git clean -fdx</c>, confined to this one worktree: HEAD and the
+    /// branch are untouched, nested repositories are left alone. Callers back up tracked changes first.
+    /// </summary>
+    Task<WorktreeCleanResult> CleanWorktreeAsync(GitRepositoryLocation repo, string worktreePath, CancellationToken cancellationToken);
+
     /// <summary>Merges <paramref name="source"/> (normally the integration tip) into the worktree's branch.</summary>
     Task<GitMergeResult> MergeIntoWorktreeAsync(TicketWorktree worktree, CommitSha source, string message, CancellationToken cancellationToken);
 

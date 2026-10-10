@@ -53,7 +53,7 @@ public sealed class AwaitingMergeRecoveryTests
         ReadyAndMergeFixture f = _fixture;
         InMemoryWorkflowStore store = f.Store;
         var conflicts = new ConflictResolutionRunner(
-            store, store, f.Git, new ScriptedAgentRunner(), new PromptRenderer(), store, store, f.Ids, f.Clock, new IntegrationOptions(ReadyAndMergeFixture.SkillsRoot));
+            store, store, store, f.Git, new ScriptedAgentRunner(), new PromptRenderer(), store, store, f.Ids, f.Clock, new IntegrationOptions(ReadyAndMergeFixture.SkillsRoot));
         var saga = new IntegrationSagaRunner(
             store, store, store, store, store, f.Settings, f.Gate, new IntegrationSagaSteps(store, store, store, f.Git, f.Pulls, f.Issues, conflicts, store, store, f.Clock), store, store, f.Clock);
         var external = new ExternalStateReconciler(

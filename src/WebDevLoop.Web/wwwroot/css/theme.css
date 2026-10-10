@@ -564,3 +564,8 @@ code, kbd, pre, samp, .font-mono {
 .detail-table { min-width: 36rem; }
 .detail-table.detail-table--wide { min-width: 46rem; }
 .detail-table th { color: var(--wdl-text-muted); font-size: var(--wdl-text-xs); font-weight: 500; white-space: nowrap; }
+
+/* Long paths, hashes and titles must wrap instead of widening the page */
+h1, .h1, .alert, dd, .card-body, code {
+    overflow-wrap: anywhere;
+}

@@ -7,7 +7,7 @@ public sealed class ProcessProbe(TimeSpan timeout) : IProcessProbe
 {
     public async Task<ProcessProbeResult> RunAsync(string executable, IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(executable)
+        var startInfo = new ProcessStartInfo(OperatingSystem.IsWindows() ? ResolveWindowsExecutable(executable) : executable)
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -59,6 +59,34 @@ public sealed class ProcessProbe(TimeSpan timeout) : IProcessProbe
                 throw;
             }
         }
+    }
+
+    private static string ResolveWindowsExecutable(string executable)
+    {
+        string[] extensions = Path.HasExtension(executable)
+            ? [string.Empty]
+            : (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        IEnumerable<string> directories = Path.IsPathRooted(executable) || executable.Contains(Path.DirectorySeparatorChar)
+            || executable.Contains(Path.AltDirectorySeparatorChar)
+            ? [string.Empty]
+            : new[] { Environment.CurrentDirectory }.Concat(
+                (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+                    .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        foreach (string directory in directories)
+        {
+            foreach (string extension in extensions)
+            {
+                string candidate = Path.Combine(directory.Trim('"'), executable + extension);
+                if (File.Exists(candidate))
+                {
+                    return Path.GetFullPath(candidate);
+                }
+            }
+        }
+
+        return executable;
     }
 
     private static string FirstLine(string text) => text.Split('\n', 2)[0].TrimEnd('\r');

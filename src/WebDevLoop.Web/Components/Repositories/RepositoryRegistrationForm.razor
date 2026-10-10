@@ -1,65 +1,195 @@
 @inherits ScopedComponentBase
+@using WebDevLoop.Infrastructure.GitHub.Auth
+@using WebDevLoop.Infrastructure.GitHub.Pulls
+@inject GitHubUserSession Session
+@inject GitHubAppAccess AppAccess
 
-<form class="card card-body mb-3" data-testid="register-form" @onsubmit="SubmitAsync">
-    <div class="row g-2">
-        <div class="col-md-3">
-            <label class="form-label small mb-0" for="reg-owner">Owner</label>
-            <input id="reg-owner" name="owner" class="form-control form-control-sm" placeholder="acme" @bind="_owner" />
-        </div>
-        <div class="col-md-3">
-            <label class="form-label small mb-0" for="reg-name">Name</label>
-            <input id="reg-name" name="name" class="form-control form-control-sm" placeholder="widgets" @bind="_name" />
-        </div>
-        <div class="col-md-6">
-            <label class="form-label small mb-0" for="reg-branch">Default base branch <span class="text-muted">(optional)</span></label>
-            <input id="reg-branch" name="defaultBaseBranch" class="form-control form-control-sm" placeholder="main" @bind="_defaultBaseBranch" />
-        </div>
-        <div class="col-md-6">
-            <label class="form-label small mb-0" for="reg-clone">Clone URL <span class="text-muted">(optional, defaults to the GitHub HTTPS URL)</span></label>
-            <input id="reg-clone" name="cloneUrl" class="form-control form-control-sm" @bind="_cloneUrl" />
-        </div>
-    </div>
-    @if (_error is not null)
+<div class="card card-body mb-3" data-testid="register-form">
+    @if (!Session.Status.IsConfigured || !Session.Status.IsSignedIn)
     {
-        <div class="alert alert-danger py-1 px-2 small mt-2 mb-0" role="alert" data-testid="register-errors">@_error</div>
+        <div class="alert alert-warning mb-2" role="alert" data-testid="register-signin-required">
+            @(Session.Status.IsConfigured ? "Sign in with GitHub" : "Configure the GitHub sign-in") on the
+            <a href="github">GitHub page</a> first: repositories are activated from the ones the GitHub App can reach.
+        </div>
     }
-    <div class="mt-2 d-flex gap-2">
-        <button type="submit" class="btn btn-primary btn-sm" disabled="@_submitting">Register</button>
-        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OnCancel">Cancel</button>
+    else
+    {
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <input type="search" name="filter" class="form-control form-control-sm w-auto flex-grow-1" placeholder="Filter repositories…" aria-label="Filter repositories"
+                   data-testid="register-filter" @bind="Filter" @bind:event="oninput" />
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="register-refresh" disabled="@(_loading || _busy)" @onclick="LoadAsync">
+                @(_loading ? "Loading…" : "Refresh")
+            </button>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger py-1 px-2 small mb-2" role="alert" data-testid="register-errors">@_error</div>
+        }
+
+        @if (_accessError is not null)
+        {
+            <div class="alert alert-danger py-1 px-2 small mb-2" role="alert" data-testid="register-access-error">Could not load the repository access: @_accessError</div>
+        }
+        else if (_candidates is null)
+        {
+            <div class="spinner-border spinner-border-sm" role="status"><span class="visually-hidden">Loading…</span></div>
+        }
+        else if (_candidates.Count == 0)
+        {
+            <p class="text-muted small mb-0" data-testid="register-none">
+                The GitHub App reaches no repository yet. Add repositories to its installation on the <a href="github">GitHub page</a>.
+            </p>
+        }
+        else
+        {
+            IReadOnlyList<string> visible = VisibleCandidates();
+            if (visible.Count == 0)
+            {
+                <p class="text-muted small mb-0" data-testid="register-no-match">No repository matches “@Filter”.</p>
+            }
+            else
+            {
+                <ul class="list-group list-group-flush small" data-testid="register-candidates">
+                    @foreach (string fullName in visible)
+                    {
+                        RepositoryView? registered = FindRegistered(fullName);
+                        <li class="list-group-item d-flex align-items-center gap-2 py-1" data-repo="@fullName" data-active="@((registered is not null).ToString().ToLowerInvariant())">
+                            <span class="me-auto">@fullName</span>
+                            @if (registered is null)
+                            {
+                                <button type="button" class="btn btn-primary btn-sm" data-testid="activate" disabled="@_busy" @onclick="() => ActivateAsync(fullName)">Activate</button>
+                            }
+                            else
+                            {
+                                <span class="badge text-bg-success">Active</span>
+                                @if (_confirmRemove == fullName)
+                                {
+                                    <button type="button" class="btn btn-danger btn-sm" data-testid="confirm-remove" disabled="@_busy" @onclick="() => RemoveAsync(registered)">Confirm remove</button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="cancel-remove" @onclick="() => _confirmRemove = null">Cancel</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-outline-danger btn-sm" data-testid="remove" disabled="@_busy" @onclick="() => _confirmRemove = fullName">Remove</button>
+                                }
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        }
+    }
+    <div class="mt-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="register-close" @onclick="OnCancel">Close</button>
     </div>
-</form>
+</div>
 
 @code {
-    private string? _owner;
-    private string? _name;
-    private string? _defaultBaseBranch;
-    private string? _cloneUrl;
+    private IReadOnlyList<string>? _candidates;
+    private List<RepositoryView> _registered = [];
+    private string? _confirmRemove;
     private string? _error;
-    private bool _submitting;
+    private string? _accessError;
+    private bool _loading;
+    private bool _busy;
+
+    private string Filter { get; set; } = string.Empty;
 
     [Parameter]
     public EventCallback<RepositoryView> OnRegistered { get; set; }
 
     [Parameter]
+    public EventCallback<RepositoryView> OnRemoved { get; set; }
+
+    [Parameter]
     public EventCallback OnCancel { get; set; }
 
-    private async Task SubmitAsync()
+    protected override async Task OnInitializedAsync()
     {
-        _submitting = true;
+        if (Session.Status is { IsConfigured: true, IsSignedIn: true })
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _accessError = null;
         _error = null;
         try
         {
-            var command = new RegisterRepositoryCommand(Clean(_owner), Clean(_name), null, Clean(_defaultBaseBranch), Clean(_cloneUrl));
+            IReadOnlyList<GitHubAppInstallation> installations = await AppAccess.ListInstallationsAsync(CancellationToken.None);
+            _candidates = installations
+                .SelectMany(installation => installation.Repositories)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            _registered = [.. await InScopeAsync(services => services.GetRequiredService<IRepositoryQueries>().ListAsync(CancellationToken.None))];
+        }
+        catch (Exception exception) when (exception is HttpRequestException or GitHubTokenUnavailableException or TaskCanceledException)
+        {
+            _accessError = exception.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private IReadOnlyList<string> VisibleCandidates() =>
+        string.IsNullOrWhiteSpace(Filter)
+            ? _candidates!
+            : _candidates!.Where(name => name.Contains(Filter.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
+
+    private RepositoryView? FindRegistered(string fullName) =>
+        _registered.FirstOrDefault(repository => string.Equals($"{repository.Owner}/{repository.Name}", fullName, StringComparison.OrdinalIgnoreCase));
+
+    private async Task ActivateAsync(string fullName)
+    {
+        int separator = fullName.IndexOf('/');
+        var command = new RegisterRepositoryCommand(fullName[..separator], fullName[(separator + 1)..]);
+        await RunAsync(async () =>
+        {
             CommandResult<RepositoryView> result = await InScopeAsync(services =>
                 services.GetRequiredService<IRepositoryRegistry>().RegisterAsync(command, CancellationToken.None));
-            if (result.IsSuccess)
-            {
-                await OnRegistered.InvokeAsync(result.Value);
-            }
-            else
+            if (!result.IsSuccess)
             {
                 _error = result.Message;
+                return;
             }
+
+            RepositoryView activated = result.Value!;
+            _registered.Add(activated);
+            await OnRegistered.InvokeAsync(activated);
+        });
+    }
+
+    private async Task RemoveAsync(RepositoryView repository)
+    {
+        _confirmRemove = null;
+        await RunAsync(async () =>
+        {
+            CommandResult<int> result = await InScopeAsync(services =>
+                services.GetRequiredService<IRepositoryRegistry>().RemoveAsync(repository.Id, CancellationToken.None));
+            if (!result.IsSuccess)
+            {
+                _error = result.Message;
+                return;
+            }
+
+            _registered.RemoveAll(registered => registered.Id == repository.Id);
+            await OnRemoved.InvokeAsync(repository);
+        });
+    }
+
+    private async Task RunAsync(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await action();
         }
         catch (Exception exception)
         {
@@ -67,9 +197,7 @@
         }
         finally
         {
-            _submitting = false;
+            _busy = false;
         }
     }
-
-    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

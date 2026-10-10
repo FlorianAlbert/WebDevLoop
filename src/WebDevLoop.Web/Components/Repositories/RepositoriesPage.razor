@@ -5,12 +5,12 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h4 mb-0">Repositories</h1>
-    <button type="button" class="btn btn-primary btn-sm" data-testid="show-register" @onclick="() => _showRegister = !_showRegister">Register repository</button>
+    <button type="button" class="btn btn-primary btn-sm" data-testid="show-register" @onclick="() => _showRegister = !_showRegister">Activate repositories</button>
 </div>
 
 @if (_showRegister)
 {
-    <RepositoryRegistrationForm OnRegistered="HandleRegistered" OnCancel="() => _showRegister = false" />
+    <RepositoryRegistrationForm OnRegistered="HandleRegistered" OnRemoved="HandleRemoved" OnCancel="() => _showRegister = false" />
 }
 
 @if (_message is not null)
@@ -28,7 +28,7 @@ else if (LoadError is not null)
 }
 else if (_repositories.Count == 0)
 {
-    <p class="text-muted">No repositories registered yet. Use “Register repository” to add one.</p>
+    <p class="text-muted">No repositories registered yet. Use “Activate repositories” to pick one.</p>
 }
 else
 {
@@ -108,8 +108,7 @@ else
 
     private void HandleRegistered(RepositoryView registered)
     {
-        _showRegister = false;
-        _message = new("success", $"Registered {registered.Owner}/{registered.Name}.");
+        _message = new("success", $"Activated {registered.Owner}/{registered.Name}.");
         if (RepositoryContext.CurrentRepositoryId is null)
         {
             RepositoryContext.Select(registered.Id);
@@ -118,6 +117,16 @@ else
         {
             RepositoryContext.NotifyChanged();
         }
+    }
+
+    private void HandleRemoved(RepositoryView removed)
+    {
+        if (RepositoryContext.CurrentRepositoryId == removed.Id)
+        {
+            RepositoryContext.Select(null);
+        }
+
+        Report(true, $"Removed {removed.Owner}/{removed.Name}.");
     }
 
     private void HandleEdited()

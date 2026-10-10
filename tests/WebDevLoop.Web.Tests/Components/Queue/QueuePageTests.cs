@@ -244,4 +244,18 @@ public sealed class QueuePageTests : UiTestContext
         Assert.DoesNotContain("fatal: raw", row.TextContent);
         Assert.Equal("Retry", cut.Find("[data-testid=run-note-r-attn] a").TextContent.Trim());
     }
+
+    [Fact]
+    public void a_selected_repository_that_no_longer_exists_is_cleared_and_the_empty_state_is_shown()
+    {
+        Selection.Select(4);
+
+        IRenderedComponent<QueuePage> cut = Render<QueuePage>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Null(Selection.CurrentRepositoryId);
+            Assert.Contains("Select a repository", cut.Markup);
+        });
+    }
 }

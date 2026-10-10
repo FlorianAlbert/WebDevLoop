@@ -45,12 +45,20 @@
         ? $"Overrides for {repository.Owner}/{repository.Name}"
         : "Global settings";
 
-    protected override async Task OnInitializedAsync() => _repositories = await Repositories.ListAsync(CancellationToken.None);
+    protected override async Task OnInitializedAsync()
+    {
+        _repositories = await Repositories.ListAsync(CancellationToken.None);
+        RepositoryContext.ClearIfDangling(_repositories.Select(repository => repository.Id));
+    }
 
-    protected override void OnParametersSet() =>
-        _repositoryId = Repo is null
+    // A repository that no longer exists (stale selection or ?repo=) falls back to the global scope, which always loads.
+    protected override void OnParametersSet()
+    {
+        int? requested = Repo is null
             ? RepositoryContext.CurrentRepositoryId
             : int.TryParse(Repo, out int id) ? id : null;
+        _repositoryId = requested is { } value && _repositories.Any(repository => repository.Id == value) ? value : null;
+    }
 
     private void ScopeChanged(ChangeEventArgs args)
     {

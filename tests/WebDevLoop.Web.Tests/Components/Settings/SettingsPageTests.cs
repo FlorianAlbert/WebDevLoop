@@ -562,4 +562,25 @@ public sealed class SettingsPageTests : BunitContext
         Assert.Contains("does not exist", page.Find("[data-testid=load-error]").TextContent);
         Assert.Empty(page.FindAll("[data-testid=save]"));
     }
+
+    [Fact]
+    public async Task a_stale_current_repository_is_cleared_and_the_global_settings_load()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync(query: "x=1", currentRepositoryId: 4);
+
+        Assert.Empty(page.FindAll("[data-testid=load-error]"));
+        Assert.Contains("Global settings", page.Find("[data-testid=scope-title]").TextContent);
+        Assert.NotEmpty(page.FindAll("[data-testid=save]"));
+        Assert.Null(Services.GetRequiredService<ICurrentRepositorySelection>().CurrentRepositoryId);
+        Assert.Equal("global", page.Find("[data-testid=scope]").QuerySelector("option[selected]")!.GetAttribute("value"));
+    }
+
+    [Fact]
+    public async Task a_repo_query_for_a_missing_repository_falls_back_to_the_global_settings()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 99);
+
+        Assert.Empty(page.FindAll("[data-testid=load-error]"));
+        Assert.Contains("Global settings", page.Find("[data-testid=scope-title]").TextContent);
+    }
 }

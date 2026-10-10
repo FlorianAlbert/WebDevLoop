@@ -52,4 +52,28 @@ public sealed class RepositoryContextTests
 
         Assert.Equal(1, _changes);
     }
+
+    [Fact]
+    public void clear_if_dangling_clears_a_selection_that_points_at_a_missing_repository_and_notifies()
+    {
+        _selection.Select(4);
+
+        bool cleared = _context.ClearIfDangling([1, 2]);
+
+        Assert.True(cleared);
+        Assert.Null(_selection.CurrentRepositoryId);
+        Assert.Equal(1, _changes);
+    }
+
+    [Fact]
+    public void clear_if_dangling_keeps_a_valid_or_empty_selection()
+    {
+        _selection.Select(2);
+        Assert.False(_context.ClearIfDangling([1, 2]));
+        Assert.Equal(2, _selection.CurrentRepositoryId);
+
+        _selection.Select(null);
+        Assert.False(_context.ClearIfDangling([]));
+        Assert.Equal(0, _changes);
+    }
 }

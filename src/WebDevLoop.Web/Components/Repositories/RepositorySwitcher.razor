@@ -27,6 +27,7 @@ else
     protected override async Task LoadAsync(CancellationToken cancellationToken)
     {
         IReadOnlyList<RepositoryView> all = await InScopeAsync(services => services.GetRequiredService<IRepositoryQueries>().ListAsync(cancellationToken));
+        RepositoryContext.ClearIfDangling(all.Select(repository => repository.Id));
         _repositories = all.Where(repository => repository.IsEnabled).ToArray();
     }
 

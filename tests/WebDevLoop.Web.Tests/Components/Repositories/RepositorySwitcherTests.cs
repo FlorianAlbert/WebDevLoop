@@ -76,4 +76,28 @@ public sealed class RepositorySwitcherTests : UiTestContext
         Assert.Empty(cut.FindAll("select"));
         Assert.Equal("/repositories", cut.Find("a").GetAttribute("href"));
     }
+
+    [Fact]
+    public void a_current_repository_that_no_longer_exists_is_cleared()
+    {
+        Selection.Select(4);
+
+        IRenderedComponent<RepositorySwitcher> cut = Render<RepositorySwitcher>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Null(Selection.CurrentRepositoryId);
+            Assert.Equal(string.Empty, cut.Find("select").GetAttribute("value") ?? string.Empty);
+        });
+    }
+
+    [Fact]
+    public void a_disabled_but_existing_current_repository_is_kept()
+    {
+        Selection.Select(3);
+
+        Render<RepositorySwitcher>();
+
+        Assert.Equal(3, Selection.CurrentRepositoryId);
+    }
 }

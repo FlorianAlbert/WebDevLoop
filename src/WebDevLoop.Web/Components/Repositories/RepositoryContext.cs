@@ -18,5 +18,17 @@ public sealed class RepositoryContext(ICurrentRepositorySelection selection)
         NotifyChanged();
     }
 
+    /// <summary>Clears the selection if it points at a repository that no longer exists (removed, or the database was reset).</summary>
+    public bool ClearIfDangling(IEnumerable<int> existingRepositoryIds)
+    {
+        if (CurrentRepositoryId is not { } current || existingRepositoryIds.Contains(current))
+        {
+            return false;
+        }
+
+        Select(null);
+        return true;
+    }
+
     public void NotifyChanged() => Changed?.Invoke();
 }

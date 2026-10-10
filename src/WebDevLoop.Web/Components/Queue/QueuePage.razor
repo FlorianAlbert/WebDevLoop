@@ -95,5 +95,11 @@ else
             CommandResult<EffectiveSettingsView> settings = await services.GetRequiredService<ISettingsManager>().GetEffectiveAsync(id, cancellationToken);
             return (repository, runs, settings.Value, dependencies);
         });
+
+        if (_repository is null)
+        {
+            // The selected repository no longer exists: forget it instead of showing a stale selection.
+            RepositoryContext.ClearIfDangling([]);
+        }
     }
 }

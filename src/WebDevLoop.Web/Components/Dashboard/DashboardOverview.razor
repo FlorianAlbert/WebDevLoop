@@ -16,8 +16,8 @@ else if (LoadError is not null)
 }
 else if (_overviews.Count == 0)
 {
-    <EmptyState Icon="inbox" Title="No repositories registered yet" Text="Register a repository to start queueing specs.">
-        <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Repositories">Register a repository</a></Action>
+    <EmptyState Icon="inbox" Title="No repositories added yet" Text="Add a repository to start queueing specs.">
+        <Action><a class="btn btn-primary btn-sm" href="@UiRoutes.Repositories">Add repository</a></Action>
     </EmptyState>
 }
 else

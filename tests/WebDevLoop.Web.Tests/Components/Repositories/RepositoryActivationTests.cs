@@ -161,7 +161,7 @@ public sealed class RepositoryActivationTests : UiTestContext
         IRenderedComponent<RepositoriesPage> cut = OpenPicker(signedIn: true, expectRows: false);
 
         Assert.Equal("true", cut.Find("[data-testid=show-register]").GetAttribute("aria-expanded"));
-        Assert.DoesNotContain("No repositories registered", cut.Markup);
+        Assert.DoesNotContain("No repositories added", cut.Markup);
         Assert.Contains("Add repository", cut.Find("[data-testid=show-register]").TextContent);
     }
 

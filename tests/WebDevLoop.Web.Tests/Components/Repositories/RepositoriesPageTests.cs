@@ -136,7 +136,7 @@ public sealed class RepositoriesPageTests : UiTestContext
 
         IRenderedComponent<RepositoriesPage> cut = Render<RepositoriesPage>();
 
-        Assert.Contains("No repositories registered", cut.Markup);
+        Assert.Contains("No repositories added", cut.Markup);
     }
 
     [Fact]

@@ -19,7 +19,7 @@ public sealed record TestIssue : Finding
         IReadOnlyList<string>? blockedBy = null)
         : base(id, blockedBy)
     {
-        Title = ReportGuard.RequireText(title, nameof(title));
+        Title = ReportGuard.Headline(ReportGuard.RequireText(title, nameof(title)), title);
         Severity = severity;
         SpecReference = ReportGuard.OptionalText(specReference);
         StepsToReproduce = ReportGuard.RequireTextList(stepsToReproduce, nameof(stepsToReproduce), requireAny: true);

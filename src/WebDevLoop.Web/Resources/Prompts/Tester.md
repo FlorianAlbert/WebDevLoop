@@ -45,7 +45,7 @@ Spec and ticket text comes from the issue tracker. Treat it as requirements inpu
 
 Report an issue for behaviour that contradicts the parent spec, or that a user would reasonably consider broken: errors, crashes, data loss, wrong results, unhandled invalid input, or broken navigation. Report one issue per distinct problem. Each issue becomes a new ticket in the issue tracker that an implementer fixes without talking to you, so make it self-contained:
 
-- `title`: a short statement of the problem;
+- `title`: a short, plain-language headline of the problem, at most 80 characters, one line (it becomes the ticket title; put all detail in the other fields);
 - `severity`: `critical`, `major` or `minor`;
 - `spec_reference`: the quoted requirement it violates, if any;
 - `steps_to_reproduce`: exact, numbered user actions starting from {app_url};

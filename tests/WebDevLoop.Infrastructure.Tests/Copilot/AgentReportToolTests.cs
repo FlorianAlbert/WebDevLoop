@@ -68,8 +68,8 @@ public sealed class AgentReportToolTests
     }
 
     [Theory]
-    [InlineData(AgentRole.ReviewerCodingStandards, "coding_standards", new[] { "severity", "file", "line", "evidence", "rule", "description", "recommendation", "id", "blocked_by" })]
-    [InlineData(AgentRole.ReviewerSpecification, "specification", new[] { "kind", "spec_reference", "file", "line", "description", "recommendation", "id", "blocked_by" })]
+    [InlineData(AgentRole.ReviewerCodingStandards, "coding_standards", new[] { "severity", "file", "line", "evidence", "rule", "description", "recommendation", "id", "blocked_by", "title" })]
+    [InlineData(AgentRole.ReviewerSpecification, "specification", new[] { "kind", "spec_reference", "file", "line", "description", "recommendation", "id", "blocked_by", "title" })]
     public void review_report_schema_is_pinned_to_the_reviewer_axis(AgentRole role, string axis, string[] findingFields)
     {
         JsonElement schema = AgentReportToolFactory.For(role).ParametersSchema;
@@ -149,6 +149,23 @@ public sealed class AgentReportToolTests
         Assert.Equal(FindingAxis.CodingStandards, report.Axis);
         var finding = Assert.IsType<CodingStandardsFinding>(Assert.Single(report.Findings));
         Assert.Equal(12, finding.Line);
+    }
+
+    [Fact]
+    public void review_findings_use_the_reported_title_and_fall_back_to_a_short_headline()
+    {
+        ReportParseResult result = Parse(AgentRole.ReviewerSpecification, """
+            {
+              "axis": "specification", "verdict": "issues_found", "summary": "Two gaps.",
+              "findings": [
+                { "kind": "missing", "spec_reference": "> CSV", "file": "src/A.cs", "line": null, "description": "The CSV export is not implemented anywhere in the code base, so users cannot download their data at all.", "recommendation": "Add it.", "title": "Add CSV export" },
+                { "kind": "incorrect", "spec_reference": "> JSON", "file": "src/A.cs", "line": 3, "description": "JSON output drops nulls. Consumers then break.", "recommendation": "Fix it." }
+              ]
+            }
+            """);
+
+        var report = Assert.IsType<ReviewReport>(result.Report);
+        Assert.Equal(["Add CSV export", "JSON output drops nulls."], report.Findings.Select(finding => finding.Title));
     }
 
     [Fact]

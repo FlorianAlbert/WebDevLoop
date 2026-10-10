@@ -38,8 +38,8 @@ internal sealed record FindingRecord(
 
     public Finding ToDomain() => Axis switch
     {
-        FindingAxis.CodingStandards => new CodingStandardsFinding(Require(Severity), File, Line, Require(Evidence), Require(Rule), Description, Recommendation, ReportedId, BlockedBy),
-        FindingAxis.Specification => new SpecificationFinding(Require(Kind), Require(SpecReference), File, Line, Description, Recommendation, ReportedId, BlockedBy),
+        FindingAxis.CodingStandards => new CodingStandardsFinding(Require(Severity), File, Line, Require(Evidence), Require(Rule), Description, Recommendation, ReportedId, BlockedBy, Title),
+        FindingAxis.Specification => new SpecificationFinding(Require(Kind), Require(SpecReference), File, Line, Description, Recommendation, ReportedId, BlockedBy, Title),
         _ => throw new InvalidAgentReportException($"'{Axis}' is not a review axis."),
     };
 

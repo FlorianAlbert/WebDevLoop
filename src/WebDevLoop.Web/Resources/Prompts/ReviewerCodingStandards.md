@@ -65,6 +65,7 @@ Report a finding only if it is actionable and should be fixed before this change
 - `severity`: `blocking` for documented-standard breaches and defects, `judgement` for clean-code smells;
 - `file` and `line` evidence, quoting the relevant code;
 - `rule`: the standard you cite (file and rule) or the principle;
+- `title` (optional but expected): a short, plain-language headline of the problem, at most 80 characters and one line, without trailing period (for example "Subtract rejects negative operands"). It becomes the ticket title; put all detail in `description`;
 - `description` of the problem, and a concrete `recommendation` for the fix.
 - `id`: a short identifier that is unique within this report (for example `F1`), only needed so that other findings can name this one in `blocked_by`;
 - `blocked_by` (optional): the `id`s of findings in this report that must be fixed first because this fix builds on theirs or edits the same code and would otherwise conflict with it. Leave it out for independent findings, which are fixed in parallel; never use it for a cycle.

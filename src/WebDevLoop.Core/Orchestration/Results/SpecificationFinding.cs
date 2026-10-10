@@ -15,7 +15,8 @@ public sealed record SpecificationFinding : Finding
         string description,
         string recommendation,
         string? id = null,
-        IReadOnlyList<string>? blockedBy = null)
+        IReadOnlyList<string>? blockedBy = null,
+        string? title = null)
         : base(id, blockedBy)
     {
         Kind = kind;
@@ -24,11 +25,12 @@ public sealed record SpecificationFinding : Finding
         Line = ReportGuard.OptionalLine(line, nameof(line));
         Description = ReportGuard.RequireText(description, nameof(description));
         Recommendation = ReportGuard.RequireText(recommendation, nameof(recommendation));
+        Title = ReportGuard.Headline(title, Description);
     }
 
     public override FindingAxis Axis => FindingAxis.Specification;
 
-    public override string Title => ReportGuard.Headline(Description);
+    public override string Title { get; }
 
     public SpecificationFindingKind Kind { get; }
 

@@ -15,7 +15,8 @@ public sealed record CodingStandardsFinding : Finding
         string description,
         string recommendation,
         string? id = null,
-        IReadOnlyList<string>? blockedBy = null)
+        IReadOnlyList<string>? blockedBy = null,
+        string? title = null)
         : base(id, blockedBy)
     {
         Severity = severity;
@@ -25,11 +26,12 @@ public sealed record CodingStandardsFinding : Finding
         Rule = ReportGuard.RequireText(rule, nameof(rule));
         Description = ReportGuard.RequireText(description, nameof(description));
         Recommendation = ReportGuard.RequireText(recommendation, nameof(recommendation));
+        Title = ReportGuard.Headline(title, Description);
     }
 
     public override FindingAxis Axis => FindingAxis.CodingStandards;
 
-    public override string Title => ReportGuard.Headline(Description);
+    public override string Title { get; }
 
     public CodingStandardsSeverity Severity { get; }
 

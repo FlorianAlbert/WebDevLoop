@@ -47,9 +47,10 @@ internal sealed record CodingStandardsFindingPayload(
     string Description,
     string Recommendation,
     string? Id = null,
-    IReadOnlyList<string>? BlockedBy = null)
+    IReadOnlyList<string>? BlockedBy = null,
+    string? Title = null)
 {
-    public CodingStandardsFinding ToDomain() => new(Severity, File, Line, Evidence, Rule, Description, Recommendation, Id, BlockedBy);
+    public CodingStandardsFinding ToDomain() => new(Severity, File, Line, Evidence, Rule, Description, Recommendation, Id, BlockedBy, Title);
 }
 
 internal sealed record SpecificationFindingPayload(
@@ -60,9 +61,10 @@ internal sealed record SpecificationFindingPayload(
     string Description,
     string Recommendation,
     string? Id = null,
-    IReadOnlyList<string>? BlockedBy = null)
+    IReadOnlyList<string>? BlockedBy = null,
+    string? Title = null)
 {
-    public SpecificationFinding ToDomain() => new(Kind, SpecReference, File, Line, Description, Recommendation, Id, BlockedBy);
+    public SpecificationFinding ToDomain() => new(Kind, SpecReference, File, Line, Description, Recommendation, Id, BlockedBy, Title);
 }
 
 internal sealed record CodingStandardsReviewPayload(

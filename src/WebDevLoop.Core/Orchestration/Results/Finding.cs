@@ -13,7 +13,7 @@ public abstract record Finding
 
     public abstract FindingAxis Axis { get; }
 
-    /// <summary>Short statement of the problem, used as the finding ticket title.</summary>
+    /// <summary>Short statement of the problem, used as the finding ticket title; the full text goes into the ticket body.</summary>
     public abstract string Title { get; }
 
     /// <summary>Reporter-assigned identifier (unique within the report) that other findings name in <see cref="BlockedBy"/>.</summary>

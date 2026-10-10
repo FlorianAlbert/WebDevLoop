@@ -59,6 +59,7 @@ Report a finding for every missing, incorrect or out-of-scope behaviour. Every f
 - `kind`: `missing`, `incorrect` or `out_of_scope`;
 - `spec_reference`: the quoted line of the specification it concerns (for out-of-scope behaviour, the closest relevant line or "not requested");
 - `file` and `line` evidence for the implementation, or for missing behaviour, the place where it is expected;
+- `title` (optional but expected): a short, plain-language headline of the problem, at most 80 characters and one line, without trailing period (for example "Subtract rejects negative operands"). It becomes the ticket title; put all detail in `description`;
 - `description` of expected versus actual behaviour, and a concrete `recommendation`.
 - `id`: a short identifier that is unique within this report (for example `F1`), only needed so that other findings can name this one in `blocked_by`;
 - `blocked_by` (optional): the `id`s of findings in this report that must be fixed first because this fix builds on theirs or edits the same code and would otherwise conflict with it. Leave it out for independent findings, which are fixed in parallel; never use it for a cycle.

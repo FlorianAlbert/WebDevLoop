@@ -8,11 +8,41 @@ internal static class ReportGuard
     private const int MaxHeadlineLength = 100;
     private static readonly StringComparer FindingIds = StringComparer.OrdinalIgnoreCase;
 
-    /// <summary>First line of <paramref name="text"/>, shortened for use as an issue title.</summary>
-    public static string Headline(string text)
+    /// <summary>
+    /// A short issue title: the reporter's <paramref name="title"/> when given, otherwise the first sentence of
+    /// <paramref name="fallbackText"/>. Anything longer than the limit is cut at a word boundary; the full text belongs in the body.
+    /// </summary>
+    public static string Headline(string? title, string fallbackText)
     {
-        string firstLine = text.Trim().Split('\n', 2)[0].Trim();
-        return firstLine.Length <= MaxHeadlineLength ? firstLine : string.Concat(firstLine.AsSpan(0, MaxHeadlineLength - 1), "…");
+        bool explicitTitle = !string.IsNullOrWhiteSpace(title);
+        string line = (explicitTitle ? title! : fallbackText).Trim().Split('\n', 2)[0].Trim();
+        if (!explicitTitle)
+        {
+            line = FirstSentence(line);
+        }
+
+        return line.Length <= MaxHeadlineLength ? line : CutAtWord(line);
+    }
+
+    private static string FirstSentence(string line)
+    {
+        for (int index = 0; index < line.Length - 1; index++)
+        {
+            if (line[index] is '.' or '!' or '?' && char.IsWhiteSpace(line[index + 1]) && index + 1 <= MaxHeadlineLength)
+            {
+                return line[..(index + 1)];
+            }
+        }
+
+        return line;
+    }
+
+    private static string CutAtWord(string line)
+    {
+        string head = line[..(MaxHeadlineLength - 1)];
+        int boundary = line[MaxHeadlineLength - 1] is ' ' or '\t' ? head.Length : head.LastIndexOfAny([' ', '\t']);
+        string cut = boundary > MaxHeadlineLength / 2 ? head[..boundary] : head;
+        return cut.TrimEnd(' ', '\t', '.', ':', ';', ',', '-', '—') + "…";
     }
 
     public static string RequireText(string? value, string field) =>

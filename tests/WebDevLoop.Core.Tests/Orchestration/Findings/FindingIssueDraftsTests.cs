@@ -29,6 +29,46 @@ public sealed class FindingIssueDraftsTests
     }
 
     [Fact]
+    public void Ticket_title_is_the_reported_summary_and_the_full_text_stays_in_the_body()
+    {
+        const string description = "The required review diff is empty because both sides resolve to commit 62e1ebac9ff6f1a5f1b6b555c709 and nothing differs between them.";
+        var finding = new SpecificationFinding(
+            SpecificationFindingKind.Missing, "> subtract", "src/Calc.cs", null, description, "Implement it.", title: "Subtract is not implemented");
+
+        FindingIssueDraft draft = Draft(StepKind.ParentReview, finding);
+
+        Assert.Equal("Subtract is not implemented", draft.Title);
+        Assert.Contains(description, draft.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ticket_title_without_a_summary_is_cut_at_a_word_boundary()
+    {
+        const string description = "The required review diff is empty because both sides resolve to commit 62e1ebac9ff6f1a5f1b6b555c709 and nothing differs between them";
+        var finding = new CodingStandardsFinding(
+            CodingStandardsSeverity.Blocking, "src/A.cs", 1, "x", "rule", description, "Fix.");
+
+        FindingIssueDraft draft = Draft(StepKind.ParentReview, finding);
+
+        Assert.True(draft.Title.Length <= 100);
+        Assert.EndsWith("…", draft.Title, StringComparison.Ordinal);
+        Assert.StartsWith(draft.Title.TrimEnd('…'), description, StringComparison.Ordinal);
+        Assert.Equal(' ', description[draft.Title.Length - 1]);
+        Assert.Contains(description, draft.Body, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Short problem.", "Short problem.")]
+    [InlineData("First sentence. Second sentence follows.", "First sentence.")]
+    [InlineData("First line\nsecond line", "First line")]
+    public void Ticket_title_without_a_summary_is_the_first_sentence_or_line(string description, string expected)
+    {
+        var finding = new SpecificationFinding(SpecificationFindingKind.Incorrect, "> x", "src/A.cs", null, description, "Fix.");
+
+        Assert.Equal(expected, finding.Title);
+    }
+
+    [Fact]
     public void Tester_ticket_lists_reproduction_steps_expected_and_actual_behaviour()
     {
         var issue = new TestIssue("Saving fails", TestIssueSeverity.Major, "Users can save items.", ["Open /items", "Click Save"], "Item saved", "Error 500", ["shots/save.png"]);

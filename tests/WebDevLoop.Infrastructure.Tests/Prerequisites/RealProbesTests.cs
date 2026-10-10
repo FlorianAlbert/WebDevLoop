@@ -4,6 +4,7 @@ using WebDevLoop.Infrastructure.Prerequisites;
 
 namespace WebDevLoop.Infrastructure.Tests.Prerequisites;
 
+[Collection("Process environment")]
 public sealed class RealProbesTests : IDisposable
 {
     // Muxer-only invocations: `dotnet --version` and unknown commands boot the whole SDK CLI, which is slow and can spawn
@@ -14,6 +15,57 @@ public sealed class RealProbesTests : IDisposable
     private readonly TestDirectory _directory = new("probes");
 
     public void Dispose() => _directory.Dispose();
+
+    [Theory]
+    [InlineData("", false)]
+    [InlineData(".cmd", false)]
+    [InlineData(".bat", false)]
+    [InlineData("", true)]
+    [InlineData(".cmd", true)]
+    [InlineData(".bat", true)]
+    public async Task process_probe_runs_platform_scripts_by_path_or_name(string extension, bool searchPath)
+    {
+        string directory = Path.Combine(_directory.Path, "directory with spaces");
+        Directory.CreateDirectory(directory);
+        string scriptName = "prerequisite-probe" + extension;
+        string scriptPath = Path.Combine(directory, scriptName);
+        if (OperatingSystem.IsWindows())
+        {
+            if (extension.Length == 0)
+            {
+                scriptPath += ".cmd";
+                await File.WriteAllTextAsync(Path.Combine(directory, scriptName), "#!/bin/sh\nexit 1\n", TestContext.Current.CancellationToken);
+            }
+
+            await File.WriteAllTextAsync(scriptPath, "@echo off\r\necho %GH_PROMPT_DISABLED%/%NO_COLOR%/%~1\r\n", TestContext.Current.CancellationToken);
+        }
+        else
+        {
+            await File.WriteAllTextAsync(scriptPath, "#!/bin/sh\nprintf '%s/%s/%s\\n' \"$GH_PROMPT_DISABLED\" \"$NO_COLOR\" \"$1\"\n", TestContext.Current.CancellationToken);
+            File.SetUnixFileMode(scriptPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        string? originalPath = Environment.GetEnvironmentVariable("PATH");
+        try
+        {
+            if (searchPath)
+            {
+                Environment.SetEnvironmentVariable("PATH", directory);
+            }
+
+            string executable = searchPath ? scriptName : Path.Combine(directory, scriptName);
+            var probe = new ProcessProbe(GenerousTimeout);
+
+            ProcessProbeResult result = await probe.RunAsync(executable, ["argument with spaces"], CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("1/1/argument with spaces", result.Output);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PATH", originalPath);
+        }
+    }
 
     [Fact]
     public async Task process_probe_reports_a_missing_executable_as_not_found()
@@ -43,10 +95,10 @@ public sealed class RealProbesTests : IDisposable
     [Fact]
     public async Task process_probe_times_out_and_stops_a_hanging_tool()
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the POSIX sleep command.");
+        (string executable, string[] arguments) = HangingTool();
         var probe = new ProcessProbe(TimeSpan.FromMilliseconds(300));
 
-        ProcessProbeResult result = await probe.RunAsync("sleep", ["30"], CancellationToken.None);
+        ProcessProbeResult result = await probe.RunAsync(executable, arguments, CancellationToken.None);
 
         Assert.Equal(ProcessProbeOutcome.TimedOut, result.Outcome);
     }
@@ -54,11 +106,11 @@ public sealed class RealProbesTests : IDisposable
     [Fact]
     public async Task process_probe_propagates_caller_cancellation()
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the POSIX sleep command.");
+        (string executable, string[] arguments) = HangingTool();
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         var probe = new ProcessProbe(GenerousTimeout);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probe.RunAsync("sleep", ["30"], cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => probe.RunAsync(executable, arguments, cts.Token));
     }
 
     [Fact]
@@ -138,8 +190,24 @@ public sealed class RealProbesTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(version));
     }
 
+    private (string Executable, string[] Arguments) HangingTool()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return ("sleep", ["30"]);
+        }
+
+        string script = Path.Combine(_directory.Path, "hanging-tool.cmd");
+        string ping = Path.Combine(Environment.SystemDirectory, "ping.exe");
+        File.WriteAllText(script, $"@echo off\r\n\"{ping}\" -n 31 127.0.0.1 >nul\r\n");
+        return (script, []);
+    }
+
     private WebDevLoopDbContext NewContext(string relativePath) =>
         new(new DbContextOptionsBuilder<WebDevLoopDbContext>()
             .UseSqlite($"Data Source={Path.Combine(_directory.Path, relativePath)};Pooling=False")
             .Options);
 }
+
+[CollectionDefinition("Process environment", DisableParallelization = true)]
+public sealed class ProcessEnvironmentCollection;

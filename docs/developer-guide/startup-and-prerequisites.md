@@ -84,6 +84,8 @@ Each check implements <xref:WebDevLoop.Infrastructure.Prerequisites.IPrerequisit
 
 Files: `src/WebDevLoop.Infrastructure/Prerequisites/*Check.cs`. External access goes through probes (`IProcessProbe`, `IFileSystemProbe`, `IDatabaseProbe`, `ILibGit2Probe`) so tests can fake it.
 
+All executable checks share the same process probe. On Linux, commands are launched directly using the executable name or path. On Windows, extensionless names are resolved using `PATH` and `PATHEXT`, so npm launchers such as `playwright-cli.cmd` work alongside native `.exe` tools. Explicit paths, including paths with spaces, are supported on both platforms.
+
 What readiness controls:
 
 | Mode | UI | Read API | Mutating API | Workers |

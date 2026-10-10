@@ -1,33 +1,45 @@
 @page "/settings"
 @rendermode InteractiveServer
+@using Microsoft.AspNetCore.Components.Routing
 @using WebDevLoop.Core.Queries
+@using WebDevLoop.Web.Components.Repositories
+@using WebDevLoop.Web.Components.Shared
 @inject IRepositoryQueries Repositories
+@inject RepositoryContext RepositoryContext
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
 
-<PageTitle>Settings</PageTitle>
+<PageHeader Title="Settings" Description="Defaults for all repositories, with optional per-repository overrides." />
 
-<h1>Settings</h1>
+<NavigationLock OnBeforeInternalNavigation="ConfirmLeaveAsync" ConfirmExternalNavigation="_dirty" />
 
-<div class="row mb-3">
-    <div class="col-md-6">
-        <label class="form-label fw-semibold" for="settings-scope">Edit settings for</label>
-        <select id="settings-scope" class="form-select" data-testid="scope" @onchange="ScopeChanged">
-            <option value="" selected="@(_repositoryId is null)">Global (all repositories)</option>
-            @foreach (RepositoryView repository in _repositories)
-            {
-                <option value="@repository.Id" selected="@(repository.Id == _repositoryId)">@repository.Owner/@repository.Name (override)</option>
-            }
-        </select>
-        <div class="form-text">Repository settings only override what you fill in; everything else is inherited from the global settings.</div>
-    </div>
+<div class="mb-3">
+    <label class="form-label fw-semibold" for="settings-scope">Edit settings for</label>
+    <select id="settings-scope" class="form-select w-auto mw-100" data-testid="scope" @key="_scopeKey" @onchange="ScopeChanged">
+        <option value="@GlobalScope" selected="@(_repositoryId is null)">Global (all repositories)</option>
+        @foreach (RepositoryView repository in _repositories)
+        {
+            <option value="@repository.Id" selected="@(repository.Id == _repositoryId)">@repository.Owner/@repository.Name</option>
+        }
+    </select>
+    <div class="form-text">Repository settings only override what you fill in; everything else is inherited from the global settings.</div>
 </div>
 
-<h2 class="h4" data-testid="scope-title">@ScopeTitle</h2>
+<h2 class="h5" data-testid="scope-title">@ScopeTitle</h2>
 
-<SettingsEditor RepositoryId="_repositoryId" />
+<SettingsEditor RepositoryId="_repositoryId" DirtyChanged="DirtyChanged" />
 
 @code {
+    private const string GlobalScope = "global";
+
     private IReadOnlyList<RepositoryView> _repositories = [];
     private int? _repositoryId;
+    private bool _dirty;
+    private int _scopeKey;
+
+    /// <summary>"global" or a repository id; without it the page follows the repository selected in the top bar.</summary>
+    [SupplyParameterFromQuery(Name = "repo")]
+    public string? Repo { get; set; }
 
     private string ScopeTitle => _repositories.FirstOrDefault(repository => repository.Id == _repositoryId) is { } repository
         ? $"Overrides for {repository.Owner}/{repository.Name}"
@@ -35,6 +47,40 @@
 
     protected override async Task OnInitializedAsync() => _repositories = await Repositories.ListAsync(CancellationToken.None);
 
-    private void ScopeChanged(ChangeEventArgs args) =>
-        _repositoryId = int.TryParse(args.Value?.ToString(), out int id) ? id : null;
+    protected override void OnParametersSet() =>
+        _repositoryId = Repo is null
+            ? RepositoryContext.CurrentRepositoryId
+            : int.TryParse(Repo, out int id) ? id : null;
+
+    private void ScopeChanged(ChangeEventArgs args)
+    {
+        string? value = args.Value?.ToString();
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("repo", string.IsNullOrEmpty(value) ? GlobalScope : value));
+    }
+
+    private void DirtyChanged(bool dirty) => _dirty = dirty;
+
+    private async Task ConfirmLeaveAsync(LocationChangingContext context)
+    {
+        if (!_dirty)
+        {
+            return;
+        }
+
+        bool leave;
+        try
+        {
+            leave = await Js.InvokeAsync<bool>("confirm", "You have unsaved settings. Leave this page and discard them?");
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+
+        if (!leave)
+        {
+            context.PreventNavigation();
+            _scopeKey++;
+        }
+    }
 }

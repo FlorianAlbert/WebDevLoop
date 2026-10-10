@@ -1,8 +1,9 @@
 <OverrideFieldFrame Field="@Field" Label="@Label" IsOverridden="@(!string.IsNullOrEmpty(Value))" Inherited="@Inherited"
                     Errors="@Errors" OnReset="@Reset">
-    <select id="@OverrideFieldFrame.InputIdFor(Field)" class="form-select" @onchange="Changed">
-        <option value="" selected="@string.IsNullOrEmpty(Value)">(inherit)</option>
-        @foreach ((string value, string label) in Options)
+    <select id="@OverrideFieldFrame.InputIdFor(Field)" class="form-select w-auto @OverrideFieldFrame.InvalidClass(Errors)" aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)"
+            aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)" @onchange="Changed">
+        <option value="" selected="@string.IsNullOrEmpty(Value)">@EmptyLabel</option>
+        @foreach ((string value, string label) in AllOptions)
         {
             <option value="@value" selected="@(value == Value)">@label</option>
         }
@@ -10,6 +11,8 @@
 </OverrideFieldFrame>
 
 @code {
+    [CascadingParameter(Name = "SettingsInherits")] public bool Inherits { get; set; } = true;
+
     [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
 
     [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
@@ -20,9 +23,18 @@
 
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
 
+    /// <summary>The (display) value in effect when nothing is chosen.</summary>
     [Parameter] public string? Inherited { get; set; }
 
     [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    private string EmptyLabel => Inherited is null
+        ? "(not set)"
+        : Inherits ? $"Inherit ({Inherited})" : $"Default ({Inherited})";
+
+    /// <summary>A stored value that is not among the known options stays selectable instead of silently turning into "inherit".</summary>
+    private IEnumerable<(string Value, string Label)> AllOptions =>
+        !string.IsNullOrEmpty(Value) && Options.All(option => option.Value != Value) ? [.. Options, (Value, Value)] : Options;
 
     private Task Changed(ChangeEventArgs args) =>
         ValueChanged.InvokeAsync(string.IsNullOrEmpty(args.Value?.ToString()) ? null : args.Value!.ToString());

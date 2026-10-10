@@ -98,11 +98,51 @@ public sealed class SettingsEditModel
             .ToDictionary(entry => entry.Key, entry => entry.Override),
     };
 
-    /// <summary>Problems only the form can detect, because <see cref="ToData"/> cannot express them.</summary>
-    public IReadOnlyList<SettingsValidationError> LocalErrors() =>
-        PortStart.HasValue != PortEnd.HasValue
-            ? [new SettingsValidationError(nameof(SettingsProfileData.TestPortRange), "Set both the first and the last port, or neither.")]
-            : [];
+    /// <summary>Problems the form can detect itself, worded for the user (the editor prefixes the field label).</summary>
+    public IReadOnlyList<SettingsValidationError> LocalErrors()
+    {
+        var errors = new List<SettingsValidationError>();
+        CheckMinimum(errors, nameof(SettingsProfileData.MaxActiveSpecsPerRepo), MaxActiveSpecsPerRepo, 1);
+        CheckMinimum(errors, nameof(SettingsProfileData.MaxConcurrentImplementersGlobal), MaxConcurrentImplementersGlobal, 1);
+        CheckMinimum(errors, nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo), MaxConcurrentImplementersPerRepo, 1);
+        CheckMinimum(errors, nameof(SettingsProfileData.MaxReviewIterations), MaxReviewIterations, 1);
+        CheckMinimum(errors, nameof(SettingsProfileData.MaxRetries), MaxRetries, 0);
+        CheckMinimum(errors, nameof(SettingsProfileData.ParentReviewCycleLimit), ParentReviewCycleLimit, 1);
+        CheckMinimum(errors, nameof(SettingsProfileData.TesterCycleLimit), TesterCycleLimit, 1);
+        foreach ((AgentRole role, RoleEditModel edit) in Roles)
+        {
+            CheckMinimum(errors, $"Roles.{role}.{nameof(RoleSettingsOverride.TimeoutSeconds)}", edit.TimeoutSeconds, 1);
+        }
+
+        const string portField = nameof(SettingsProfileData.TestPortRange);
+        if (PortStart.HasValue != PortEnd.HasValue)
+        {
+            errors.Add(new SettingsValidationError(portField, "Set both the first and the last port, or neither."));
+        }
+        else if (PortStart is { } start && PortEnd is { } end)
+        {
+            if (start < SettingsValidator.MinimumUnprivilegedPort || end > MaximumPort)
+            {
+                errors.Add(new SettingsValidationError(portField, $"Both ports must be between {SettingsValidator.MinimumUnprivilegedPort} and {MaximumPort}."));
+            }
+            else if (start > end)
+            {
+                errors.Add(new SettingsValidationError(portField, "The first port must not be greater than the last port."));
+            }
+        }
+
+        return errors;
+    }
+
+    public const int MaximumPort = 65535;
+
+    private static void CheckMinimum(List<SettingsValidationError> errors, string field, int? value, int minimum)
+    {
+        if (value < minimum)
+        {
+            errors.Add(new SettingsValidationError(field, $"Must be {minimum} or more."));
+        }
+    }
 
     /// <summary>The data to persist: a copy with prompts that still equal the inherited template collapsed to "not overridden".</summary>
     public SettingsProfileData ToPersistedData(EffectiveSettingsView inherited)

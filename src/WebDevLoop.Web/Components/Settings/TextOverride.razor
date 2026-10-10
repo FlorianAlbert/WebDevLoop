@@ -2,20 +2,13 @@
                     Errors="@Errors" OnReset="@Reset">
     @if (Multiline)
     {
-        <textarea id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control" rows="@Rows" value="@Value" @onchange="Changed"></textarea>
+        <textarea id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control @OverrideFieldFrame.InvalidClass(Errors)" rows="@Rows" value="@Value" placeholder="@Inherited"
+                  aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)" @onchange="Changed"></textarea>
     }
     else
     {
-        <input id="@OverrideFieldFrame.InputIdFor(Field)" type="text" class="form-control" value="@Value" list="@(Suggestions.Count > 0 ? ListId : null)" @onchange="Changed" />
-        @if (Suggestions.Count > 0)
-        {
-            <datalist id="@ListId">
-                @foreach (string suggestion in Suggestions)
-                {
-                    <option value="@suggestion"></option>
-                }
-            </datalist>
-        }
+        <input id="@OverrideFieldFrame.InputIdFor(Field)" type="text" class="form-control @OverrideFieldFrame.InvalidClass(Errors)" value="@Value" placeholder="@Inherited"
+               aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)" @onchange="Changed" />
     }
 </OverrideFieldFrame>
 
@@ -28,6 +21,7 @@
 
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
 
+    /// <summary>The value in effect when this field is empty; shown as the placeholder.</summary>
     [Parameter] public string? Inherited { get; set; }
 
     [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
@@ -35,10 +29,6 @@
     [Parameter] public bool Multiline { get; set; }
 
     [Parameter] public int Rows { get; set; } = 3;
-
-    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
-
-    private string ListId => "l-" + Field.Replace('.', '-');
 
     private Task Changed(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString());
 

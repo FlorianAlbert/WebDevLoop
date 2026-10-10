@@ -1,6 +1,9 @@
+@using System.Text.Json
+@using System.Text.RegularExpressions
 @using WebDevLoop.Core.Domain
 @using WebDevLoop.Core.Management
 @using WebDevLoop.Core.Settings
+@using WebDevLoop.Web.Components.Shared
 @inject ISettingsManager Manager
 @inject EffectiveSettings EmbeddedDefaults
 
@@ -10,101 +13,156 @@
 }
 else if (_model is not null)
 {
-    <form @onsubmit="SaveAsync" @onsubmit:preventDefault>
+    <CascadingValue Name="SettingsInherits" Value="!IsGlobal">
+    <form @onsubmit="SaveAsync" @onsubmit:preventDefault novalidate @key="_version">
         @if (_errors.Count > 0)
         {
-            <div class="alert alert-danger" role="alert" data-testid="error-summary">
-                <strong>The settings cannot be saved yet:</strong>
+            <div class="alert alert-danger" role="alert" tabindex="-1" data-testid="error-summary" @ref="_summary">
+                <strong>@(_errors.Count == 1 ? "1 setting needs attention before saving:" : $"{_errors.Count} settings need attention before saving:")</strong>
                 <ul class="mb-0">
                     @foreach (SettingsValidationError error in _errors)
                     {
-                        <li>@error</li>
+                        <li><a href="#@OverrideFieldFrame.InputIdFor(error.Field)" class="alert-link" onclick="@JumpTo(OverrideFieldFrame.InputIdFor(error.Field))">@FieldLabel(error.Field)</a>: @Describe(error)</li>
                     }
                 </ul>
             </div>
         }
 
-        <h3 class="h5">General</h3>
-        <TextOverride Field="@nameof(SettingsProfileData.BaseBranch)" Label="Base (trunk) branch" @bind-Value="_model.BaseBranch"
-                      Inherited="@_inherited.BaseBranch" Errors="@ErrorsFor(nameof(SettingsProfileData.BaseBranch))" />
-        <ChoiceOverride Field="@nameof(SettingsProfileData.SpecDependencyMode)" Label="Spec dependency mode" Options="DependencyModes"
-                        Value="@_model.SpecDependencyMode?.ToString()" ValueChanged="SetDependencyMode"
-                        Inherited="@_inherited.SpecDependencyMode.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.SpecDependencyMode))" />
-        @if (IsGlobal)
-        {
-            <p class="form-text mb-1" data-testid="startup-directories-note">
-                The workspace root and the Copilot base directory are read once at startup and shared by all repositories: a change takes effect
-                after a restart, and existing clones must be moved under the new workspace root (then update each repository's local path).
-            </p>
-            <TextOverride Field="@nameof(SettingsProfileData.WorkspaceRootDirectory)" Label="Workspace root directory" @bind-Value="_model.WorkspaceRootDirectory"
-                          Inherited="@_inherited.WorkspaceRootDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.WorkspaceRootDirectory))" />
-            <TextOverride Field="@nameof(SettingsProfileData.CopilotBaseDirectory)" Label="Copilot base directory" @bind-Value="_model.CopilotBaseDirectory"
-                          Inherited="@_inherited.CopilotBaseDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.CopilotBaseDirectory))" />
-        }
+        <div class="settings-layout">
+            <nav class="settings-nav" aria-label="Settings sections" data-testid="section-nav">
+                @foreach ((string id, string title) in Sections)
+                {
+                    <a href="#@id" onclick="@JumpTo(id)">@title</a>
+                }
+            </nav>
 
-        <h3 class="h5 mt-4">Concurrency, review and retries</h3>
-        <NumberOverride Field="@nameof(SettingsProfileData.MaxActiveSpecsPerRepo)" Label="Max active specs per repository" @bind-Value="_model.MaxActiveSpecsPerRepo"
-                        Inherited="@_inherited.MaxActiveSpecsPerRepo.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxActiveSpecsPerRepo))" />
-        @if (IsGlobal)
-        {
-            <NumberOverride Field="@nameof(SettingsProfileData.MaxConcurrentImplementersGlobal)" Label="Max concurrent implementers (all repositories)"
-                            @bind-Value="_model.MaxConcurrentImplementersGlobal" Inherited="@_inherited.MaxConcurrentImplementersGlobal.ToString()"
-                            Errors="@ErrorsFor(nameof(SettingsProfileData.MaxConcurrentImplementersGlobal))" />
-        }
-        <NumberOverride Field="@nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo)" Label="Max concurrent implementers per repository"
-                        @bind-Value="_model.MaxConcurrentImplementersPerRepo" Inherited="@_inherited.MaxConcurrentImplementersPerRepo.ToString()"
-                        Errors="@ErrorsFor(nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo))" />
-        <NumberOverride Field="@nameof(SettingsProfileData.MaxReviewIterations)" Label="Max review iterations per ticket" @bind-Value="_model.MaxReviewIterations"
-                        Inherited="@_inherited.MaxReviewIterations.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxReviewIterations))" />
-        <NumberOverride Field="@nameof(SettingsProfileData.MaxRetries)" Label="Max retries" @bind-Value="_model.MaxRetries"
-                        Inherited="@_inherited.MaxRetries.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxRetries))" />
-        <NumberOverride Field="@nameof(SettingsProfileData.ParentReviewCycleLimit)" Label="Parent review cycle limit" @bind-Value="_model.ParentReviewCycleLimit"
-                        Inherited="@_inherited.ParentReviewCycleLimit.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.ParentReviewCycleLimit))" />
-        <NumberOverride Field="@nameof(SettingsProfileData.TesterCycleLimit)" Label="Tester cycle limit" @bind-Value="_model.TesterCycleLimit"
-                        Inherited="@_inherited.TesterCycleLimit.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.TesterCycleLimit))" />
+            <div>
+                <SectionCard Id="section-general" Title="General">
+                    <TextOverride Field="@nameof(SettingsProfileData.BaseBranch)" Label="@FieldLabel(nameof(SettingsProfileData.BaseBranch))" @bind-Value="_model.BaseBranch"
+                                  Inherited="@_inherited.BaseBranch" Errors="@ErrorsFor(nameof(SettingsProfileData.BaseBranch))" />
+                    <ChoiceOverride Field="@nameof(SettingsProfileData.SpecDependencyMode)" Label="@FieldLabel(nameof(SettingsProfileData.SpecDependencyMode))" Options="DependencyModes"
+                                    Value="@_model.SpecDependencyMode?.ToString()" ValueChanged="SetDependencyMode"
+                                    Inherited="@DisplayNames.For(_inherited.SpecDependencyMode)" Errors="@ErrorsFor(nameof(SettingsProfileData.SpecDependencyMode))" />
+                    @if (IsGlobal)
+                    {
+                        <div class="alert alert-warning" role="note" data-testid="startup-directories-note">
+                            The workspace root and the Copilot base directory are read once at startup and shared by all repositories: a change takes effect
+                            after a restart, and existing clones must be moved under the new workspace root (then update each repository's local path).
+                        </div>
+                        <TextOverride Field="@nameof(SettingsProfileData.WorkspaceRootDirectory)" Label="@FieldLabel(nameof(SettingsProfileData.WorkspaceRootDirectory))" @bind-Value="_model.WorkspaceRootDirectory"
+                                      Inherited="@_inherited.WorkspaceRootDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.WorkspaceRootDirectory))" />
+                        <TextOverride Field="@nameof(SettingsProfileData.CopilotBaseDirectory)" Label="@FieldLabel(nameof(SettingsProfileData.CopilotBaseDirectory))" @bind-Value="_model.CopilotBaseDirectory"
+                                      Inherited="@_inherited.CopilotBaseDirectory" Errors="@ErrorsFor(nameof(SettingsProfileData.CopilotBaseDirectory))" />
+                    }
+                </SectionCard>
 
-        <h3 class="h5 mt-4">Tester</h3>
-        <TextOverride Field="@nameof(SettingsProfileData.TesterRunInstructions)" Label="Run instructions" Multiline="true" Rows="5"
-                      @bind-Value="_model.TesterRunInstructions" Inherited="@_inherited.TesterRunInstructions"
-                      Errors="@ErrorsFor(nameof(SettingsProfileData.TesterRunInstructions))" />
-        <OverrideFieldFrame Field="@nameof(SettingsProfileData.TestPortRange)" Label="Test port range" IsOverridden="@(_model.PortStart is not null || _model.PortEnd is not null)"
-                            Inherited="@($"{_inherited.TestPortRange.Start}–{_inherited.TestPortRange.End}")" Errors="@ErrorsFor(nameof(SettingsProfileData.TestPortRange))"
-                            OnReset="ResetPortRange">
-            <div class="input-group">
-                <input type="number" class="form-control" aria-label="First port" data-testid="port-start" value="@_model.PortStart" @onchange="args => _model.PortStart = ParseInt(args)" />
-                <span class="input-group-text">to</span>
-                <input type="number" class="form-control" aria-label="Last port" data-testid="port-end" value="@_model.PortEnd" @onchange="args => _model.PortEnd = ParseInt(args)" />
+                <SectionCard Id="section-limits" Title="Concurrency, review and retries">
+                    <NumberOverride Field="@nameof(SettingsProfileData.MaxActiveSpecsPerRepo)" Label="@FieldLabel(nameof(SettingsProfileData.MaxActiveSpecsPerRepo))" Min="1" @bind-Value="_model.MaxActiveSpecsPerRepo"
+                                    Inherited="@_inherited.MaxActiveSpecsPerRepo.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxActiveSpecsPerRepo))" />
+                    @if (IsGlobal)
+                    {
+                        <NumberOverride Field="@nameof(SettingsProfileData.MaxConcurrentImplementersGlobal)" Label="@FieldLabel(nameof(SettingsProfileData.MaxConcurrentImplementersGlobal))" Min="1"
+                                        @bind-Value="_model.MaxConcurrentImplementersGlobal" Inherited="@_inherited.MaxConcurrentImplementersGlobal.ToString()"
+                                        Errors="@ErrorsFor(nameof(SettingsProfileData.MaxConcurrentImplementersGlobal))" />
+                    }
+                    <NumberOverride Field="@nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo)" Label="@FieldLabel(nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo))" Min="1"
+                                    @bind-Value="_model.MaxConcurrentImplementersPerRepo" Inherited="@_inherited.MaxConcurrentImplementersPerRepo.ToString()"
+                                    Errors="@ErrorsFor(nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo))" />
+                    <NumberOverride Field="@nameof(SettingsProfileData.MaxReviewIterations)" Label="@FieldLabel(nameof(SettingsProfileData.MaxReviewIterations))" Min="1" @bind-Value="_model.MaxReviewIterations"
+                                    Inherited="@_inherited.MaxReviewIterations.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxReviewIterations))" />
+                    <NumberOverride Field="@nameof(SettingsProfileData.MaxRetries)" Label="@FieldLabel(nameof(SettingsProfileData.MaxRetries))" Min="0" @bind-Value="_model.MaxRetries"
+                                    Inherited="@_inherited.MaxRetries.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.MaxRetries))" />
+                    <NumberOverride Field="@nameof(SettingsProfileData.ParentReviewCycleLimit)" Label="@FieldLabel(nameof(SettingsProfileData.ParentReviewCycleLimit))" Min="1" @bind-Value="_model.ParentReviewCycleLimit"
+                                    Inherited="@_inherited.ParentReviewCycleLimit.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.ParentReviewCycleLimit))" />
+                    <NumberOverride Field="@nameof(SettingsProfileData.TesterCycleLimit)" Label="@FieldLabel(nameof(SettingsProfileData.TesterCycleLimit))" Min="1" @bind-Value="_model.TesterCycleLimit"
+                                    Inherited="@_inherited.TesterCycleLimit.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.TesterCycleLimit))" />
+                </SectionCard>
+
+                <SectionCard Id="section-tester" Title="Tester">
+                    <TextOverride Field="@nameof(SettingsProfileData.TesterRunInstructions)" Label="@FieldLabel(nameof(SettingsProfileData.TesterRunInstructions))" Multiline="true" Rows="5"
+                                  @bind-Value="_model.TesterRunInstructions" Inherited="@_inherited.TesterRunInstructions"
+                                  Errors="@ErrorsFor(nameof(SettingsProfileData.TesterRunInstructions))" />
+                    <OverrideFieldFrame Field="@nameof(SettingsProfileData.TestPortRange)" Label="@FieldLabel(nameof(SettingsProfileData.TestPortRange))"
+                                        IsOverridden="@(_model.PortStart is not null || _model.PortEnd is not null)"
+                                        Inherited="@($"{_inherited.TestPortRange.Start}–{_inherited.TestPortRange.End}")" Errors="@ErrorsFor(nameof(SettingsProfileData.TestPortRange))"
+                                        OnReset="ResetPortRange">
+                        <div class="input-group settings-number-group" style="max-width: 22rem">
+                            <input id="@OverrideFieldFrame.InputIdFor(nameof(SettingsProfileData.TestPortRange))" type="number" class="form-control @PortInvalidClass" min="@SettingsValidator.MinimumUnprivilegedPort" max="@SettingsEditModel.MaximumPort"
+                                   aria-label="First port" placeholder="@_inherited.TestPortRange.Start" aria-invalid="@PortInvalidFlag" aria-describedby="@PortDescribedBy" data-testid="port-start"
+                                   value="@_model.PortStart" @onchange="args => _model.PortStart = ParseInt(args)" />
+                            <span class="input-group-text">to</span>
+                            <input type="number" class="form-control @PortInvalidClass" min="@SettingsValidator.MinimumUnprivilegedPort" max="@SettingsEditModel.MaximumPort"
+                                   aria-label="Last port" placeholder="@_inherited.TestPortRange.End" aria-invalid="@PortInvalidFlag" aria-describedby="@PortDescribedBy" data-testid="port-end"
+                                   value="@_model.PortEnd" @onchange="args => _model.PortEnd = ParseInt(args)" />
+                        </div>
+                    </OverrideFieldFrame>
+                </SectionCard>
+
+                <SectionCard Id="section-roles" Title="Agent roles" Description="Model, reasoning effort, timeout and prompt for each agent.">
+                    @foreach (AgentRole role in Enum.GetValues<AgentRole>())
+                    {
+                        RoleEditModel roleModel = _model.Roles[role];
+                        EffectiveRoleSettingsView inheritedRole = _inherited.Roles[role];
+                        string prefix = $"Roles.{role}.";
+                        bool expanded = _expandedRoles.Contains(role);
+                        string panelId = $"role-panel-{role}";
+                        <div class="settings-role" data-role="@role">
+                            <button type="button" class="settings-role__toggle" aria-expanded="@(expanded ? "true" : "false")" aria-controls="@panelId" data-testid="role-toggle" @onclick="() => ToggleRole(role)">
+                                <Icon Name="chevron-down" />
+                                <span>@DisplayNames.For(role)</span>
+                                @if (!IsGlobal && HasOverrides(roleModel, inheritedRole))
+                                {
+                                    <span class="text-body-secondary small fw-normal">Customized</span>
+                                }
+                            </button>
+                            <div class="settings-role__body" id="@panelId" hidden="@(!expanded)">
+                                <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.Model))" Label="Model" @bind-Value="roleModel.Model"
+                                              Inherited="@inheritedRole.Model" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
+                                <ChoiceOverride Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Label="Reasoning effort" Options="ReasoningEfforts"
+                                                Value="@roleModel.ReasoningEffort" ValueChanged="value => roleModel.ReasoningEffort = value"
+                                                Inherited="@inheritedRole.ReasoningEffort" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
+                                <NumberOverride Field="@(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" Label="Session timeout" Unit="seconds" Min="1" @bind-Value="roleModel.TimeoutSeconds"
+                                                Inherited="@inheritedRole.TimeoutSeconds.ToString()" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" />
+                                <PromptTemplateField Role="role" Value="@(roleModel.PromptTemplate ?? string.Empty)" ValueChanged="text => roleModel.PromptTemplate = text"
+                                                     InheritedTemplate="@inheritedRole.PromptTemplate" DefaultTemplate="@_defaults.Roles[role].PromptTemplate"
+                                                     ShowReset="@(!IsGlobal)" ServerErrors="@ErrorsFor(PromptTemplateValidator.FieldName(role))" />
+                            </div>
+                        </div>
+                    }
+                </SectionCard>
             </div>
-        </OverrideFieldFrame>
+        </div>
 
-        <h3 class="h5 mt-4">Agent roles</h3>
-        @foreach (AgentRole role in Enum.GetValues<AgentRole>())
-        {
-            RoleEditModel roleModel = _model.Roles[role];
-            EffectiveRoleSettingsView inheritedRole = _inherited.Roles[role];
-            string prefix = $"Roles.{role}.";
-            <details class="card card-body mb-2" data-role="@role">
-                <summary class="fw-semibold">@role</summary>
-                <div class="pt-3">
-                    <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.Model))" Label="Model" @bind-Value="roleModel.Model"
-                                  Inherited="@inheritedRole.Model" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
-                    <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Label="Reasoning effort" @bind-Value="roleModel.ReasoningEffort"
-                                  Inherited="@inheritedRole.ReasoningEffort" Suggestions="ReasoningEfforts"
-                                  Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
-                    <NumberOverride Field="@(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" Label="Session timeout (seconds)" @bind-Value="roleModel.TimeoutSeconds"
-                                    Inherited="@($"{inheritedRole.TimeoutSeconds} s")" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" />
-                    <PromptTemplateField Role="role" Value="@(roleModel.PromptTemplate ?? string.Empty)" ValueChanged="text => roleModel.PromptTemplate = text"
-                                         InheritedTemplate="@inheritedRole.PromptTemplate" DefaultTemplate="@_defaults.Roles[role].PromptTemplate"
-                                         ShowReset="@(!IsGlobal)" ServerErrors="@ErrorsFor(PromptTemplateValidator.FieldName(role))" />
-                </div>
-            </details>
-        }
-
-        <div class="d-flex align-items-center gap-3 mt-3">
-            <button type="submit" class="btn btn-primary" data-testid="save" disabled="@_isSaving">Save settings</button>
-            <span class="@(_statusIsError ? "text-danger" : "text-success")" role="status" data-testid="save-status">@_status</span>
+        <div class="settings-savebar" data-testid="save-bar">
+            <div class="settings-savebar__status" role="status" data-testid="save-status">
+                @if (_isSaving)
+                {
+                    <span class="text-body-secondary">Saving…</span>
+                }
+                else if (_status is not null && _statusIsError)
+                {
+                    <span class="text-danger">@_status</span>
+                }
+                else if (IsDirty)
+                {
+                    <span data-testid="dirty-note"><Icon Name="alert" /> You have unsaved changes</span>
+                }
+                else if (_status is not null)
+                {
+                    <span class="text-success">@_status</span>
+                }
+            </div>
+            <button type="button" class="btn btn-outline-secondary" data-testid="discard" disabled="@(!IsDirty || _isSaving)" @onclick="Discard">Discard changes</button>
+            <button type="submit" class="btn btn-primary" data-testid="save" disabled="@(!IsDirty || _isSaving)" aria-busy="@(_isSaving ? "true" : null)">
+                @if (_isSaving)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                Save settings
+            </button>
         </div>
     </form>
+    </CascadingValue>
 }
 else
 {
@@ -112,21 +170,66 @@ else
 }
 
 @code {
+    private static readonly IReadOnlyList<(string Id, string Title)> Sections =
+    [
+        ("section-general", "General"),
+        ("section-limits", "Concurrency & retries"),
+        ("section-tester", "Tester"),
+        ("section-roles", "Agent roles"),
+    ];
+
     private static readonly IReadOnlyList<(string Value, string Label)> DependencyModes =
-        Enum.GetValues<SpecDependencyMode>().Select(mode => (mode.ToString(), mode.ToString())).ToArray();
+        Enum.GetValues<SpecDependencyMode>().Select(mode => (mode.ToString(), DisplayNames.For(mode))).ToArray();
 
-    private static readonly IReadOnlyList<string> ReasoningEfforts = ["low", "medium", "high", "xhigh"];
+    private static readonly IReadOnlyList<(string Value, string Label)> ReasoningEfforts =
+        new[] { "low", "medium", "high", "xhigh" }.Select(value => (value, value)).ToArray();
 
+    private static readonly Dictionary<string, string> FieldLabels = new()
+    {
+        [nameof(SettingsProfileData.BaseBranch)] = "Base (trunk) branch",
+        [nameof(SettingsProfileData.SpecDependencyMode)] = "Spec dependency mode",
+        [nameof(SettingsProfileData.WorkspaceRootDirectory)] = "Workspace root directory",
+        [nameof(SettingsProfileData.CopilotBaseDirectory)] = "Copilot base directory",
+        [nameof(SettingsProfileData.MaxActiveSpecsPerRepo)] = "Max active specs per repository",
+        [nameof(SettingsProfileData.MaxConcurrentImplementersGlobal)] = "Max concurrent implementers (all repositories)",
+        [nameof(SettingsProfileData.MaxConcurrentImplementersPerRepo)] = "Max concurrent implementers per repository",
+        [nameof(SettingsProfileData.MaxReviewIterations)] = "Max review iterations per ticket",
+        [nameof(SettingsProfileData.MaxRetries)] = "Max retries",
+        [nameof(SettingsProfileData.ParentReviewCycleLimit)] = "Parent review cycle limit",
+        [nameof(SettingsProfileData.TesterCycleLimit)] = "Tester cycle limit",
+        [nameof(SettingsProfileData.TesterRunInstructions)] = "Run instructions",
+        [nameof(SettingsProfileData.TestPortRange)] = "Test port range",
+    };
+
+    private static readonly Dictionary<string, string> RoleFieldLabels = new()
+    {
+        [nameof(RoleSettingsOverride.Model)] = "Model",
+        [nameof(RoleSettingsOverride.ReasoningEffort)] = "Reasoning effort",
+        [nameof(RoleSettingsOverride.TimeoutSeconds)] = "Session timeout",
+        [nameof(RoleSettingsOverride.PromptTemplate)] = "Prompt template",
+    };
+
+    private static readonly Regex AtLeastMessage = new(@"^Must be at least (-?\d+), but was -?\d+\.$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private readonly HashSet<AgentRole> _expandedRoles = [];
     private SettingsEditModel? _model;
+    private SettingsProfileData _loadedLayer = new();
+    private string _baseline = string.Empty;
     private EffectiveSettingsView _inherited = default!;
     private EffectiveSettingsView _defaults = default!;
     private IReadOnlyList<SettingsValidationError> _errors = [];
+    private ElementReference _summary;
     private string? _loadError;
     private string? _status;
     private bool _statusIsError;
     private bool _isSaving;
+    private bool _focusSummary;
     private bool _initialized;
+    private bool _reportedDirty;
+    private int _version;
     private int? _loadedRepositoryId;
+
+    [Parameter] public EventCallback<bool> DirtyChanged { get; set; }
 
     [Parameter] public int? RepositoryId { get; set; }
 
@@ -173,6 +276,8 @@ else
 
     private void ShowLayer(SettingsProfileData layer)
     {
+        _loadedLayer = layer;
+        _version++;
         _model = SettingsEditModel.FromData(layer);
         if (!IsGlobal)
         {
@@ -180,7 +285,94 @@ else
         }
 
         _model.ShowInheritedPrompts(_inherited);
+        _baseline = Snapshot();
     }
+
+    private bool IsDirty => _model is not null && Snapshot() != _baseline;
+
+    private string Snapshot() =>
+        JsonSerializer.Serialize(new { Data = _model!.ToPersistedData(_inherited), _model.PortStart, _model.PortEnd });
+
+    private void Discard()
+    {
+        _errors = [];
+        _status = null;
+        ShowLayer(_loadedLayer);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusSummary)
+        {
+            _focusSummary = false;
+            try
+            {
+                await _summary.FocusAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        bool dirty = IsDirty;
+        if (dirty != _reportedDirty)
+        {
+            _reportedDirty = dirty;
+            await DirtyChanged.InvokeAsync(dirty);
+        }
+    }
+
+    private void ToggleRole(AgentRole role)
+    {
+        if (!_expandedRoles.Remove(role))
+        {
+            _expandedRoles.Add(role);
+        }
+    }
+
+    private void ShowErrors(IReadOnlyList<SettingsValidationError> errors)
+    {
+        _errors = errors;
+        _focusSummary = errors.Count > 0;
+        foreach (SettingsValidationError error in errors)
+        {
+            if (error.Field.StartsWith("Roles.", StringComparison.Ordinal) && Enum.TryParse(error.Field.Split('.')[1], out AgentRole role))
+            {
+                _expandedRoles.Add(role);
+            }
+        }
+    }
+
+    private static bool HasOverrides(RoleEditModel role, EffectiveRoleSettingsView inherited) =>
+        !string.IsNullOrWhiteSpace(role.Model) || !string.IsNullOrWhiteSpace(role.ReasoningEffort) || role.TimeoutSeconds is not null
+        || (!string.IsNullOrWhiteSpace(role.PromptTemplate) && role.PromptTemplate != inherited.PromptTemplate);
+
+    private static string JumpTo(string id) =>
+        $"var e=document.getElementById('{id}');if(e){{e.scrollIntoView({{block:'center'}});e.focus({{preventScroll:true}});}}return false;";
+
+    private static string FieldLabel(string field)
+    {
+        if (FieldLabels.TryGetValue(field, out string? label))
+        {
+            return label;
+        }
+
+        string[] parts = field.Split('.');
+        return parts is ["Roles", var role, var name] && Enum.TryParse(role, out AgentRole agentRole)
+            ? $"{DisplayNames.For(agentRole)} – {RoleFieldLabels.GetValueOrDefault(name, DisplayNames.Humanize(name).ToLowerInvariant())}"
+            : DisplayNames.Humanize(field);
+    }
+
+    private static string Describe(SettingsValidationError error) =>
+        AtLeastMessage.Match(error.Message) is { Success: true } match ? $"Must be {match.Groups[1].Value} or more." : error.Message;
+
+    private IReadOnlyList<string> PortErrors => ErrorsFor(nameof(SettingsProfileData.TestPortRange));
+
+    private string? PortInvalidClass => OverrideFieldFrame.InvalidClass(PortErrors);
+
+    private string? PortInvalidFlag => OverrideFieldFrame.InvalidFlag(PortErrors);
+
+    private string? PortDescribedBy => OverrideFieldFrame.DescribedBy(nameof(SettingsProfileData.TestPortRange), PortErrors);
 
     private async Task SaveAsync()
     {
@@ -190,9 +382,11 @@ else
         }
 
         _status = null;
-        _errors = [.. _model.LocalErrors(), .. PromptErrors()];
+        ShowErrors([.. _model.LocalErrors(), .. PromptErrors()]);
         if (_errors.Count > 0)
         {
+            _status = "Fix the highlighted settings to continue.";
+            _statusIsError = true;
             return;
         }
 
@@ -221,8 +415,8 @@ else
                 _status = "Settings saved.";
                 break;
             case CommandStatus.Invalid:
-                _errors = result.Errors ?? [];
-                _status = "Fix the errors above to continue.";
+                ShowErrors(result.Errors ?? []);
+                _status = "Fix the highlighted settings to continue.";
                 break;
             default:
                 _status = result.Message ?? "The settings could not be saved.";
@@ -236,7 +430,7 @@ else
             .SelectMany(entry => PromptTemplateValidator.Validate(entry.Key, entry.Value.PromptTemplate!));
 
     private IReadOnlyList<string> ErrorsFor(string field) =>
-        _errors.Where(error => error.Field == field).Select(error => error.Message).Distinct().ToArray();
+        _errors.Where(error => error.Field == field).Select(Describe).Distinct().ToArray();
 
     private void SetDependencyMode(string? value) =>
         _model!.SpecDependencyMode = Enum.TryParse(value, out SpecDependencyMode mode) ? mode : null;

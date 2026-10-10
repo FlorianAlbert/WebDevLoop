@@ -1,8 +1,22 @@
 @using System.Globalization
 
-<OverrideFieldFrame Field="@Field" Label="@Label" IsOverridden="@(Value is not null)" Inherited="@Inherited"
+<OverrideFieldFrame Field="@Field" Label="@Label" IsOverridden="@(Value is not null)" Inherited="@InheritedText"
                     Errors="@Errors" OnReset="@Reset">
-    <input id="@OverrideFieldFrame.InputIdFor(Field)" type="number" class="form-control" value="@Value?.ToString(CultureInfo.InvariantCulture)" @onchange="Changed" />
+    @if (Unit is null)
+    {
+        <input id="@OverrideFieldFrame.InputIdFor(Field)" type="number" class="form-control settings-number @OverrideFieldFrame.InvalidClass(Errors)" min="@Min" max="@Max"
+               value="@Value?.ToString(CultureInfo.InvariantCulture)" placeholder="@Inherited" aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)"
+               aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)" @onchange="Changed" />
+    }
+    else
+    {
+        <div class="input-group settings-number-group">
+            <input id="@OverrideFieldFrame.InputIdFor(Field)" type="number" class="form-control @OverrideFieldFrame.InvalidClass(Errors)" min="@Min" max="@Max"
+                   value="@Value?.ToString(CultureInfo.InvariantCulture)" placeholder="@Inherited" aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)"
+                   aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)" @onchange="Changed" />
+            <span class="input-group-text">@Unit</span>
+        </div>
+    }
 </OverrideFieldFrame>
 
 @code {
@@ -14,9 +28,18 @@
 
     [Parameter] public EventCallback<int?> ValueChanged { get; set; }
 
+    /// <summary>The value in effect when this field is empty; shown as the placeholder.</summary>
     [Parameter] public string? Inherited { get; set; }
 
     [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    [Parameter] public int? Min { get; set; }
+
+    [Parameter] public int? Max { get; set; }
+
+    [Parameter] public string? Unit { get; set; }
+
+    private string? InheritedText => Inherited is null ? null : Unit is null ? Inherited : $"{Inherited} {Unit}";
 
     private Task Changed(ChangeEventArgs args) =>
         ValueChanged.InvokeAsync(int.TryParse(args.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? parsed : null);

@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Settings;
+using Microsoft.AspNetCore.Components;
+using WebDevLoop.Web.Components.Repositories;
 using WebDevLoop.Web.Components.Settings;
 
 namespace WebDevLoop.Web.Tests.Components.Settings;
@@ -12,18 +14,20 @@ public sealed class SettingsPageTests : BunitContext
 {
     private readonly RecordingSettingsManager _manager = new();
 
-    private async Task<IRenderedComponent<SettingsPage>> RenderAsync(int? repositoryId = null)
+    private async Task<IRenderedComponent<SettingsPage>> RenderAsync(int? repositoryId = null, string? query = null, int? currentRepositoryId = null)
     {
+        JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddSingleton<ISettingsManager>(_manager);
         Services.AddSingleton<WebDevLoop.Core.Queries.IRepositoryQueries>(new StubRepositoryQueries());
         Services.AddSingleton(SettingsTestData.Defaults);
-        IRenderedComponent<SettingsPage> page = Render<SettingsPage>();
-        if (repositoryId is { } id)
-        {
-            await page.Find("[data-testid=scope]").ChangeAsync(id.ToString());
-        }
-
-        return page;
+        CurrentRepositorySelection selection = new();
+        selection.Select(currentRepositoryId);
+        Services.AddSingleton<ICurrentRepositorySelection>(selection);
+        Services.AddSingleton<RepositoryContext>();
+        NavigationManager navigation = Services.GetRequiredService<NavigationManager>();
+        string? target = query ?? (repositoryId is { } id ? $"repo={id}" : "repo=global");
+        navigation.NavigateTo($"/settings?{target}");
+        return Render<SettingsPage>();
     }
 
     private static IElement Field(IRenderedComponent<SettingsPage> page, string field) => page.Find($"[data-field='{field}']");
@@ -31,8 +35,14 @@ public sealed class SettingsPageTests : BunitContext
     private static string Origin(IRenderedComponent<SettingsPage> page, string field) =>
         Field(page, field).QuerySelector("[data-testid=origin]")!.TextContent.Trim();
 
+    private static string Placeholder(IRenderedComponent<SettingsPage> page, string field) =>
+        Field(page, field).QuerySelector("input, textarea")!.GetAttribute("placeholder") ?? string.Empty;
+
     private static string InheritedText(IRenderedComponent<SettingsPage> page, string field) =>
         Field(page, field).QuerySelector("[data-testid=inherited-value]")!.TextContent;
+
+    private static Task MakeDirtyAsync(IRenderedComponent<SettingsPage> page) =>
+        page.Find("[data-field='BaseBranch'] input").ChangeAsync("edited");
 
     private static string[] Errors(IRenderedComponent<SettingsPage> page, string field) =>
         Field(page, field).QuerySelectorAll("[data-testid=error]").Select(error => error.TextContent.Trim()).ToArray();
@@ -46,20 +56,21 @@ public sealed class SettingsPageTests : BunitContext
         IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
 
         Assert.Equal("Inherited", Origin(page, "MaxRetries"));
-        Assert.Contains("7", InheritedText(page, "MaxRetries"));
+        Assert.Equal("7", Placeholder(page, "MaxRetries"));
         Assert.Equal(string.Empty, page.Find("[data-field='MaxRetries'] input").GetAttribute("value") ?? string.Empty);
 
+        await MakeDirtyAsync(page);
         await SaveAsync(page);
 
         (int id, SettingsProfileData saved) = Assert.Single(_manager.SavedRepository);
         Assert.Equal(1, id);
         Assert.Null(saved.MaxRetries);
-        Assert.Null(saved.BaseBranch);
+        Assert.Equal("edited", saved.BaseBranch);
         Assert.Null(saved.TesterRunInstructions);
         Assert.Null(saved.TestPortRange);
         Assert.True(saved.Roles is null or { Count: 0 });
         Assert.Equal("Inherited", Origin(page, "MaxRetries"));
-        Assert.Contains("7", InheritedText(page, "MaxRetries"));
+        Assert.Equal("7", Placeholder(page, "MaxRetries"));
     }
 
     [Fact]
@@ -71,6 +82,7 @@ public sealed class SettingsPageTests : BunitContext
         Assert.Empty(page.FindAll("[data-field='WorkspaceRootDirectory']"));
         Assert.Empty(page.FindAll("[data-field='CopilotBaseDirectory']"));
 
+        await MakeDirtyAsync(page);
         await SaveAsync(page);
 
         SettingsProfileData saved = Assert.Single(_manager.SavedRepository).Data;
@@ -84,7 +96,9 @@ public sealed class SettingsPageTests : BunitContext
         IRenderedComponent<SettingsPage> page = await RenderAsync();
 
         Assert.NotNull(Field(page, "WorkspaceRootDirectory"));
-        string note = page.Find("[data-testid=startup-directories-note]").TextContent;
+        IElement noteElement = page.Find("[data-testid=startup-directories-note]");
+        Assert.Contains("alert-warning", noteElement.ClassName);
+        string note = noteElement.TextContent;
         Assert.Contains("restart", note, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("clones must be moved", note, StringComparison.OrdinalIgnoreCase);
     }
@@ -107,13 +121,15 @@ public sealed class SettingsPageTests : BunitContext
     }
 
     [Fact]
-    public async Task global_scope_shows_embedded_defaults_as_inherited_and_the_global_only_implementer_limit()
+    public async Task global_scope_shows_embedded_defaults_as_placeholders_without_any_inherit_ui()
     {
         IRenderedComponent<SettingsPage> page = await RenderAsync();
 
-        Assert.Contains(SettingsTestData.Defaults.MaxRetries.ToString(), InheritedText(page, "MaxRetries"));
-        Assert.Equal("Inherited", Origin(page, "MaxConcurrentImplementersGlobal"));
-        Assert.Contains("41000", InheritedText(page, "TestPortRange"));
+        Assert.Equal(SettingsTestData.Defaults.MaxRetries.ToString(), Placeholder(page, "MaxRetries"));
+        Assert.Empty(page.FindAll("[data-testid=origin]"));
+        Assert.Empty(page.FindAll("[data-testid=reset]"));
+        Assert.Empty(page.FindAll("[data-testid=inherited-value]"));
+        Assert.Equal("41000", page.Find("[data-testid=port-start]").GetAttribute("placeholder"));
     }
 
     [Fact]
@@ -151,7 +167,7 @@ public sealed class SettingsPageTests : BunitContext
         Assert.Equal("dotnet run --urls $APP_URL", saved.TesterRunInstructions);
         Assert.Equal(new PortRangeData(42000, 42100), saved.TestPortRange);
         Assert.Contains("saved", page.Find("[data-testid=save-status]").TextContent, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("Overridden", Origin(page, "MaxRetries"));
+        Assert.Equal("MaxRetries", page.Find("[data-field='MaxRetries']").GetAttribute("data-field"));
     }
 
     [Fact]
@@ -159,11 +175,12 @@ public sealed class SettingsPageTests : BunitContext
     {
         IRenderedComponent<SettingsPage> page = await RenderAsync();
         RoleSettings tester = SettingsTestData.Defaults.For(AgentRole.Tester);
-        Assert.Contains(tester.Model, InheritedText(page, "Roles.Tester.Model"));
-        Assert.Contains(((int)tester.Timeout.TotalSeconds).ToString(), InheritedText(page, "Roles.Tester.TimeoutSeconds"));
+        Assert.Equal(tester.Model, Placeholder(page, "Roles.Tester.Model"));
+        Assert.Equal(((int)tester.Timeout.TotalSeconds).ToString(), Placeholder(page, "Roles.Tester.TimeoutSeconds"));
+        Assert.Empty(page.FindAll("[data-field='Roles.Tester.ReasoningEffort'] datalist"));
 
         await page.Find("[data-field='Roles.Tester.Model'] input").ChangeAsync("gpt-test");
-        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] input").ChangeAsync("low");
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("low");
         await page.Find("[data-field='Roles.Tester.TimeoutSeconds'] input").ChangeAsync("120");
         await SaveAsync(page);
 
@@ -216,12 +233,12 @@ public sealed class SettingsPageTests : BunitContext
     {
         IRenderedComponent<SettingsPage> page = await RenderAsync();
 
+        await Field(page, "Roles.Implementer.PromptTemplate").QuerySelector("[data-testid=override-prompt]")!.ClickAsync();
         await page.Find("[data-field='Roles.Implementer.PromptTemplate'] textarea").InputAsync("Implement {ticket_title} in {worktree_path}");
         await SaveAsync(page);
 
         SettingsProfileData saved = Assert.Single(_manager.SavedGlobal);
         Assert.Equal("Implement {ticket_title} in {worktree_path}", saved.Roles![AgentRole.Implementer].PromptTemplate);
-        Assert.Equal("Overridden", Origin(page, "Roles.Implementer.PromptTemplate"));
     }
 
     [Fact]
@@ -230,8 +247,13 @@ public sealed class SettingsPageTests : BunitContext
         IRenderedComponent<SettingsPage> page = await RenderAsync();
 
         Assert.Equal(SettingsTestData.DefaultTemplate, page.Find("[data-field='Roles.Tester.PromptTemplate'] textarea").GetAttribute("value"));
-        Assert.Equal("Inherited", Origin(page, "Roles.Tester.PromptTemplate"));
+        Assert.NotNull(page.Find("[data-field='Roles.Tester.PromptTemplate'] textarea").GetAttribute("readonly"));
+        Assert.True(page.Find("[data-testid=save]").HasAttribute("disabled"));
 
+        await Field(page, "Roles.Tester.PromptTemplate").QuerySelector("[data-testid=override-prompt]")!.ClickAsync();
+        Assert.Null(page.Find("[data-field='Roles.Tester.PromptTemplate'] textarea").GetAttribute("readonly"));
+
+        await MakeDirtyAsync(page);
         await SaveAsync(page);
 
         Assert.True(Assert.Single(_manager.SavedGlobal).Roles is null or { Count: 0 });
@@ -245,7 +267,7 @@ public sealed class SettingsPageTests : BunitContext
             Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Implementer] = new(PromptTemplate: "Custom {repo_name}") },
         };
         IRenderedComponent<SettingsPage> page = await RenderAsync();
-        Assert.Equal("Overridden", Origin(page, "Roles.Implementer.PromptTemplate"));
+        Assert.Null(page.Find("[data-field='Roles.Implementer.PromptTemplate'] textarea").GetAttribute("readonly"));
 
         await Field(page, "Roles.Implementer.PromptTemplate").QuerySelector("[data-testid=reset-default]")!.ClickAsync();
 
@@ -271,6 +293,7 @@ public sealed class SettingsPageTests : BunitContext
         await Field(page, "Roles.Tester.PromptTemplate").QuerySelector("[data-testid=reset]")!.ClickAsync();
         Assert.Equal("Global {repo_name}", page.Find("[data-field='Roles.Tester.PromptTemplate'] textarea").GetAttribute("value"));
 
+        await Field(page, "Roles.Tester.PromptTemplate").QuerySelector("[data-testid=override-prompt]")!.ClickAsync();
         await Field(page, "Roles.Tester.PromptTemplate").QuerySelector("[data-testid=reset-default]")!.ClickAsync();
         Assert.Equal(SettingsTestData.DefaultTemplate, page.Find("[data-field='Roles.Tester.PromptTemplate'] textarea").GetAttribute("value"));
         await SaveAsync(page);
@@ -288,13 +311,21 @@ public sealed class SettingsPageTests : BunitContext
         ]);
         IRenderedComponent<SettingsPage> page = await RenderAsync();
 
-        await page.Find("[data-field='MaxRetries'] input").ChangeAsync("-1");
+        await MakeDirtyAsync(page);
         await SaveAsync(page);
 
-        Assert.Contains("Must be at least 0", Assert.Single(Errors(page, "MaxRetries")));
-        Assert.Contains("Must be at least 1", Assert.Single(Errors(page, "Roles.Tester.TimeoutSeconds")));
-        Assert.DoesNotContain("saved", page.Find("[data-testid=save-status]").TextContent, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("-1", page.Find("[data-field='MaxRetries'] input").GetAttribute("value"));
+        Assert.Equal("Must be 0 or more.", Assert.Single(Errors(page, "MaxRetries")));
+        Assert.Equal("Must be 1 or more.", Assert.Single(Errors(page, "Roles.Tester.TimeoutSeconds")));
+        string summary = page.Find("[data-testid=error-summary]").TextContent;
+        Assert.Contains("Max retries", summary);
+        Assert.DoesNotContain("MaxRetries", summary);
+        Assert.Equal("#f-MaxRetries", page.Find("[data-testid=error-summary] a").GetAttribute("href"));
+        IElement input = page.Find("[data-field='MaxRetries'] input");
+        Assert.Contains("is-invalid", input.ClassName);
+        Assert.Equal("true", input.GetAttribute("aria-invalid"));
+        Assert.Equal("e-MaxRetries", input.GetAttribute("aria-describedby"));
+        JSInterop.VerifyFocusAsyncInvoke();
+        Assert.Equal("edited", page.Find("[data-field='BaseBranch'] input").GetAttribute("value"));
     }
 
     [Fact]
@@ -303,6 +334,7 @@ public sealed class SettingsPageTests : BunitContext
         _manager.SaveGlobalOverride = CommandResult<SettingsProfileData>.Conflict("The settings were changed concurrently; reload and retry.");
         IRenderedComponent<SettingsPage> page = await RenderAsync();
 
+        await MakeDirtyAsync(page);
         await SaveAsync(page);
 
         Assert.Contains("changed concurrently", page.Find("[data-testid=save-status]").TextContent);
@@ -318,6 +350,105 @@ public sealed class SettingsPageTests : BunitContext
 
         Assert.Empty(_manager.SavedGlobal);
         Assert.Single(Errors(page, "TestPortRange"));
+        Assert.Contains("Test port range", page.Find("[data-testid=error-summary]").TextContent);
+    }
+
+    [Fact]
+    public async Task a_negative_number_is_rejected_in_plain_language_and_numeric_inputs_declare_their_range()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        IElement retries = page.Find("[data-field='MaxRetries'] input");
+        Assert.Equal("0", retries.GetAttribute("min"));
+        Assert.Equal("1024", page.Find("[data-testid=port-start]").GetAttribute("min"));
+        Assert.Equal("65535", page.Find("[data-testid=port-end]").GetAttribute("max"));
+
+        await retries.ChangeAsync("-1");
+        await SaveAsync(page);
+
+        Assert.Empty(_manager.SavedGlobal);
+        Assert.Equal("Must be 0 or more.", Assert.Single(Errors(page, "MaxRetries")));
+        Assert.Contains("Max retries: Must be 0 or more.", page.Find("[data-testid=error-summary]").TextContent);
+    }
+
+    [Fact]
+    public async Task a_reversed_port_range_is_reported()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        await page.Find("[data-testid=port-start]").ChangeAsync("42100");
+        await page.Find("[data-testid=port-end]").ChangeAsync("42000");
+        await SaveAsync(page);
+
+        Assert.Empty(_manager.SavedGlobal);
+        Assert.Contains("first port must not be greater", Assert.Single(Errors(page, "TestPortRange")));
+    }
+
+    [Fact]
+    public async Task the_save_bar_tracks_unsaved_changes_and_discard_restores_the_loaded_values()
+    {
+        _manager.Global = new SettingsProfileData { MaxRetries = 7 };
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+        Assert.True(page.Find("[data-testid=save]").HasAttribute("disabled"));
+        Assert.True(page.Find("[data-testid=discard]").HasAttribute("disabled"));
+        Assert.Empty(page.FindAll("[data-testid=dirty-note]"));
+
+        await page.Find("[data-field='MaxRetries'] input").ChangeAsync("9");
+
+        Assert.False(page.Find("[data-testid=save]").HasAttribute("disabled"));
+        Assert.Contains("unsaved changes", page.Find("[data-testid=dirty-note]").TextContent);
+
+        await page.Find("[data-testid=discard]").ClickAsync();
+
+        Assert.Equal("7", page.Find("[data-field='MaxRetries'] input").GetAttribute("value"));
+        Assert.True(page.Find("[data-testid=save]").HasAttribute("disabled"));
+        Assert.Empty(page.FindAll("[data-testid=dirty-note]"));
+    }
+
+    [Fact]
+    public async Task leaving_with_unsaved_changes_asks_for_confirmation()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+        await MakeDirtyAsync(page);
+        JSInterop.Setup<bool>("confirm", _ => true).SetResult(false);
+        NavigationManager navigation = Services.GetRequiredService<NavigationManager>();
+
+        navigation.NavigateTo("/queue");
+
+        Assert.Single(JSInterop.Invocations, invocation => invocation.Identifier == "confirm");
+        Assert.EndsWith("/settings?repo=global", navigation.Uri);
+    }
+
+    [Fact]
+    public async Task the_scope_defaults_to_the_current_repository_and_follows_the_repo_query()
+    {
+        IRenderedComponent<SettingsPage> followsSelection = await RenderAsync(query: "x=1", currentRepositoryId: 2);
+        Assert.Contains("Overrides for", followsSelection.Find("[data-testid=scope-title]").TextContent);
+        Assert.Equal("2", followsSelection.Find("[data-testid=scope]").QuerySelector("option[selected]")!.GetAttribute("value"));
+    }
+
+    [Fact]
+    public async Task repo_global_in_the_query_overrides_the_current_repository()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync(query: "repo=global", currentRepositoryId: 2);
+
+        Assert.Contains("Global settings", page.Find("[data-testid=scope-title]").TextContent);
+    }
+
+    [Fact]
+    public async Task agent_roles_are_a_collapsed_accordion_with_readable_names()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        IElement toggle = page.Find("[data-role='ReviewerCodingStandards'] [data-testid=role-toggle]");
+        Assert.Equal("Reviewer – coding standards", toggle.TextContent.Trim());
+        Assert.Equal("false", toggle.GetAttribute("aria-expanded"));
+
+        await toggle.ClickAsync();
+
+        Assert.Equal("true", page.Find("[data-role='ReviewerCodingStandards'] [data-testid=role-toggle]").GetAttribute("aria-expanded"));
+        Assert.Contains("Wait for merge", page.Find("[data-field='SpecDependencyMode'] select").InnerHtml);
+        Assert.NotEmpty(page.FindAll("[data-testid=section-nav] a"));
     }
 
     [Fact]
@@ -327,7 +458,7 @@ public sealed class SettingsPageTests : BunitContext
         _manager.Repository = new SettingsProfileData { MaxRetries = 3 };
         IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
 
-        await page.Find("[data-testid=scope]").ChangeAsync(string.Empty);
+        await page.Find("[data-testid=scope]").ChangeAsync("global");
 
         Assert.Equal("7", page.Find("[data-field='MaxRetries'] input").GetAttribute("value"));
         Assert.Contains("Global", page.Find("[data-testid=scope-title]").TextContent);

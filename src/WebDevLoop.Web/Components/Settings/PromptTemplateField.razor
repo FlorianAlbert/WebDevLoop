@@ -1,16 +1,28 @@
 @using WebDevLoop.Core.Domain
 @using WebDevLoop.Core.Settings
 
-<OverrideFieldFrame Field="@Field" Label="Prompt template" IsOverridden="@IsOverridden" ShowReset="@ShowReset" Errors="@Errors"
+<OverrideFieldFrame Field="@Field" Label="Prompt template" IsOverridden="@IsOverridden" ShowReset="@(ShowReset && Editing)" Errors="@Errors"
                     OnReset="@ResetToInherited">
     <ExtraActions>
-        @if (Value != DefaultTemplate)
+        @if (!Editing)
         {
-            <button type="button" class="btn btn-link btn-sm p-0" data-testid="reset-default" @onclick="ResetToDefault">Reset to default template</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm py-0" data-testid="override-prompt" @onclick="StartOverriding">Override</button>
+        }
+        else
+        {
+            @if (Value != DefaultTemplate)
+            {
+                <button type="button" class="btn btn-link btn-sm p-0" data-testid="reset-default" @onclick="ResetToDefault">Reset to default template</button>
+            }
+            @if (!IsOverridden)
+            {
+                <button type="button" class="btn btn-link btn-sm p-0" data-testid="cancel-override" @onclick="StopOverriding">Stop editing</button>
+            }
         }
     </ExtraActions>
     <ChildContent>
-        <textarea id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control font-monospace" rows="14" value="@Value" @oninput="Changed"></textarea>
+        <textarea id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control font-monospace @OverrideFieldFrame.InvalidClass(Errors)" rows="14" value="@Value" readonly="@(!Editing)"
+                  aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)" @oninput="Changed"></textarea>
         <div class="form-text" data-testid="placeholders">
             Available placeholders:
             @foreach (string name in Placeholders)
@@ -22,6 +34,8 @@
 </OverrideFieldFrame>
 
 @code {
+    private bool _forced;
+
     [Parameter, EditorRequired] public AgentRole Role { get; set; }
 
     /// <summary>The template text currently in the editor (the inherited template until edited).</summary>
@@ -42,14 +56,25 @@
 
     private bool IsOverridden => Value != InheritedTemplate;
 
+    /// <summary>The inherited template is shown read-only until the user chooses to override it.</summary>
+    private bool Editing => _forced || IsOverridden;
+
     private IEnumerable<string> Placeholders => PromptPlaceholders.AvailableFor(Role).Order(StringComparer.Ordinal);
 
     private IReadOnlyList<string> Errors =>
         PromptTemplateValidator.Validate(Role, Value).Select(error => error.Message).Concat(ServerErrors).Distinct().ToArray();
 
+    private void StartOverriding() => _forced = true;
+
+    private void StopOverriding() => _forced = false;
+
     private Task Changed(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
 
-    private Task ResetToInherited() => ValueChanged.InvokeAsync(InheritedTemplate);
+    private Task ResetToInherited()
+    {
+        _forced = false;
+        return ValueChanged.InvokeAsync(InheritedTemplate);
+    }
 
     private Task ResetToDefault() => ValueChanged.InvokeAsync(DefaultTemplate);
 }

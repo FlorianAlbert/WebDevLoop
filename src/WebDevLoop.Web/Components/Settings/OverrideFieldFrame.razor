@@ -1,25 +1,44 @@
+@using WebDevLoop.Web.Components.Shared
+
 <div class="mb-3" data-field="@Field">
-    <div class="d-flex align-items-center gap-2 mb-1">
+    <div class="d-flex align-items-baseline flex-wrap gap-2 mb-1">
         <label class="form-label fw-semibold mb-0" for="@InputIdFor(Field)">@Label</label>
-        <span class="badge @(IsOverridden ? "text-bg-primary" : "text-bg-secondary")" data-testid="origin">@(IsOverridden ? "Overridden" : "Inherited")</span>
-        @if (IsOverridden && ShowReset)
+        @if (Inherits)
         {
-            <button type="button" class="btn btn-link btn-sm p-0" data-testid="reset" @onclick="OnReset">Reset to inherited</button>
+            @if (IsOverridden)
+            {
+                <StatusPill Variant="StatusVariant.Info" data-testid="origin">Overridden</StatusPill>
+                @if (ShowReset)
+                {
+                    <button type="button" class="btn btn-link btn-sm p-0" data-testid="reset" @onclick="OnReset">Reset to inherited</button>
+                }
+            }
+            else
+            {
+                <span class="text-body-secondary small" data-testid="origin">Inherited</span>
+            }
         }
         @ExtraActions
     </div>
     @ChildContent
-    @if (Inherited is not null)
+    @if (Inherits && IsOverridden && Inherited is not null)
     {
         <div class="form-text" data-testid="inherited-value">Inherited: @Inherited</div>
     }
-    @foreach (string error in Errors)
+    @if (Errors.Count > 0)
     {
-        <div class="text-danger small" role="alert" data-testid="error">@error</div>
+        <div id="@ErrorIdFor(Field)">
+            @foreach (string error in Errors)
+            {
+                <div class="invalid-feedback d-block" role="alert" data-testid="error">@error</div>
+            }
+        </div>
     }
 </div>
 
 @code {
+    [CascadingParameter(Name = "SettingsInherits")] public bool Inherits { get; set; } = true;
+
     [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
 
     [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
@@ -39,4 +58,12 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     public static string InputIdFor(string field) => "f-" + field.Replace('.', '-');
+
+    public static string ErrorIdFor(string field) => "e-" + field.Replace('.', '-');
+
+    public static string? InvalidClass(IReadOnlyList<string> errors) => errors.Count > 0 ? "is-invalid" : null;
+
+    public static string? InvalidFlag(IReadOnlyList<string> errors) => errors.Count > 0 ? "true" : null;
+
+    public static string? DescribedBy(string field, IReadOnlyList<string> errors) => errors.Count > 0 ? ErrorIdFor(field) : null;
 }

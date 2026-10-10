@@ -62,6 +62,7 @@
     --wdl-surface: #171a22;
     --wdl-surface-muted: #1e222c;
     --wdl-border: #2a2f3b;
+    --wdl-border-strong: #3d4454;
     --wdl-text: #e5e7eb;
     --wdl-text-muted: #9ca3af;
     --wdl-shadow: none;
@@ -156,6 +157,8 @@ code, kbd, pre, samp, .font-mono {
 
 .btn-outline-primary {
     --bs-btn-color: var(--wdl-accent-text);
+    --bs-btn-disabled-color: var(--wdl-accent-text);
+    --bs-btn-disabled-border-color: var(--wdl-accent);
     --bs-btn-border-color: var(--wdl-accent);
     --bs-btn-hover-bg: var(--wdl-accent);
     --bs-btn-hover-border-color: var(--wdl-accent);
@@ -166,7 +169,7 @@ code, kbd, pre, samp, .font-mono {
 
 .btn-outline-secondary {
     --bs-btn-color: var(--wdl-text);
-    --bs-btn-border-color: var(--wdl-border);
+    --bs-btn-border-color: var(--wdl-border-strong, var(--wdl-border));
     --bs-btn-hover-bg: var(--wdl-surface-muted);
     --bs-btn-hover-border-color: var(--wdl-border);
     --bs-btn-hover-color: var(--wdl-text);
@@ -206,6 +209,14 @@ code, kbd, pre, samp, .font-mono {
 }
 
 .table > :not(caption) > * > * { padding: 0.65rem 0.75rem; }
+
+/* Highlight the current row in both color modes */
+.table > tbody > tr.table-primary > * {
+    --bs-table-bg: var(--wdl-accent-soft);
+    --bs-table-color: var(--wdl-text);
+    --bs-table-border-color: var(--wdl-border);
+    color: var(--wdl-text);
+}
 .table > thead > tr > th { font-size: var(--wdl-text-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--wdl-text-muted); }
 
 /* Bootstrap cards and alerts adopt the surface look */

@@ -27,6 +27,10 @@ public sealed record EffectiveSettings
 
     public required int TesterCycleLimit { get; init; }
 
+    public required bool TroubleshooterEnabled { get; init; }
+
+    public required int TroubleshooterMaxAttempts { get; init; }
+
     public required string TesterRunInstructions { get; init; }
 
     public required TestPortRange TestPortRange { get; init; }

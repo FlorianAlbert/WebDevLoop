@@ -54,7 +54,7 @@ public sealed class CompositionRootTests
         IAttentionStage[] stages = [.. scope.ServiceProvider.GetServices<IAttentionStage>()];
         AttentionCode[] remediated = [.. scope.ServiceProvider.GetServices<IKnownRemediation>().Select(remediation => remediation.Code).Order()];
 
-        Assert.IsType<KnownRemediationStage>(stages[0]);
+        Assert.Collection(stages, stage => Assert.IsType<KnownRemediationStage>(stage), stage => Assert.IsType<TroubleshooterStage>(stage));
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<AttentionTriageService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<AttentionTriageEventHandler>());
         AttentionCode[] expected =

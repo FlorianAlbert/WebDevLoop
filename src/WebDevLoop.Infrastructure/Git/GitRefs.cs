@@ -74,4 +74,11 @@ internal static class GitRefs
         TreeChanges changes = repo.Diff.Compare<TreeChanges>(RequireCommit(repo, from).Tree, RequireCommit(repo, to).Tree);
         return [.. changes.SelectMany(change => new[] { change.OldPath, change.Path }).Distinct().Order(StringComparer.Ordinal)];
     }
+
+    public static IReadOnlyList<string> RecentCommits(Repository repo, CommitSha tip, int count) =>
+    [
+        .. repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = RequireCommit(repo, tip), SortBy = CommitSortStrategies.Topological })
+            .Take(count)
+            .Select(commit => $"{commit.Sha[..8]} {commit.MessageShort}"),
+    ];
 }

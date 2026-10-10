@@ -40,6 +40,10 @@ public sealed class SettingsProfile : VersionedEntity
 
     public int? TesterCycleLimit { get; set; }
 
+    public bool? TroubleshooterEnabled { get; set; }
+
+    public int? TroubleshooterMaxAttempts { get; set; }
+
     public string? TesterRunInstructions { get; set; }
 
     public TestPortRange? TestPortRange { get; set; }

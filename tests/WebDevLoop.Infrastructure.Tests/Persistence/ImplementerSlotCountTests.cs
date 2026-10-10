@@ -121,6 +121,8 @@ public sealed class ImplementerSlotCountTests : IDisposable
         MaxRetries = 2,
         ParentReviewCycleLimit = 3,
         TesterCycleLimit = 3,
+        TroubleshooterEnabled = true,
+        TroubleshooterMaxAttempts = 2,
         TesterRunInstructions = "run",
         TestPortRange = new TestPortRange(41000, 41999),
         Roles = new Dictionary<AgentRole, RoleSettings>(),

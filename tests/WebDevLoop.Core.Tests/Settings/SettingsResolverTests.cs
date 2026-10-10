@@ -75,6 +75,61 @@ public sealed class SettingsResolverTests
     }
 
     [Fact]
+    public void troubleshooter_settings_fall_back_to_embedded_defaults_when_no_layer_sets_them()
+    {
+        EffectiveSettings effective = _resolver.Resolve(SettingsProfile.ForGlobal(), SettingsProfile.ForRepository(RepositoryId));
+
+        Assert.True(effective.TroubleshooterEnabled);
+        Assert.Equal(2, effective.TroubleshooterMaxAttempts);
+    }
+
+    [Fact]
+    public void global_troubleshooter_settings_apply_and_repository_overrides_win()
+    {
+        SettingsProfile global = SettingsProfile.ForGlobal();
+        global.TroubleshooterEnabled = false;
+        global.TroubleshooterMaxAttempts = 4;
+        SettingsProfile repository = SettingsProfile.ForRepository(RepositoryId);
+
+        EffectiveSettings inherited = _resolver.Resolve(global, repository);
+        repository.TroubleshooterEnabled = true;
+        repository.TroubleshooterMaxAttempts = 1;
+        EffectiveSettings overridden = _resolver.Resolve(global, repository);
+
+        Assert.False(inherited.TroubleshooterEnabled);
+        Assert.Equal(4, inherited.TroubleshooterMaxAttempts);
+        Assert.True(overridden.TroubleshooterEnabled);
+        Assert.Equal(1, overridden.TroubleshooterMaxAttempts);
+    }
+
+    [Fact]
+    public void repository_can_turn_the_troubleshooter_off_while_global_leaves_it_on()
+    {
+        SettingsProfile global = SettingsProfile.ForGlobal();
+        global.TroubleshooterEnabled = true;
+        SettingsProfile repository = SettingsProfile.ForRepository(RepositoryId);
+        repository.TroubleshooterEnabled = false;
+
+        Assert.False(_resolver.Resolve(global, repository).TroubleshooterEnabled);
+    }
+
+    [Fact]
+    public void troubleshooter_role_inherits_repository_then_global_then_embedded_default()
+    {
+        SettingsProfile global = SettingsProfile.ForGlobal();
+        global.SetRole(AgentRole.Troubleshooter, new RoleSettingsOverride(Model: "global-model", TimeoutSeconds: 900));
+        SettingsProfile repository = SettingsProfile.ForRepository(RepositoryId);
+        repository.SetRole(AgentRole.Troubleshooter, new RoleSettingsOverride(Model: "repo-model"));
+
+        RoleSettings role = _resolver.Resolve(global, repository).For(AgentRole.Troubleshooter);
+
+        Assert.Equal("repo-model", role.Model);
+        Assert.Equal(TimeSpan.FromSeconds(900), role.Timeout);
+        Assert.Equal("medium", role.ReasoningEffort);
+        Assert.Equal("default Troubleshooter template", role.PromptTemplate);
+    }
+
+    [Fact]
     public void swapped_profiles_are_rejected()
     {
         Assert.Throws<ArgumentException>(

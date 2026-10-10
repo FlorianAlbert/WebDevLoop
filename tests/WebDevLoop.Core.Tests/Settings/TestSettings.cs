@@ -20,6 +20,8 @@ internal static class TestSettings
         MaxRetries = 2,
         ParentReviewCycleLimit = 3,
         TesterCycleLimit = 3,
+        TroubleshooterEnabled = true,
+        TroubleshooterMaxAttempts = 2,
         TesterRunInstructions = "default run instructions",
         TestPortRange = new TestPortRange(41000, 41999),
         Roles = Enum.GetValues<AgentRole>().ToDictionary(

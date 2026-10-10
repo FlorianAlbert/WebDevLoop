@@ -38,9 +38,10 @@ public sealed class TicketRunControl(
         // A saga past the squash must be resumed: implementing again would leave its commit orphaned on the integration branch.
         bool integrationInProgress = await sagas.FindLatestForTicketAsync(ticket.Id, cancellationToken)
             is { IsCompleted: false, Checkpoint: >= IntegrationSagaCheckpoint.SquashCommitCreated };
+        StepRun[] troubleshooters = await StopTroubleshooterAsync(ticket, automatic, cancellationToken);
         TicketRunStatus target = journal.RetryTicket(ticket, integrationInProgress, resumeAt);
         journal.Record(automatic ? ControlAction.AutoRetry : ControlAction.Retry, spec!.Id, ticket.Id, target.ToString());
-        return await SaveAsync(ticketRunId, cancellationToken);
+        return await SaveAndStopAsync(ticketRunId, troubleshooters, cancellationToken);
     }
 
     public async Task<ControlResult> SkipAsync(
@@ -75,13 +76,14 @@ public sealed class TicketRunControl(
             }
         }
 
+        StepRun[] troubleshooters = await StopTroubleshooterAsync(ticket!, automatic, cancellationToken);
         foreach (TicketRun candidate in skipped)
         {
             journal.MoveTicket(candidate, TicketRunStatus.Skipped);
         }
 
         journal.Record(automatic ? ControlAction.AutoSkip : ControlAction.Skip, spec!.Id, ticket!.Id, nameof(TicketRunStatus.Skipped), skipped.Skip(1).Select(candidate => candidate.Id));
-        return await SaveAsync(ticketRunId, cancellationToken);
+        return await SaveAndStopAsync(ticketRunId, troubleshooters, cancellationToken);
     }
 
     public async Task<ControlResult> AbortAsync(TicketRunId ticketRunId, CancellationToken cancellationToken)
@@ -187,6 +189,32 @@ public sealed class TicketRunControl(
         await sagas.FindLatestForTicketAsync(ticket.Id, cancellationToken) is { IsCompleted: false, Checkpoint: >= IntegrationSagaCheckpoint.IntegrationRefUpdated } saga
             ? $"Ticket run '{ticket.Id}' already has its squash commit on the integration branch (saga at {saga.Checkpoint}); retry it so its stack layer gets published."
             : null;
+
+    /// <summary>
+    /// The user's own Retry or Skip overrides a troubleshooter session that is still working on the ticket: it is cancelled (and its
+    /// agent session aborted once the command is saved) so it cannot keep changing a worktree the resumed work is using.
+    /// </summary>
+    private async Task<StepRun[]> StopTroubleshooterAsync(TicketRun ticket, bool automatic, CancellationToken cancellationToken)
+    {
+        if (automatic)
+        {
+            return [];
+        }
+
+        StepRun[] active = [.. (await stepRuns.ListByTicketRunAsync(ticket.Id, cancellationToken)).Where(step => step is { Kind: StepKind.Troubleshoot, IsActive: true })];
+        foreach (StepRun step in active)
+        {
+            journal.CancelStep(step);
+        }
+
+        return active;
+    }
+
+    private async Task<ControlResult> SaveAndStopAsync(TicketRunId ticketRunId, StepRun[] cancelled, CancellationToken cancellationToken)
+    {
+        ControlResult saved = await SaveAsync(ticketRunId, cancellationToken);
+        return saved.IsApplied && cancelled.Length > 0 ? ControlResult.Applied(await stopper.StopAsync(cancelled, releasedLease: null)) : saved;
+    }
 
     private async Task<ControlResult> SaveAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) =>
         await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved

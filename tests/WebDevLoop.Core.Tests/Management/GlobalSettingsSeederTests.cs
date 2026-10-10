@@ -37,6 +37,8 @@ public sealed class GlobalSettingsSeederTests
         Assert.Equal(_defaults.MaxRetries, global.MaxRetries);
         Assert.Equal(_defaults.ParentReviewCycleLimit, global.ParentReviewCycleLimit);
         Assert.Equal(_defaults.TesterCycleLimit, global.TesterCycleLimit);
+        Assert.Equal(_defaults.TroubleshooterEnabled, global.TroubleshooterEnabled);
+        Assert.Equal(_defaults.TroubleshooterMaxAttempts, global.TroubleshooterMaxAttempts);
         Assert.Equal(_defaults.TesterRunInstructions, global.TesterRunInstructions);
         Assert.Equal(_defaults.TestPortRange, global.TestPortRange);
         Assert.All(Enum.GetValues<AgentRole>(), role => Assert.Equal(

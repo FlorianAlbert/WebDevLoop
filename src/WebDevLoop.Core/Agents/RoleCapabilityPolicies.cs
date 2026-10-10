@@ -39,6 +39,17 @@ public static class RoleCapabilityPolicies
         }.Select(subcommand => new DeniedCommand("git", subcommand)),
     ];
 
+    /// <summary>
+    /// The troubleshooter repairs local state, so unlike a reviewer it may change files and commit in its worktrees. On top of the
+    /// publishing commands it may not delete or rewrite history (tags, reflog, gc, filter-branch, replace); every remote and GitHub
+    /// operation, branch deletion and configuration change stays denied, and it receives no token: WebDevLoop hands it the GitHub state.
+    /// </summary>
+    private static readonly DeniedCommand[] TroubleshooterCommands =
+    [
+        .. PublishingCommands,
+        .. new[] { "tag", "filter-branch", "reflog", "gc", "prune", "replace", "notes", "submodule" }.Select(subcommand => new DeniedCommand("git", subcommand)),
+    ];
+
     /// <summary>Removed from agent shells; Copilot auth is supplied to the runtime, not to tools the agent runs.</summary>
     private static readonly string[] ScrubbedVariables =
     [
@@ -84,7 +95,7 @@ public static class RoleCapabilityPolicies
     {
         ArgumentNullException.ThrowIfNull(workspace);
         string workingDirectory = workspace.WorkingDirectory;
-        string[] readable = workspace.NotesDirectory is { } notes ? [workingDirectory, notes] : [workingDirectory];
+        string[] readable = [workingDirectory, .. workspace.AdditionalWorkDirectories ?? [], .. workspace.NotesDirectory is { } notes ? new[] { notes } : []];
 
         return role switch
         {
@@ -123,9 +134,23 @@ public static class RoleCapabilityPolicies
                 RepositoryMutationCommands,
                 GitHubTokenAccess.None,
                 AgentReportTools.Test),
+            AgentRole.Troubleshooter => Create(
+                role,
+                LocalEditing,
+                new PathConfinement(workingDirectory, readable, WorkDirectories(workspace)),
+                [.. TroubleshooterCommands, .. ProtectedBranchCommands(workspace)],
+                GitHubTokenAccess.None,
+                AgentReportTools.Troubleshooting),
             _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown agent role."),
         };
     }
+
+    /// <summary>Checking out, switching to or rebasing a protected branch would let a commit land on a branch WebDevLoop owns.</summary>
+    private static IEnumerable<DeniedCommand> ProtectedBranchCommands(AgentWorkspace workspace) =>
+        (workspace.ProtectedBranches ?? []).SelectMany(branch => new[] { "checkout", "switch", "rebase" }.Select(subcommand => new DeniedCommand("git", subcommand, branch)));
+
+    private static string[] WorkDirectories(AgentWorkspace workspace) =>
+        [workspace.WorkingDirectory, .. workspace.AdditionalWorkDirectories ?? []];
 
     private static string[] TestEvidenceRoots(AgentWorkspace workspace) =>
         workspace.NotesDirectory is null ? [] : [Path.Combine(RequireNotesOutsideRepository(workspace), TestEvidenceDirectoryName)];

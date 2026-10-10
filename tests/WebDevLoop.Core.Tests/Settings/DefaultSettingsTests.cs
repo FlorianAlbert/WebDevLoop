@@ -35,6 +35,19 @@ public sealed class DefaultSettingsTests
     }
 
     [Fact]
+    public void troubleshooter_is_enabled_with_two_attempts_and_a_high_effort_role()
+    {
+        EffectiveSettings defaults = DefaultSettings.Create(new FakeTemplates(), DataRoot);
+
+        Assert.True(defaults.TroubleshooterEnabled);
+        Assert.Equal(2, defaults.TroubleshooterMaxAttempts);
+        RoleSettings troubleshooter = defaults.For(AgentRole.Troubleshooter);
+        Assert.False(string.IsNullOrWhiteSpace(troubleshooter.Model));
+        Assert.Equal("high", troubleshooter.ReasoningEffort);
+        Assert.Equal(TimeSpan.FromMinutes(30), troubleshooter.Timeout);
+    }
+
+    [Fact]
     public void invalid_shipped_template_fails_fast()
     {
         var templates = new FakeTemplates { [AgentRole.Tester] = "Open {unknown_thing}." };

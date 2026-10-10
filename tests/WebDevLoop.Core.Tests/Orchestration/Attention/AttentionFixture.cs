@@ -1,9 +1,12 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Orchestration.Attention;
 using WebDevLoop.Core.Orchestration.Control;
+using WebDevLoop.Core.Orchestration.Preparation;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Core.Queries;
 using WebDevLoop.Core.Settings;
 using WebDevLoop.Core.Tests.Orchestration.Control;
 using WebDevLoop.Core.Tests.Ports.Fakes;
@@ -29,7 +32,71 @@ internal sealed class AttentionFixture : IDisposable
 
     public static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    public void Dispose() => Run.Dispose();
+    /// <summary>A real directory for the files the troubleshooter writes (context, backups); only created when a test asks for the troubleshooter.</summary>
+    public string Root { get; } = Path.Combine(Path.GetTempPath(), "wdl-troubleshooter-" + Guid.NewGuid().ToString("N"));
+
+    public ScriptedAgentRunner Agents => Run.Agents;
+
+    private readonly SequentialIdGenerator _ids = new();
+
+    public List<AgentLogView> Logs { get; } = [];
+
+    public void Dispose()
+    {
+        Run.Dispose();
+        if (Directory.Exists(Root))
+        {
+            Directory.Delete(Root, recursive: true);
+        }
+    }
+
+    /// <summary>The ticket worktree path once <see cref="Troubleshooter"/> moved the workspace root to <see cref="Root"/>.</summary>
+    public string TicketPath(SpecRun spec, TicketRun ticket) => TicketWorktreeLayout.PathFor(Root, spec.Id, ticket.Id);
+
+    public RunWorkspaceLayout LayoutOf(SpecRun spec) => RunWorkspaceLayout.For(Root, spec.Id);
+
+    /// <summary>The troubleshooter stage wired to the fakes, rendering the shipped prompt template. Moves the workspace root to <see cref="Root"/>.</summary>
+    public IAttentionStage Troubleshooter()
+    {
+        Run.GlobalSettings.WorkspaceRootDirectory = Root;
+        Run.GlobalSettings.SetRole(AgentRole.Troubleshooter, new RoleSettingsOverride(PromptTemplate: ShippedTemplate()));
+        var settings = new PersistedEffectiveSettingsProvider(Run.Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
+        var loader = new AttentionWorkLoader(Run.Store, Run.Store, Run.Store, settings);
+        var pulls = new InMemoryPullsAndStacks(_ => Base);
+        var options = new TroubleshooterOptions("/skills");
+        return new TroubleshooterStage(
+            loader,
+            new TroubleshootingStateReader(Git, pulls, Run.Store),
+            new TroubleshooterWorkspace(Git, Run.Store, new FixedLogReader(Logs), Run.Clock, options),
+            new TroubleshooterVerifier(Git),
+            Agents,
+            new PromptRenderer(),
+            Run.Store,
+            Run.Store,
+            Run.Store,
+            Run.Store,
+            Run.Store,
+            _ids,
+            Run.Clock,
+            options);
+    }
+
+    public static string ShippedTemplate()
+    {
+        string directory = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(directory, "WebDevLoop.slnx")))
+        {
+            directory = Path.GetDirectoryName(directory) ?? throw new DirectoryNotFoundException("Repository root not found.");
+        }
+
+        return File.ReadAllText(Path.Combine(directory, "src", "WebDevLoop.Web", "Resources", "Prompts", "Troubleshooter.md"));
+    }
+
+    private sealed class FixedLogReader(List<AgentLogView> entries) : IAgentLogReader
+    {
+        public Task<IReadOnlyList<AgentLogView>> ReadAsync(StepRunId stepRunId, int afterSequence, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AgentLogView>>(entries);
+    }
 
     /// <summary>A spec that reached <c>Running</c> on an integration branch at a base commit; the branch exists locally.</summary>
     public SpecRun SeedRunningSpec()

@@ -62,6 +62,44 @@ public sealed class SettingsValidatorTests
             fields);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void non_positive_troubleshooter_attempts_are_rejected(int attempts)
+    {
+        SettingsProfile profile = SettingsProfile.ForGlobal();
+        profile.TroubleshooterMaxAttempts = attempts;
+
+        SettingsValidationError error = Assert.Single(SettingsValidator.Validate(profile));
+
+        Assert.Equal(nameof(SettingsProfile.TroubleshooterMaxAttempts), error.Field);
+    }
+
+    [Fact]
+    public void unset_and_positive_troubleshooter_settings_are_valid()
+    {
+        SettingsProfile unset = SettingsProfile.ForRepository(RepositoryId);
+        SettingsProfile set = SettingsProfile.ForRepository(RepositoryId);
+        set.TroubleshooterEnabled = false;
+        set.TroubleshooterMaxAttempts = 1;
+
+        Assert.Empty(SettingsValidator.Validate(unset));
+        Assert.Empty(SettingsValidator.Validate(set));
+    }
+
+    [Fact]
+    public void troubleshooter_prompt_is_validated_against_its_own_placeholders()
+    {
+        SettingsProfile valid = SettingsProfile.ForGlobal();
+        valid.SetRole(AgentRole.Troubleshooter, new RoleSettingsOverride(PromptTemplate: "Fix {attention_code} in {worktree_path} ({backup_path})."));
+        SettingsProfile invalid = SettingsProfile.ForGlobal();
+        invalid.SetRole(AgentRole.Troubleshooter, new RoleSettingsOverride(PromptTemplate: "Open {app_url}."));
+
+        Assert.Empty(SettingsValidator.Validate(valid));
+        SettingsValidationError error = Assert.Single(SettingsValidator.Validate(invalid));
+        Assert.Equal("Roles.Troubleshooter.PromptTemplate", error.Field);
+    }
+
     [Fact]
     public void repository_profile_cannot_set_global_only_implementer_limit()
     {

@@ -33,9 +33,18 @@ public sealed record AttentionResume(AttentionResumeKind Kind, TicketRunStatus? 
     public static AttentionResume Skip { get; } = new(AttentionResumeKind.SkipTicket);
 }
 
+/// <summary>An agent's findings to show the user when nothing resolved the situation after all.</summary>
+public sealed record AttentionStageDiagnosis(AttentionDiagnosis Diagnosis, IReadOnlyList<string> UserSteps, IReadOnlyList<AttentionActionKind> SuggestedButtons);
+
 /// <param name="Summary">What happened, in the words that appear in the run history ("Removed 3 untracked files and continued").</param>
 /// <param name="Tried">What was attempted, for the "What WebDevLoop already tried" list when the user is asked after all.</param>
-public sealed record AttentionStageResult(AttentionStageStatus Status, string Summary, IReadOnlyList<string> Tried, AttentionResume? Resume = null)
+/// <param name="Diagnosis">The findings of an agent session, applied to the "Action needed" card when the user is asked.</param>
+public sealed record AttentionStageResult(
+    AttentionStageStatus Status,
+    string Summary,
+    IReadOnlyList<string> Tried,
+    AttentionResume? Resume = null,
+    AttentionStageDiagnosis? Diagnosis = null)
 {
     public static AttentionStageResult NotApplicable { get; } = new(AttentionStageStatus.NotApplicable, string.Empty, []);
 

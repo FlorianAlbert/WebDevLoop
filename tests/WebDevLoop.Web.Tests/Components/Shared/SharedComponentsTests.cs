@@ -166,6 +166,7 @@ public sealed class SharedComponentsTests : BunitContext
         Assert.Equal("Stack on top", DisplayNames.For(SpecDependencyMode.StackOnTop));
         Assert.Equal("Reviewer – coding standards", DisplayNames.For(AgentRole.ReviewerCodingStandards));
         Assert.Equal("Conflict resolver", DisplayNames.For(AgentRole.ConflictResolver));
+        Assert.Equal("Troubleshooter", DisplayNames.For(AgentRole.Troubleshooter));
         Assert.Equal("Tester", DisplayNames.For(AgentRole.Tester));
         Assert.Equal("Needs attention", DisplayNames.Humanize("NeedsAttention"));
         Assert.All(Enum.GetValues<SpecDependencyMode>(), m => Assert.NotEmpty(DisplayNames.Describe(m)));
@@ -202,6 +203,11 @@ public sealed class SharedComponentsTests : BunitContext
     [InlineData("AttentionNeedsYou", "{\"summary\":\"Conflict.\",\"tried\":[\"a\",\"b\"]}", "WebDevLoop needs you: Conflict (it already tried 2 things)")]
     [InlineData("AttentionNeedsYou", "{\"summary\":\"Conflict.\",\"tried\":[\"a\"]}", "WebDevLoop needs you: Conflict (it already tried 1 thing)")]
     [InlineData("AttentionNeedsYou", "{\"summary\":\"Conflict.\",\"tried\":[]}", "WebDevLoop needs you: Conflict")]
+    [InlineData("AttentionTroubleshooterStarted", "{\"code\":\"WorktreeNotClean\"}", "The Troubleshooter agent started looking into it")]
+    [InlineData("AttentionTroubleshooterFinished", "{\"outcome\":\"Resolved\",\"summary\":\"Troubleshooter: Cleaned 3 files and re-verified.\"}", "Troubleshooter: Cleaned 3 files and re-verified")]
+    [InlineData("AttentionTroubleshooterFinished", "{\"outcome\":\"ClaimRejected\",\"summary\":\"x\"}", "The Troubleshooter agent said it was fixed, but WebDevLoop's own check disagreed")]
+    [InlineData("AttentionTroubleshooterFinished", "{\"outcome\":\"NeedsUser\",\"summary\":\"The database is missing.\"}", "The Troubleshooter agent looked into it: The database is missing")]
+    [InlineData("AttentionTroubleshooterFinished", "{\"outcome\":\"TimedOut\",\"summary\":\"x\"}", "The Troubleshooter agent ran out of time")]
     [InlineData("ControlRetry", "{\"action\":\"Retry\",\"status\":\"Implementing\",\"tickets\":[]}", "You retried it")]
     [InlineData("ControlAutoRetry", "{\"action\":\"AutoRetry\",\"status\":\"Implementing\",\"tickets\":[]}", "WebDevLoop retried it automatically")]
     [InlineData("ControlSkip", "{\"action\":\"Skip\",\"status\":\"Skipped\",\"tickets\":[\"t2\",\"t3\"]}", "You skipped the ticket and 2 tickets that depended on it")]

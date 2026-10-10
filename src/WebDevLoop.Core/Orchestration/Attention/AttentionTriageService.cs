@@ -48,17 +48,19 @@ public sealed class AttentionTriageService(
 
         runEvents.Add(AttentionRunEvents.Raise(attentionCase, clock.UtcNow));
         var tried = new List<string>();
+        AttentionStageDiagnosis? diagnosis = null;
         foreach (IAttentionStage stage in _stages)
         {
             AttentionStageResult result = await stage.TryAsync(attentionCase, cancellationToken);
             tried.AddRange(result.Tried.Where(_ => result.Status != AttentionStageStatus.NotApplicable));
+            diagnosis = result.Diagnosis ?? diagnosis;
             if (result.Status == AttentionStageStatus.Resolved)
             {
                 return await ResumeAsync(attentionCase, stage, result, cancellationToken);
             }
         }
 
-        return await AskUserAsync(assignment, attentionCase, tried, cancellationToken);
+        return await AskUserAsync(attentionCase, tried, diagnosis, cancellationToken);
     }
 
     /// <returns>Null unless the owner still needs attention and its guidance was not triaged yet.</returns>
@@ -93,17 +95,17 @@ public sealed class AttentionTriageService(
         {
             ControlOutcome.Applied => AttentionTriageOutcome.Resolved,
             ControlOutcome.ConcurrencyConflict => AttentionTriageOutcome.ConcurrencyConflict,
-            _ => await KeepForUserAsync(attentionCase, [..result.Tried, $"Could not resume automatically: {control.Reason}"], cancellationToken),
+            _ => await KeepForUserAsync(attentionCase, [..result.Tried, $"Could not resume automatically: {control.Reason}"], result.Diagnosis, cancellationToken),
         };
     }
 
     private async Task<AttentionTriageOutcome> AskUserAsync(
-        AttentionTriageAssignment assignment,
         AttentionCase attentionCase,
         IReadOnlyList<string> tried,
+        AttentionStageDiagnosis? diagnosis,
         CancellationToken cancellationToken)
     {
-        if (tried.Count == 0 && attentionCase.Reason.AutoFix is null)
+        if (tried.Count == 0 && attentionCase.Reason.AutoFix is null && diagnosis is null)
         {
             // Nothing was attempted: only the "raised" event is worth keeping.
             return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved
@@ -111,12 +113,21 @@ public sealed class AttentionTriageService(
                 : AttentionTriageOutcome.ConcurrencyConflict;
         }
 
-        return await KeepForUserAsync(attentionCase, tried, cancellationToken);
+        return await KeepForUserAsync(attentionCase, tried, diagnosis, cancellationToken);
     }
 
-    private async Task<AttentionTriageOutcome> KeepForUserAsync(AttentionCase attentionCase, IReadOnlyList<string> tried, CancellationToken cancellationToken)
+    private async Task<AttentionTriageOutcome> KeepForUserAsync(
+        AttentionCase attentionCase,
+        IReadOnlyList<string> tried,
+        AttentionStageDiagnosis? diagnosis,
+        CancellationToken cancellationToken)
     {
         AttentionReason updated = attentionCase.Reason.WithTried([.. tried]);
+        if (diagnosis is not null)
+        {
+            updated = updated.WithDiagnosis(diagnosis.Diagnosis, diagnosis.UserSteps, diagnosis.SuggestedButtons);
+        }
+
         if (updated.AutoFix is not null)
         {
             updated = updated.WithAutoFixAttempted(tried.Count == 0 ? "Not applicable." : tried[^1]);

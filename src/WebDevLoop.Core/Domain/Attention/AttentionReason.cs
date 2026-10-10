@@ -38,6 +38,12 @@ public sealed record AttentionStep(string Text, string? Command = null, string? 
 public sealed record AttentionAutoFix(string Description, bool Attempted = false, string? Outcome = null);
 
 /// <summary>
+/// What an agent found out about the problem before the user was asked (the troubleshooter's diagnosis): the plain-language
+/// <see cref="Summary"/> and what it did to look into or repair it. Shown on the "Action needed" card.
+/// </summary>
+public sealed record AttentionDiagnosis(string Author, string Summary, IReadOnlyList<string> ActionsTaken);
+
+/// <summary>
 /// Structured guidance replacing the free-form failure string: what happened in plain language, why it matters, what
 /// WebDevLoop already tried, what the user can do, and the buttons that make sense. Created where the failure is detected.
 /// A run, ticket or step cannot enter <c>NeedsAttention</c> without one, which is why the constructor refuses an
@@ -55,7 +61,8 @@ public sealed class AttentionReason
         AttentionAutoFix? autoFix,
         IReadOnlyList<string>? triedSoFar,
         IReadOnlyList<AttentionStep>? userSteps,
-        IReadOnlyList<AttentionAction>? actions)
+        IReadOnlyList<AttentionAction>? actions,
+        AttentionDiagnosis? diagnosis = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(summary);
         ArgumentException.ThrowIfNullOrWhiteSpace(whyItMatters);
@@ -78,6 +85,7 @@ public sealed class AttentionReason
         TriedSoFar = triedSoFar ?? [];
         UserSteps = userSteps ?? [];
         Actions = actions;
+        Diagnosis = diagnosis;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -107,6 +115,9 @@ public sealed class AttentionReason
 
     public IReadOnlyList<AttentionAction> Actions { get; }
 
+    /// <summary>The troubleshooter's findings, once it looked at the problem; null before or when none was run.</summary>
+    public AttentionDiagnosis? Diagnosis { get; }
+
     /// <summary>WebDevLoop still has an automatic remediation to run for this reason, so the page should not ask the user yet.</summary>
     [JsonIgnore]
     public bool AutoFixPending => AutoFix is { Attempted: false };
@@ -118,13 +129,35 @@ public sealed class AttentionReason
     public AttentionReason WithTried(params string[] attempts) =>
         attempts.Length == 0
             ? this
-            : new AttentionReason(Code, Summary, WhyItMatters, Details, Cause, AutoFix, [.. TriedSoFar, .. attempts], UserSteps, Actions);
+            : new AttentionReason(Code, Summary, WhyItMatters, Details, Cause, AutoFix, [.. TriedSoFar, .. attempts], UserSteps, Actions, Diagnosis);
 
     public AttentionReason WithAutoFixAttempted(string outcome) =>
-        new(Code, Summary, WhyItMatters, Details, Cause, (AutoFix ?? new AttentionAutoFix(outcome)) with { Attempted = true, Outcome = outcome }, TriedSoFar, UserSteps, Actions);
+        new(Code, Summary, WhyItMatters, Details, Cause, (AutoFix ?? new AttentionAutoFix(outcome)) with { Attempted = true, Outcome = outcome }, TriedSoFar, UserSteps, Actions, Diagnosis);
 
     public AttentionReason WithDetails(string details) =>
-        new(Code, Summary, WhyItMatters, details, Cause, AutoFix, TriedSoFar, UserSteps, Actions);
+        new(Code, Summary, WhyItMatters, details, Cause, AutoFix, TriedSoFar, UserSteps, Actions, Diagnosis);
+
+    /// <summary>
+    /// Adds an agent's findings: the diagnosis itself, its actions to "What WebDevLoop tried", its steps in front of the catalogue's
+    /// steps, and the suggested buttons first. A suggestion that is not one of this reason's actions is ignored, because the
+    /// catalogue decides which commands are allowed at all.
+    /// </summary>
+    public AttentionReason WithDiagnosis(AttentionDiagnosis diagnosis, IReadOnlyList<string> userSteps, IReadOnlyList<AttentionActionKind> suggestedButtons)
+    {
+        ArgumentNullException.ThrowIfNull(diagnosis);
+        AttentionAction[] suggested = [.. suggestedButtons.Distinct().Select(kind => Actions.FirstOrDefault(action => action.Kind == kind)).OfType<AttentionAction>()];
+        return new AttentionReason(
+            Code,
+            Summary,
+            WhyItMatters,
+            Details,
+            Cause,
+            AutoFix,
+            [.. TriedSoFar, .. diagnosis.ActionsTaken.Select(action => $"{diagnosis.Author}: {action}")],
+            [.. userSteps.Select(step => new AttentionStep(step)), .. UserSteps],
+            [.. suggested, .. Actions.Except(suggested)],
+            diagnosis);
+    }
 
     public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
 

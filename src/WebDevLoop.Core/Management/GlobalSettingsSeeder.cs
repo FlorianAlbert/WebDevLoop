@@ -36,6 +36,8 @@ public sealed class GlobalSettingsSeeder(ISettingsProfileRepository profiles, IU
         global.MaxRetries = defaults.MaxRetries;
         global.ParentReviewCycleLimit = defaults.ParentReviewCycleLimit;
         global.TesterCycleLimit = defaults.TesterCycleLimit;
+        global.TroubleshooterEnabled = defaults.TroubleshooterEnabled;
+        global.TroubleshooterMaxAttempts = defaults.TroubleshooterMaxAttempts;
         global.TesterRunInstructions = defaults.TesterRunInstructions;
         global.TestPortRange = defaults.TestPortRange;
         foreach ((AgentRole role, RoleSettings settings) in defaults.Roles)

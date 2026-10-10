@@ -109,6 +109,9 @@ public sealed class GitWorkspace : IGitWorkspace
     public Task<IReadOnlyList<string>> GetChangedFilesAsync(GitRepositoryLocation repo, CommitSha from, CommitSha to, CancellationToken cancellationToken) =>
         WithRepositoryAsync(repo, git => GitRefs.ChangedFiles(git, from, to), cancellationToken);
 
+    public Task<IReadOnlyList<string>> GetRecentCommitsAsync(GitRepositoryLocation repo, CommitSha tip, int count, CancellationToken cancellationToken) =>
+        WithRepositoryAsync(repo, git => GitRefs.RecentCommits(git, tip, count), cancellationToken);
+
     public Task<PushOutcome> PushAsync(GitRepositoryLocation repo, RefPush push, CancellationToken cancellationToken) =>
         WithRepositoryAsync(repo, git => _remote.Push(git, repo, push, cancellationToken), cancellationToken);
 

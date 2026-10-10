@@ -220,6 +220,19 @@ public sealed class StalledWorkRecoveryTests
     }
 
     [Fact]
+    public async Task an_interrupted_troubleshooter_session_is_finished_without_claiming_that_work_restarts()
+    {
+        SeededSpec spec = await SeedTicketAsync(ToImplementing);
+        await _fixture.SeedRunningStepAsync(spec.Id, spec[1], StepKind.Troubleshoot, AgentRole.Troubleshooter, "troubleshoot-1");
+        _fixture.Restart();
+
+        await _fixture.RecoverAsync();
+
+        Assert.Equal(StepStatus.Failed, _fixture.Step("troubleshoot-1").Status);
+        Assert.DoesNotContain(_fixture.RunEvents.All, runEvent => runEvent.Type == AttentionRunEvents.AutoResolved && runEvent.PayloadJson.Contains("Troubleshoot", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task an_integrating_ticket_without_an_interrupted_step_is_left_to_saga_reconciliation()
     {
         await SeedTicketAsync(ToIntegrating);

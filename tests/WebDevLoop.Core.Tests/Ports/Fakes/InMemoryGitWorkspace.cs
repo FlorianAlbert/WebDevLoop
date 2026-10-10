@@ -177,6 +177,9 @@ public sealed class InMemoryGitWorkspace : IGitWorkspace
     public Task<IReadOnlyList<string>> GetChangedFilesAsync(GitRepositoryLocation repo, CommitSha from, CommitSha to, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<string>>(FilesBetween(from, to));
 
+    public Task<IReadOnlyList<string>> GetRecentCommitsAsync(GitRepositoryLocation repo, CommitSha tip, int count, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>([tip.Value[..Math.Min(8, tip.Value.Length)] + " commit"]);
+
     public Task<PushOutcome> PushAsync(GitRepositoryLocation repo, RefPush push, CancellationToken cancellationToken)
     {
         CommitSha? remote = RemoteTip(push.Branch);

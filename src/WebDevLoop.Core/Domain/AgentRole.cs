@@ -8,4 +8,5 @@ public enum AgentRole
     ReviewerSpecification,
     ConflictResolver,
     Tester,
+    Troubleshooter,
 }

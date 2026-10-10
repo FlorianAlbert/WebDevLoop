@@ -127,6 +127,98 @@ public sealed class RolePolicyTests
     }
 
     [Fact]
+    public void troubleshooter_edits_commits_and_reports_troubleshooting_without_a_token()
+    {
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Troubleshooter, Workspace);
+
+        Assert.Equal(AgentReportTools.Troubleshooting, policy.ReportToolName);
+        Assert.Equal("report_troubleshooting", policy.ReportToolName);
+        Assert.Equal(GitHubTokenAccess.None, policy.TokenAccess);
+        Assert.All(
+            [AgentCapability.ReadFiles, AgentCapability.WriteFiles, AgentCapability.RunShellCommands, AgentCapability.CreateLocalCommit, AgentCapability.ReportResult],
+            capability => Assert.True(policy.Allows(capability), $"Troubleshooter should have {capability}."));
+    }
+
+    [Fact]
+    public void troubleshooter_writes_in_the_main_and_additional_worktrees_but_nowhere_else()
+    {
+        const string integration = "/work/trees/integration-1";
+        var workspace = new AgentWorkspace(Worktree, Notes, [integration]);
+
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Troubleshooter, workspace);
+
+        Assert.True(policy.Paths.CanWrite($"{Worktree}/src/a.cs"));
+        Assert.True(policy.Paths.CanWrite($"{integration}/src/a.cs"));
+        Assert.True(policy.Paths.CanRead($"{integration}/src/a.cs"));
+        Assert.False(policy.Paths.CanWrite("/work/trees/t2/src/a.cs"));
+        Assert.False(policy.Paths.CanWrite("/etc/passwd"));
+        Assert.True(policy.Paths.CanRead($"{Notes}/notes.md"));
+        Assert.False(policy.Paths.CanWrite($"{Notes}/notes.md"));
+    }
+
+    [Theory]
+    [InlineData("git push")]
+    [InlineData("git push --force origin main")]
+    [InlineData("git fetch origin")]
+    [InlineData("git remote add x https://example.com/x.git")]
+    [InlineData("git branch -D feature")]
+    [InlineData("git update-ref -d refs/heads/x")]
+    [InlineData("git tag -d v1")]
+    [InlineData("git config user.name x")]
+    [InlineData("git worktree remove x")]
+    [InlineData("git reflog expire --all")]
+    [InlineData("gh")]
+    [InlineData("gh pr merge 12")]
+    [InlineData("gh api -X DELETE repos/acme/widgets/git/refs/heads/x")]
+    [InlineData("sh -c 'git push origin main'")]
+    [InlineData("sh -c \"gh pr merge 12\"")]
+    [InlineData("echo $(git push --force)")]
+    [InlineData("echo `git fetch`")]
+    public void troubleshooter_cannot_publish_reach_remotes_or_rewrite_repository_metadata(string command)
+    {
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Troubleshooter, Workspace);
+
+        Assert.False(policy.IsCommandAllowed(command), $"Troubleshooter must not run '{command}'.");
+    }
+
+    [Theory]
+    [InlineData("git status")]
+    [InlineData("git log --oneline -5")]
+    [InlineData("git diff main...HEAD")]
+    [InlineData("git reset --hard HEAD")]
+    [InlineData("git clean -fdx")]
+    [InlineData("git add -A && git commit -m fix")]
+    [InlineData("git merge --no-edit main")]
+    [InlineData("git rebase main")]
+    [InlineData("dotnet test")]
+    [InlineData("ls -la src")]
+    public void troubleshooter_may_repair_local_state(string command)
+    {
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Troubleshooter, Workspace);
+
+        Assert.True(policy.IsCommandAllowed(command), $"Troubleshooter should run '{command}'.");
+    }
+
+    [Theory]
+    [InlineData("git checkout webdevloop/run1/integration", false)]
+    [InlineData("git switch main", false)]
+    [InlineData("git -C /work/trees/t1 checkout main", false)]
+    [InlineData("git rebase main webdevloop/run1/ticket/t1", false)]
+    [InlineData("git rebase origin/main", true)]
+    [InlineData("git merge main", true)]
+    [InlineData("git log main..HEAD", true)]
+    [InlineData("git diff main...HEAD", true)]
+    [InlineData("git checkout -- src/a.cs", true)]
+    public void troubleshooter_cannot_check_out_or_rebase_branches_webdevloop_owns(string command, bool allowed)
+    {
+        var workspace = new AgentWorkspace(Worktree, Notes, ProtectedBranches: ["main", "webdevloop/run1/integration"]);
+
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Troubleshooter, workspace);
+
+        Assert.Equal(allowed, policy.IsCommandAllowed(command));
+    }
+
+    [Fact]
     public void explorer_writes_only_notes_outside_the_repository()
     {
         RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(AgentRole.Explorer, new AgentWorkspace("/work/repos/octo/app", Notes));

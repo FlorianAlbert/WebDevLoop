@@ -39,6 +39,8 @@ public sealed class InMemoryWorkflowStore :
 
     public int SaveCount { get; private set; }
 
+    public IReadOnlyList<StepRun> Steps => _steps;
+
     public bool ConflictOnNextSave { get; set; }
 
     public IEnumerable<WorkflowEvent> PendingEvents => _outbox.Values.Where(row => !row.Dispatched).Select(row => row.Event);

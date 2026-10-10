@@ -22,6 +22,7 @@ public sealed partial class PromptReportContractTests
         { "ReviewerSpecification.md", "ReviewReport", "SpecificationFinding" },
         { "ConflictResolver.md", "ConflictResolutionReport", null },
         { "Tester.md", "TestReport", "TestIssue" },
+        { "Troubleshooter.md", "TroubleshooterReport", null },
     };
 
     [Theory]

@@ -74,7 +74,8 @@ public sealed class InterruptedStepFinisher(
         step.Finish(status, now, failureReason: reason);
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
         Owner? escalated = await EscalateIfRetriesExhaustedAsync(step, cancellationToken);
-        if (escalated is null)
+        // A troubleshooter session is not restarted: the ticket stays with the user, who sees the interruption on its step.
+        if (escalated is null && step.Kind != StepKind.Troubleshoot)
         {
             runEvents.Add(RestartRecoveryEvent(step, reason, now));
         }

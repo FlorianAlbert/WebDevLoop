@@ -18,6 +18,20 @@ public sealed class InheritedSettingsTests
     }
 
     [Fact]
+    public void troubleshooter_values_are_inherited_from_global_then_defaults()
+    {
+        EffectiveSettingsView fromDefaults = InheritedSettings.FromDefaults(SettingsTestData.Defaults);
+        EffectiveSettingsView underRepository = InheritedSettings.UnderRepository(
+            new SettingsProfileData { TroubleshooterEnabled = false, TroubleshooterMaxAttempts = 5 }, SettingsTestData.Defaults);
+        EffectiveSettingsView withoutGlobalValues = InheritedSettings.UnderRepository(new SettingsProfileData(), SettingsTestData.Defaults);
+
+        Assert.Equal((true, 2), (fromDefaults.TroubleshooterEnabled, fromDefaults.TroubleshooterMaxAttempts));
+        Assert.Equal((false, 5), (underRepository.TroubleshooterEnabled, underRepository.TroubleshooterMaxAttempts));
+        Assert.Equal((true, 2), (withoutGlobalValues.TroubleshooterEnabled, withoutGlobalValues.TroubleshooterMaxAttempts));
+        Assert.Contains(AgentRole.Troubleshooter, fromDefaults.Roles.Keys);
+    }
+
+    [Fact]
     public void repository_baseline_is_global_over_defaults()
     {
         var global = new SettingsProfileData

@@ -170,6 +170,41 @@ public sealed class SettingsManagerTests
     }
 
     [Fact]
+    public async Task troubleshooter_settings_round_trip_and_resolve_into_the_effective_view()
+    {
+        await _manager.SaveGlobalAsync(new SettingsProfileData { TroubleshooterEnabled = false, TroubleshooterMaxAttempts = 5 }, CancellationToken.None);
+        await _manager.SaveRepositoryAsync(RepositoryId, new SettingsProfileData { TroubleshooterEnabled = true }, CancellationToken.None);
+
+        SettingsProfileData global = await _manager.GetGlobalAsync(CancellationToken.None);
+        SettingsProfileData repository = (await _manager.GetRepositoryAsync(RepositoryId, CancellationToken.None)).Value!;
+        EffectiveSettingsView view = (await _manager.GetEffectiveAsync(RepositoryId, CancellationToken.None)).Value!;
+
+        Assert.Equal((false, 5), (global.TroubleshooterEnabled, global.TroubleshooterMaxAttempts));
+        Assert.Equal((true, (int?)null), (repository.TroubleshooterEnabled, repository.TroubleshooterMaxAttempts));
+        Assert.Equal((true, 5), (view.TroubleshooterEnabled, view.TroubleshooterMaxAttempts));
+    }
+
+    [Fact]
+    public async Task a_global_profile_without_troubleshooter_values_resolves_to_the_defaults()
+    {
+        await _manager.SaveGlobalAsync(new SettingsProfileData { MaxRetries = 3 }, CancellationToken.None);
+
+        EffectiveSettingsView view = (await _manager.GetEffectiveAsync(RepositoryId, CancellationToken.None)).Value!;
+
+        Assert.Equal((true, 2), (view.TroubleshooterEnabled, view.TroubleshooterMaxAttempts));
+        Assert.Contains(AgentRole.Troubleshooter, view.Roles.Keys);
+    }
+
+    [Fact]
+    public async Task zero_troubleshooter_attempts_are_rejected()
+    {
+        CommandResult<SettingsProfileData> result = await _manager.SaveGlobalAsync(new SettingsProfileData { TroubleshooterMaxAttempts = 0 }, CancellationToken.None);
+
+        Assert.Equal(CommandStatus.Invalid, result.Status);
+        Assert.Contains(result.Errors!, error => error.Field == nameof(SettingsProfileData.TroubleshooterMaxAttempts));
+    }
+
+    [Fact]
     public async Task effective_settings_conflict_when_global_settings_were_never_seeded()
     {
         CommandResult<EffectiveSettingsView> result = await _manager.GetEffectiveAsync(RepositoryId, CancellationToken.None);

@@ -55,7 +55,7 @@ public abstract class UiTestContext : BunitContext
     }
 
     internal static EffectiveSettingsView Effective(int maxActiveSpecs = 2, SpecDependencyMode mode = SpecDependencyMode.WaitForMerge) =>
-        new("/ws", "/copilot", "main", maxActiveSpecs, mode, 4, 2, 3, 2, 3, 3, "run it", new PortRangeData(5000, 5100), new Dictionary<AgentRole, EffectiveRoleSettingsView>());
+        new("/ws", "/copilot", "main", maxActiveSpecs, mode, 4, 2, 3, 2, 3, 3, "run it", new PortRangeData(5000, 5100), new Dictionary<AgentRole, EffectiveRoleSettingsView>(), true, 2);
 
     internal static EventEnvelope SpecStatusChanged(string specRunId, int repositoryId, SpecRunStatus to, long messageId = 1) =>
         new(messageId, new SpecRunStatusChanged(new RunId(specRunId), repositoryId, SpecRunStatus.Queued, to, ApiData.Now));

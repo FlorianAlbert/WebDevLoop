@@ -41,6 +41,17 @@ public static class PromptPlaceholders
     public const string ReservedPort = "reserved_port";
     public const string AppUrl = "app_url";
     public const string ExplorationNotesPath = "exploration_notes_path";
+    public const string AttentionCode = "attention_code";
+    public const string AttentionSummary = "attention_summary";
+    public const string AttentionDetails = "attention_details";
+    public const string FailedPhase = "failed_phase";
+    public const string RemediationTried = "remediation_tried";
+    public const string GitState = "git_state";
+    public const string GitHubState = "github_state";
+    public const string RecentAgentLogs = "recent_agent_logs";
+    public const string TroubleshootingContextPath = "troubleshooting_context_path";
+    public const string BackupPath = "backup_path";
+    public const string IntegrationWorktreePath = "integration_worktree_path";
 
     /// <summary>Every known placeholder name with a human-readable description (for settings UI/help).</summary>
     public static IReadOnlyDictionary<string, string> Descriptions { get; } = new Dictionary<string, string>
@@ -78,6 +89,17 @@ public static class PromptPlaceholders
         [ReservedPort] = "TCP port reserved by WebDevLoop for this test run.",
         [AppUrl] = "Base URL at which the application under test must be served.",
         [ExplorationNotesPath] = "Directory outside the repository holding exploration notes shared with later agents.",
+        [AttentionCode] = "Reason code of the problem the troubleshooter looks at (e.g. WorktreeNotClean).",
+        [AttentionSummary] = "Plain-language summary of the problem.",
+        [AttentionDetails] = "Technical details of the failure: the exception text, paths and commit ids.",
+        [FailedPhase] = "The phase of the run or ticket that failed and that WebDevLoop resumes once the problem is solved.",
+        [RemediationTried] = "What WebDevLoop and earlier troubleshooter attempts already tried, one item per line.",
+        [GitState] = "Git status, recent commits and branch tips of the ticket worktree and the integration branch.",
+        [GitHubState] = "What WebDevLoop knows about the pull requests and the remote branches of the ticket (read-only).",
+        [RecentAgentLogs] = "The tail of the log of the last agent step of the ticket or run.",
+        [TroubleshootingContextPath] = "Read-only directory with the full context of the problem and the backups taken before the session.",
+        [BackupPath] = "Directory holding the patch of the uncommitted changes WebDevLoop saved before the session started.",
+        [IntegrationWorktreePath] = "Scratch checkout of the integration branch tip on its own branch, safe to inspect and modify.",
     };
 
     private static readonly string[] SpecContext =
@@ -106,6 +128,11 @@ public static class PromptPlaceholders
             [AgentRole.ConflictResolver] = Set(SpecContext, TicketContext, WorkspaceContext,
                 [ConflictingFiles, ChangedFiles]),
             [AgentRole.Tester] = Set(SpecContext, WorkspaceContext, [TesterInstructions, ReservedPort, AppUrl]),
+            [AgentRole.Troubleshooter] = Set(SpecContext, TicketContext, WorkspaceContext,
+            [
+                AttentionCode, AttentionSummary, AttentionDetails, FailedPhase, RemediationTried, GitState, GitHubState,
+                RecentAgentLogs, TroubleshootingContextPath, BackupPath, IntegrationWorktreePath,
+            ]),
         };
 
     public static IReadOnlyCollection<string> All { get; } = Descriptions.Keys.ToArray();

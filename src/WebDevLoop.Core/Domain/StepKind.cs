@@ -9,4 +9,5 @@ public enum StepKind
     ResolveConflict,
     ParentReview,
     Test,
+    Troubleshoot,
 }

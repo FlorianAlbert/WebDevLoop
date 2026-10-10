@@ -14,6 +14,8 @@ public static class DefaultSettings
     public const int MaxRetries = 2;
     public const int ParentReviewCycleLimit = 3;
     public const int TesterCycleLimit = 3;
+    public const bool TroubleshooterEnabled = true;
+    public const int TroubleshooterMaxAttempts = 2;
     public const string WorkspacesDirectoryName = "workspaces";
     public const string CopilotDirectoryName = "copilot";
 
@@ -38,6 +40,7 @@ public static class DefaultSettings
             [AgentRole.ReviewerSpecification] = (ReviewModel, HighEffort, TimeSpan.FromMinutes(30)),
             [AgentRole.ConflictResolver] = (StandardModel, HighEffort, TimeSpan.FromMinutes(45)),
             [AgentRole.Tester] = (StandardModel, MediumEffort, TimeSpan.FromMinutes(60)),
+            [AgentRole.Troubleshooter] = (StandardModel, HighEffort, TimeSpan.FromMinutes(30)),
         };
 
     /// <exception cref="SettingsValidationException">A shipped template is invalid (fail fast at startup).</exception>
@@ -71,6 +74,8 @@ public static class DefaultSettings
             MaxRetries = MaxRetries,
             ParentReviewCycleLimit = ParentReviewCycleLimit,
             TesterCycleLimit = TesterCycleLimit,
+            TroubleshooterEnabled = TroubleshooterEnabled,
+            TroubleshooterMaxAttempts = TroubleshooterMaxAttempts,
             TesterRunInstructions = TesterRunInstructions,
             TestPortRange = TestPortRange,
             Roles = roles,

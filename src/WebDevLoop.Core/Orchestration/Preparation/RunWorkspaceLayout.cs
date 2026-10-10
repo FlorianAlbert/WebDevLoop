@@ -12,6 +12,7 @@ public sealed class RunWorkspaceLayout
     private const string NotesDirectoryName = "notes";
     private const string ExplorerCheckoutDirectoryName = "explore";
     private const string WorktreeBackupsDirectoryName = "worktree-backups";
+    private const string TroubleshooterDirectoryName = "troubleshooter";
 
     private RunWorkspaceLayout(RunId runId, string runDirectory)
     {
@@ -31,6 +32,20 @@ public sealed class RunWorkspaceLayout
 
     /// <summary>Patches of tracked changes removed from ticket worktrees, one subfolder per ticket.</summary>
     public string WorktreeBackupsDirectory => Path.Combine(RunDirectory, WorktreeBackupsDirectoryName);
+
+    /// <summary>Everything the troubleshooter uses: its context files, backups and the scratch checkout of the integration branch.</summary>
+    public string TroubleshooterDirectory => Path.Combine(RunDirectory, TroubleshooterDirectoryName);
+
+    /// <summary>Scratch checkout of the integration tip the troubleshooter may inspect and modify; it is on its own branch.</summary>
+    public string TroubleshooterIntegrationWorktree => Path.Combine(TroubleshooterDirectory, "integration");
+
+    /// <summary>Patches and ref listings saved before a troubleshooter session; the agent may add its own.</summary>
+    public string TroubleshooterBackupsDirectory => Path.Combine(TroubleshooterDirectory, "backups");
+
+    /// <summary>Read-only for the agent: the problem, git state and log tail of each attempt.</summary>
+    public string TroubleshooterContextDirectory => Path.Combine(TroubleshooterDirectory, "context");
+
+    public BranchName TroubleshooterBranch => new($"webdevloop/{RunId}/troubleshoot");
 
     public BranchName ExplorerBranch => new($"webdevloop/{RunId}/explore");
 

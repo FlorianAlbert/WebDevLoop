@@ -26,10 +26,13 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
             global.MaxRetries = 1;
             global.ParentReviewCycleLimit = 5;
             global.TesterCycleLimit = 6;
+            global.TroubleshooterEnabled = false;
+            global.TroubleshooterMaxAttempts = 4;
             global.TesterRunInstructions = "dotnet run";
             global.TestPortRange = new TestPortRange(5000, 5100);
             global.SetRole(AgentRole.Implementer, new RoleSettingsOverride("gpt-x", "high", "Do {ticket_title}", 900));
             global.SetRole(AgentRole.Tester, new RoleSettingsOverride(Model: "m2"));
+            global.SetRole(AgentRole.Troubleshooter, new RoleSettingsOverride(TimeoutSeconds: 120));
             write.Settings.Add(global);
             await write.SaveAsync();
         }
@@ -49,11 +52,14 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
         Assert.Equal(1, loaded.MaxRetries);
         Assert.Equal(5, loaded.ParentReviewCycleLimit);
         Assert.Equal(6, loaded.TesterCycleLimit);
+        Assert.False(loaded.TroubleshooterEnabled);
+        Assert.Equal(4, loaded.TroubleshooterMaxAttempts);
         Assert.Equal("dotnet run", loaded.TesterRunInstructions);
         Assert.Equal(new TestPortRange(5000, 5100), loaded.TestPortRange);
         Assert.Equal(new RoleSettingsOverride("gpt-x", "high", "Do {ticket_title}", 900), loaded.Roles[AgentRole.Implementer]);
         Assert.Equal(new RoleSettingsOverride(Model: "m2"), loaded.Roles[AgentRole.Tester]);
-        Assert.Equal(2, loaded.Roles.Count);
+        Assert.Equal(new RoleSettingsOverride(TimeoutSeconds: 120), loaded.Roles[AgentRole.Troubleshooter]);
+        Assert.Equal(3, loaded.Roles.Count);
     }
 
     [Fact]
@@ -65,6 +71,7 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
             write.Settings.Add(SettingsProfile.ForGlobal());
             SettingsProfile overrides = SettingsProfile.ForRepository(repositoryId);
             overrides.MaxRetries = 7;
+            overrides.TroubleshooterEnabled = true;
             overrides.TesterRunInstructions = "npm start";
             overrides.SetRole(AgentRole.Explorer, new RoleSettingsOverride(TimeoutSeconds: 60));
             write.Settings.Add(overrides);
@@ -77,6 +84,9 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
         Assert.False(loaded.IsGlobal);
         Assert.Equal(repositoryId, loaded.RepositoryId);
         Assert.Equal(7, loaded.MaxRetries);
+        Assert.True(loaded.TroubleshooterEnabled);
+        Assert.Null(loaded.TroubleshooterMaxAttempts);
+        Assert.Null((await read.Settings.GetGlobalAsync(CancellationToken.None))!.TroubleshooterEnabled);
         Assert.Equal("npm start", loaded.TesterRunInstructions);
         Assert.Null(loaded.WorkspaceRootDirectory);
         Assert.Null(loaded.BaseBranch);

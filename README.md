@@ -6,7 +6,7 @@ Copilot agents on run-scoped branches, has every ticket reviewed (coding standar
 squash-merges each ticket into a run-scoped integration branch and publishes it as one layer of a stacked draft PR stack,
 runs a parent review and a tester agent against the integrated app, marks the stack ready, and completes once a human
 merged it. The app is the coordinator: state, queueing, Git/GitHub mutations, and recovery are app logic; agents only
-explore, implement, review, resolve conflicts, and test locally. WebDevLoop does not split a spec into tickets: the spec must
+explore, implement, review, resolve conflicts, test, and troubleshoot locally. WebDevLoop does not split a spec into tickets: the spec must
 already have open sub-issues, otherwise the run needs attention (add the sub-issues, then retry).
 
 ## Prerequisites
@@ -118,7 +118,7 @@ section; `src/WebDevLoop.Web/appsettings.json` lists them with their defaults.
 Workflow behaviour is edited in the app (Settings page or `/api/settings`) and stored in the database: global values with
 nullable per-repository overrides for models, reasoning effort, prompt templates, timeouts, the active-spec limit, the
 dependency mode (`WaitForMerge`/`StackOnTop`), implementer concurrency, review/retry/cycle limits, tester run
-instructions, and the test port range. The global settings are seeded from the embedded defaults
+instructions, the test port range, and the Troubleshooter switch and attempt limit. The global settings are seeded from the embedded defaults
 (including the prompt templates) on first start. The workspace root and the Copilot home are global-only and startup-scoped:
 they configure process-wide resources (the git workspace confines every clone and worktree path to the root it started
 with), so they cannot be overridden per repository (the API rejects it) and a change of the global value takes effect after
@@ -206,7 +206,8 @@ with a free-form string or a reason code has no factory.
 
 Before the user is asked, every item that enters `NeedsAttention` goes through the resolution order
 (`AttentionTriageService`), which records what it did as run events (`AttentionRaised`, `AttentionRemediationAttempted`,
-`AttentionAutoResolved`, `AttentionNeedsYou`, `ControlAutoRetry`, `ControlAutoSkip`):
+`AttentionTroubleshooterStarted`, `AttentionTroubleshooterFinished`, `AttentionAutoResolved`, `AttentionNeedsYou`,
+`ControlAutoRetry`, `ControlAutoSkip`):
 
 1. **Known automatic remediation** (`IKnownRemediation`, one per code, deterministic, bounded per item until the user's next
    Retry): a dirty ticket worktree is cleaned (tracked changes are saved as a patch in the run folder first) and verified;
@@ -216,8 +217,57 @@ Before the user is asked, every item that enters `NeedsAttention` goes through t
    reviewed ticket that adds nothing to the integration branch is skipped as "no changes needed". Interrupted steps are
    restarted after a restart by the agent-step recovery and recorded the same way; merge conflicts first go to the
    conflict-resolver agent. A remediation resumes the work exactly like the user's Retry would.
-2. Further stages (e.g. a troubleshooter agent session) register another `IAttentionStage` after the known remediation.
-3. The user, now with what was tried on the card.
+2. **Troubleshooter agent session** (`TroubleshooterStage`, an `IAttentionStage` registered after the known remediation):
+   one bounded agent session for tickets whose reason needs judgement. Further stages register another `IAttentionStage`
+   after it.
+3. The user, now with what was tried and the troubleshooter's diagnosis on the card.
+
+### The Troubleshooter
+
+The Troubleshooter is an agent role like the others: Settings → Agent roles has its own model, reasoning effort, timeout and
+prompt template (`Resources/Prompts/Troubleshooter.md`, defaults, validation and global/per-repository inheritance work as for
+every role). Settings → Troubleshooter has **Try to resolve problems automatically with an agent** (default on; global switch
+with a per-repository override) and **Troubleshooter attempts per problem** (default 2), because every attempt costs model usage.
+
+- **Which problems escalate.** The decision is encoded per reason code in `TroubleshooterEscalation` (every code has an
+  explicit rule and rationale; a test fails when a code has none). Escalating: `ImplementationFailed`, `ImplementerBlocked`,
+  `WorktreeNotClean`, `TicketBranchNotBasedOnIntegration` and `ReportedCommitMismatch` (after the known remediation could not
+  repair them), `ReviewFailed`, `FixFailed`, `IntegrationFailed`, `MergeConflictUnresolved` (after the conflict resolver gave up)
+  and `InterruptedRepeatedly` — unexpected git states, an agent that failed or reported "blocked", an integration that failed
+  with an unfamiliar error. Never escalating: deterministic cases with a fixed instruction (`PromptNotRenderable`, spec and
+  settings problems), decisions (`ReviewIterationsExhausted`, `*CycleLimit`, `NoNewWork`, `TicketHasNoChanges`,
+  `PullRequestsClosedUnmerged`), temporary outages (`IntegrationTemporaryFailure`), anything that is GitHub or remote state
+  (moved or rejected integration branch, stack and pull request problems, `StackBranchExists`) and problems of the whole run,
+  which have no ticket worktree to repair and no check to verify a repair with.
+- **Bounds.** One session per attempt with the role's timeout; at most *max attempts* sessions per ticket and reason code since
+  the user's last Retry; and a **state fingerprint** (reason code plus the git state of the ticket worktree and branches): a
+  problem in an unchanged state is never escalated twice, the earlier diagnosis is shown again instead. Pressing Retry, Skip or
+  Abort while a session runs cancels it (its Copilot session is aborted), so it cannot keep changing a worktree that resumed work
+  uses.
+- **Input.** The prompt carries the reason code, summary and technical details, the failed phase, the ticket and spec text, the
+  worktree paths, the tail of the last agent step's log, `git status` / recent commits / branch tips of the ticket worktree,
+  the integration branch and trunk (local and as of the last fetch), the pull request state WebDevLoop knows, and everything
+  already tried. The same material is written to a read-only context folder in the run folder.
+- **Capabilities.** Same sandbox as the other roles (`RoleCapabilityPolicies`): it may read, edit and commit in the ticket
+  worktree and in a scratch checkout of the integration tip it is given (its own branch, thrown away afterwards), run git and
+  the repository's build and test commands there and write backups to the run folder. It receives no GitHub token, and `gh`,
+  `git push`, `fetch`, `pull`, `remote`, `config`, `worktree`, `branch`, `update-ref`, `tag`, `reflog`, `gc` and friends are
+  denied, as is checking out, switching to or rebasing the integration and trunk branches. It cannot force-push, delete remote
+  branches or pull requests, change settings, touch other runs or merge; such steps stay with the user. GitHub state is read by
+  WebDevLoop and handed to the agent.
+- **Safety net.** Every shell command and tool call lands in the step log. Before the session WebDevLoop saves the uncommitted
+  changes of the ticket worktree as a patch, the list of untracked files and the branch tips in
+  `<run folder>/troubleshooter/backups/<ticket>/…`, so nothing is lost silently.
+- **Report and verification.** The agent ends with the `report_troubleshooting` tool:
+  `{ outcome: resolved | needs_user | cannot_resolve, summary, actions_taken[], verification, user_steps[], suggested_buttons[] }`.
+  A `resolved` outcome is only a claim: WebDevLoop re-runs the failed check itself (`TroubleshooterVerifier`: the ticket
+  worktree is a clean checkout of the ticket branch, no commit of the branch was lost — a rewritten branch is restored —
+  and, for new commits or branch problems, the branch contains the integration tip). New commits are reviewed before the work
+  continues; otherwise the failed phase resumes like the user's Retry. A claim that does not hold is discarded and recorded.
+- **Visibility.** The session is a normal step (role *Troubleshooter*, kind *Troubleshoot*, model, status, log) on the ticket
+  and run pages and in the run's timeline (`AttentionTroubleshooterStarted` / `AttentionTroubleshooterFinished`). When it does
+  not resolve the problem, its diagnosis, the actions it took, its steps for you and its suggested buttons populate the
+  **Action needed** card ("What the Troubleshooter found", "What WebDevLoop already tried", "What you can do").
 
 ## Build and test
 

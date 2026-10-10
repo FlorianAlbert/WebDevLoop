@@ -73,6 +73,9 @@ internal sealed class ControlledGitWorkspace(IGitWorkspace inner) : IGitWorkspac
     public Task<IReadOnlyList<string>> GetChangedFilesAsync(GitRepositoryLocation repo, CommitSha from, CommitSha to, CancellationToken cancellationToken) =>
         inner.GetChangedFilesAsync(repo, from, to, cancellationToken);
 
+    public Task<IReadOnlyList<string>> GetRecentCommitsAsync(GitRepositoryLocation repo, CommitSha tip, int count, CancellationToken cancellationToken) =>
+        inner.GetRecentCommitsAsync(repo, tip, count, cancellationToken);
+
     public Task<PushOutcome> PushAsync(GitRepositoryLocation repo, RefPush push, CancellationToken cancellationToken) =>
         inner.PushAsync(repo, push, cancellationToken);
 

@@ -22,6 +22,8 @@ internal static class SettingsProfileMapper
         target.MaxRetries = data.MaxRetries;
         target.ParentReviewCycleLimit = data.ParentReviewCycleLimit;
         target.TesterCycleLimit = data.TesterCycleLimit;
+        target.TroubleshooterEnabled = data.TroubleshooterEnabled;
+        target.TroubleshooterMaxAttempts = data.TroubleshooterMaxAttempts;
         target.TesterRunInstructions = data.TesterRunInstructions;
         target.TestPortRange = ParsePortRange(data.TestPortRange, errors);
         ApplyRoles(data.Roles, target);
@@ -41,6 +43,8 @@ internal static class SettingsProfileMapper
         MaxRetries = profile.MaxRetries,
         ParentReviewCycleLimit = profile.ParentReviewCycleLimit,
         TesterCycleLimit = profile.TesterCycleLimit,
+        TroubleshooterEnabled = profile.TroubleshooterEnabled,
+        TroubleshooterMaxAttempts = profile.TroubleshooterMaxAttempts,
         TesterRunInstructions = profile.TesterRunInstructions,
         TestPortRange = profile.TestPortRange is { } range ? new PortRangeData(range.Start, range.End) : null,
         Roles = profile.Roles.Where(entry => entry.Value != Unset).ToDictionary(),
@@ -62,7 +66,9 @@ internal static class SettingsProfileMapper
         new PortRangeData(settings.TestPortRange.Start, settings.TestPortRange.End),
         settings.Roles.ToDictionary(
             entry => entry.Key,
-            entry => new EffectiveRoleSettingsView(entry.Value.Model, entry.Value.ReasoningEffort, entry.Value.PromptTemplate, (int)entry.Value.Timeout.TotalSeconds)));
+            entry => new EffectiveRoleSettingsView(entry.Value.Model, entry.Value.ReasoningEffort, entry.Value.PromptTemplate, (int)entry.Value.Timeout.TotalSeconds)),
+        settings.TroubleshooterEnabled,
+        settings.TroubleshooterMaxAttempts);
 
     // SettingsProfile has no role removal, so a role that is no longer overridden is reset to an empty (fall-through) override.
     private static void ApplyRoles(IReadOnlyDictionary<AgentRole, RoleSettingsOverride>? requested, SettingsProfile target)

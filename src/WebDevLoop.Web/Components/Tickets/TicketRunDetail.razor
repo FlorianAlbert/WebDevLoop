@@ -29,7 +29,7 @@ else if (_ticket is not null)
     @if (_ticket.Status == TicketRunStatus.NeedsAttention)
     {
         AttentionReason attention = AttentionDisplay.Resolve(_ticket.Attention, _ticket.FailureReason, forTicket: true);
-        <AttentionCard Reason="attention">
+        <AttentionCard Reason="attention" TroubleshooterActive="@_steps.Any(step => step is { Kind: StepKind.Troubleshoot } && step.Status.IsActive())">
             <TicketRunControls Ticket="_ticket" Siblings="_siblings" Attention="attention" OnChanged="RefreshAsync" />
         </AttentionCard>
     }

@@ -35,6 +35,7 @@ public sealed class EmbeddedDefaultPromptTemplatesTests
     [InlineData(AgentRole.ReviewerSpecification, "report_review")]
     [InlineData(AgentRole.ConflictResolver, "report_conflict_resolution")]
     [InlineData(AgentRole.Tester, "report_test")]
+    [InlineData(AgentRole.Troubleshooter, "report_troubleshooting")]
     public void template_instructs_agent_to_report_through_its_structured_report_tool(AgentRole role, string reportTool)
     {
         Assert.Contains($"`{reportTool}`", _templates.GetTemplate(role));
@@ -57,6 +58,7 @@ public sealed class EmbeddedDefaultPromptTemplatesTests
     [InlineData(AgentRole.ReviewerSpecification, new[] { "review_scope", "ticket_body", "parent_spec_body", "diff_base_ref", "diff_head_ref" })]
     [InlineData(AgentRole.ConflictResolver, new[] { "conflicting_files", "integration_branch", "integration_tip_sha", "worktree_path", "ticket_body" })]
     [InlineData(AgentRole.Tester, new[] { "parent_spec_body", "tester_instructions", "reserved_port", "app_url", "worktree_path" })]
+    [InlineData(AgentRole.Troubleshooter, new[] { "attention_code", "attention_details", "failed_phase", "remediation_tried", "git_state", "worktree_path", "integration_worktree_path", "backup_path" })]
     public void template_uses_the_context_its_role_needs(AgentRole role, string[] placeholders)
     {
         string template = _templates.GetTemplate(role);

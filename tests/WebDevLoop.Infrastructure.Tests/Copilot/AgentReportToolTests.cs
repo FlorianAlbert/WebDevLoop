@@ -81,6 +81,68 @@ public sealed class AgentReportToolTests
     }
 
     [Fact]
+    public void troubleshooting_report_schema_matches_the_troubleshooter_contract()
+    {
+        JsonElement schema = AgentReportToolFactory.For(AgentRole.Troubleshooter).ParametersSchema;
+
+        string[] fields = ["outcome", "summary", "actions_taken", "verification", "user_steps", "suggested_buttons"];
+        Assert.Equal(fields, PropertyNames(schema));
+        Assert.Equal(fields, RequiredNames(schema));
+        Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(["resolved", "needs_user", "cannot_resolve"], EnumValues(Property(schema, "outcome")));
+        Assert.Equal(["retry", "skip", "skip_with_dependents", "abort"], EnumValues(Items(Property(schema, "suggested_buttons"))));
+    }
+
+    [Fact]
+    public void valid_resolved_troubleshooting_payload_becomes_a_troubleshooter_report()
+    {
+        ReportParseResult result = Parse(AgentRole.Troubleshooter, """
+            {
+              "outcome": "resolved", "summary": "The worktree had a stale lock file.",
+              "actions_taken": ["Removed .git/index.lock"], "verification": "git status is clean",
+              "user_steps": [], "suggested_buttons": ["retry"]
+            }
+            """);
+
+        var report = Assert.IsType<TroubleshooterReport>(result.Report);
+        Assert.Null(result.Error);
+        Assert.Equal(TroubleshooterOutcome.Resolved, report.Outcome);
+        Assert.Equal(["Removed .git/index.lock"], report.ActionsTaken);
+        Assert.Equal([AttentionActionKind.Retry], report.SuggestedButtons);
+    }
+
+    [Fact]
+    public void valid_needs_user_troubleshooting_payload_keeps_the_user_steps_and_buttons()
+    {
+        ReportParseResult result = Parse(AgentRole.Troubleshooter, """
+            {
+              "outcome": "needs_user", "summary": "The remote rejects the token.",
+              "actions_taken": [], "verification": "",
+              "user_steps": ["Sign in again"], "suggested_buttons": ["retry", "skip_with_dependents", "abort"]
+            }
+            """);
+
+        var report = Assert.IsType<TroubleshooterReport>(result.Report);
+        Assert.Equal(["Sign in again"], report.UserSteps);
+        Assert.Equal([AttentionActionKind.Retry, AttentionActionKind.SkipWithDependents, AttentionActionKind.Abort], report.SuggestedButtons);
+    }
+
+    [Theory]
+    [InlineData("""{ "outcome": "resolved", "summary": "s", "actions_taken": ["a"], "verification": " ", "user_steps": [], "suggested_buttons": [] }""")]
+    [InlineData("""{ "outcome": "needs_user", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": [] }""")]
+    [InlineData("""{ "outcome": "fixed", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": [] }""")]
+    [InlineData("""{ "outcome": "cannot_resolve", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": ["retry", "retry"] }""")]
+    [InlineData("""{ "outcome": "cannot_resolve", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": ["rewrite"] }""")]
+    [InlineData("""{ "outcome": "cannot_resolve", "summary": "  ", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": [] }""")]
+    public void invalid_troubleshooting_payloads_are_rejected_with_a_reason(string payload)
+    {
+        ReportParseResult result = Parse(AgentRole.Troubleshooter, payload);
+
+        Assert.Null(result.Report);
+        Assert.False(string.IsNullOrWhiteSpace(result.Error));
+    }
+
+    [Fact]
     public void valid_implementation_payload_becomes_an_implementation_report()
     {
         ReportParseResult result = Parse(AgentRole.Implementer, $$"""

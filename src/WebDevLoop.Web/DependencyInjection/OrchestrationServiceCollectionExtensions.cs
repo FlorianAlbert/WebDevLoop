@@ -87,6 +87,7 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddSingleton(new TicketExecutionOptions(skillsRoot));
         services.TryAddSingleton(new ReviewOptions(skillsRoot));
         services.TryAddSingleton(new IntegrationOptions(skillsRoot));
+        services.TryAddSingleton(new TroubleshooterOptions(skillsRoot));
         services.TryAddSingleton(new TestingOptions(skillsRoot) { AppStartupTimeout = workflow.TesterAppStartupTimeout });
         services.TryAddSingleton(new ReadyAndMergeOptions { TrunkContainmentTimeout = workflow.TrunkContainmentTimeout });
         services.TryAddSingleton(new ExternalReconciliationOptions(workflow.ParkedIntegrationRetryInterval));
@@ -140,8 +141,8 @@ public static class OrchestrationServiceCollectionExtensions
     }
 
     /// <summary>
-    /// The resolution order for work that needs attention: known remediation first. A troubleshooter agent stage registers
-    /// another <see cref="IAttentionStage"/> after it, before the user is asked.
+    /// The resolution order for work that needs attention: known remediation first, then the bounded troubleshooter agent
+    /// session, and only then the user. The order of the <see cref="IAttentionStage"/> registrations is the order of resolution.
     /// </summary>
     private static void AddAttentionResolution(this IServiceCollection services)
     {
@@ -155,6 +156,10 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, ExplorationRetryRemediation>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, NoChangesTicketRemediation>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAttentionStage, KnownRemediationStage>());
+        services.TryAddScoped<TroubleshootingStateReader>();
+        services.TryAddScoped<TroubleshooterWorkspace>();
+        services.TryAddScoped<TroubleshooterVerifier>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IAttentionStage, TroubleshooterStage>());
         services.TryAddScoped<AttentionTriageService>();
     }
 

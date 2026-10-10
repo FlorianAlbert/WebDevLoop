@@ -16,6 +16,8 @@ public sealed record EffectiveSettingsView(
     int TesterCycleLimit,
     string TesterRunInstructions,
     PortRangeData TestPortRange,
-    IReadOnlyDictionary<AgentRole, EffectiveRoleSettingsView> Roles);
+    IReadOnlyDictionary<AgentRole, EffectiveRoleSettingsView> Roles,
+    bool TroubleshooterEnabled,
+    int TroubleshooterMaxAttempts);
 
 public sealed record EffectiveRoleSettingsView(string Model, string ReasoningEffort, string PromptTemplate, int TimeoutSeconds);

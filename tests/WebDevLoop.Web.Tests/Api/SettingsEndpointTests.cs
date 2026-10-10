@@ -10,7 +10,7 @@ public sealed class SettingsEndpointTests
 {
     private static readonly EffectiveSettingsView Effective = new(
         "/ws", "/copilot", "main", 1, SpecDependencyMode.WaitForMerge, 4, 2, 5, 2, 3, 3, "run it", new PortRangeData(41000, 41999),
-        new Dictionary<AgentRole, EffectiveRoleSettingsView> { [AgentRole.Tester] = new("model-x", "high", "Open {app_url}", 3600) });
+        new Dictionary<AgentRole, EffectiveRoleSettingsView> { [AgentRole.Tester] = new("model-x", "high", "Open {app_url}", 3600) }, true, 2);
 
     [Fact]
     public async Task global_settings_are_returned_with_string_enums()

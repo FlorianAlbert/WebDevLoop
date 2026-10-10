@@ -29,6 +29,16 @@ public sealed class GitWorkspaceRefTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task recent_commits_list_the_newest_first_with_a_short_sha_and_the_subject_and_honour_the_count()
+    {
+        IReadOnlyList<string> all = await _workspace.GetRecentCommitsAsync(_sandbox.Location, _second, 10, CancellationToken.None);
+        IReadOnlyList<string> one = await _workspace.GetRecentCommitsAsync(_sandbox.Location, _second, 1, CancellationToken.None);
+
+        Assert.Equal([$"{_second.Value[..8]} second", $"{_sandbox.InitialCommit.Value[..8]} Initial commit"], all);
+        Assert.Equal([$"{_second.Value[..8]} second"], one);
+    }
+
+    [Fact]
     public async Task creating_a_branch_that_already_exists_elsewhere_is_a_mismatch()
     {
         await _workspace.UpdateBranchAsync(_sandbox.Location, Integration, _sandbox.InitialCommit, null, CancellationToken.None);

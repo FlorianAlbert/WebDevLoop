@@ -8,4 +8,5 @@ public static class AgentReportTools
     public const string Review = "report_review";
     public const string ConflictResolution = "report_conflict_resolution";
     public const string Test = "report_test";
+    public const string Troubleshooting = "report_troubleshooting";
 }

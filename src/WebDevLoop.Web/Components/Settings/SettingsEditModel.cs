@@ -32,6 +32,10 @@ public sealed class SettingsEditModel
 
     public int? TesterCycleLimit { get; set; }
 
+    public bool? TroubleshooterEnabled { get; set; }
+
+    public int? TroubleshooterMaxAttempts { get; set; }
+
     public string? TesterRunInstructions { get; set; }
 
     public int? PortStart { get; set; }
@@ -57,6 +61,8 @@ public sealed class SettingsEditModel
             MaxRetries = data.MaxRetries,
             ParentReviewCycleLimit = data.ParentReviewCycleLimit,
             TesterCycleLimit = data.TesterCycleLimit,
+            TroubleshooterEnabled = data.TroubleshooterEnabled,
+            TroubleshooterMaxAttempts = data.TroubleshooterMaxAttempts,
             TesterRunInstructions = data.TesterRunInstructions,
             PortStart = data.TestPortRange?.Start,
             PortEnd = data.TestPortRange?.End,
@@ -90,6 +96,8 @@ public sealed class SettingsEditModel
         MaxRetries = MaxRetries,
         ParentReviewCycleLimit = ParentReviewCycleLimit,
         TesterCycleLimit = TesterCycleLimit,
+        TroubleshooterEnabled = TroubleshooterEnabled,
+        TroubleshooterMaxAttempts = TroubleshooterMaxAttempts,
         TesterRunInstructions = NullIfBlank(TesterRunInstructions),
         TestPortRange = PortStart is { } start && PortEnd is { } end ? new PortRangeData(start, end) : null,
         Roles = Roles
@@ -109,6 +117,7 @@ public sealed class SettingsEditModel
         CheckMinimum(errors, nameof(SettingsProfileData.MaxRetries), MaxRetries, 0);
         CheckMinimum(errors, nameof(SettingsProfileData.ParentReviewCycleLimit), ParentReviewCycleLimit, 1);
         CheckMinimum(errors, nameof(SettingsProfileData.TesterCycleLimit), TesterCycleLimit, 1);
+        CheckMinimum(errors, nameof(SettingsProfileData.TroubleshooterMaxAttempts), TroubleshooterMaxAttempts, 1);
         foreach ((AgentRole role, RoleEditModel edit) in Roles)
         {
             CheckMinimum(errors, $"Roles.{role}.{nameof(RoleSettingsOverride.TimeoutSeconds)}", edit.TimeoutSeconds, 1);

@@ -132,6 +132,17 @@ internal sealed record TestPayload(
         Issues.Select(issue => issue.ToDomain()).ToArray());
 }
 
+internal sealed record TroubleshooterPayload(
+    TroubleshooterOutcome Outcome,
+    string Summary,
+    IReadOnlyList<string> ActionsTaken,
+    string Verification,
+    IReadOnlyList<string> UserSteps,
+    IReadOnlyList<AttentionActionKind> SuggestedButtons)
+{
+    public TroubleshooterReport ToDomain() => new(Outcome, Summary, ActionsTaken, Verification, UserSteps, SuggestedButtons);
+}
+
 internal static class ReportPayloads
 {
     /// <exception cref="InvalidAgentReportException">The value is not a full commit SHA.</exception>

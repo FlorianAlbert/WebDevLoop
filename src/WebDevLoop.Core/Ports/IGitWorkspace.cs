@@ -48,6 +48,9 @@ public interface IGitWorkspace
 
     Task<IReadOnlyList<string>> GetChangedFilesAsync(GitRepositoryLocation repo, CommitSha from, CommitSha to, CancellationToken cancellationToken);
 
+    /// <summary>The newest <paramref name="count"/> commits reachable from <paramref name="tip"/>, newest first, as <c>&lt;short sha&gt; &lt;subject&gt;</c> lines.</summary>
+    Task<IReadOnlyList<string>> GetRecentCommitsAsync(GitRepositoryLocation repo, CommitSha tip, int count, CancellationToken cancellationToken);
+
     Task<PushOutcome> PushAsync(GitRepositoryLocation repo, RefPush push, CancellationToken cancellationToken);
 
     /// <summary>Never deletes dirty or locked worktrees; those are retained with a warning.</summary>

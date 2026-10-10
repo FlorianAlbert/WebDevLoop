@@ -34,6 +34,8 @@ public sealed class SettingsResolver(EffectiveSettings embeddedDefaults)
             MaxRetries = repository?.MaxRetries ?? global.MaxRetries ?? embeddedDefaults.MaxRetries,
             ParentReviewCycleLimit = repository?.ParentReviewCycleLimit ?? global.ParentReviewCycleLimit ?? embeddedDefaults.ParentReviewCycleLimit,
             TesterCycleLimit = repository?.TesterCycleLimit ?? global.TesterCycleLimit ?? embeddedDefaults.TesterCycleLimit,
+            TroubleshooterEnabled = repository?.TroubleshooterEnabled ?? global.TroubleshooterEnabled ?? embeddedDefaults.TroubleshooterEnabled,
+            TroubleshooterMaxAttempts = repository?.TroubleshooterMaxAttempts ?? global.TroubleshooterMaxAttempts ?? embeddedDefaults.TroubleshooterMaxAttempts,
             TesterRunInstructions = FirstText(repository?.TesterRunInstructions, global.TesterRunInstructions, embeddedDefaults.TesterRunInstructions),
             TestPortRange = repository?.TestPortRange ?? global.TestPortRange ?? embeddedDefaults.TestPortRange,
             Roles = Enum.GetValues<AgentRole>().ToDictionary(role => role, role => ResolveRole(role, global, repository)),

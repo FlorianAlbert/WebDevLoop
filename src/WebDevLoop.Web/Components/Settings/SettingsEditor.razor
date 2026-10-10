@@ -78,6 +78,14 @@ else if (_model is not null)
                                     Inherited="@_inherited.TesterCycleLimit.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.TesterCycleLimit))" />
                 </SectionCard>
 
+                <SectionCard Id="section-troubleshooter" Title="Troubleshooter" Description="Every attempt costs model usage.">
+                    <ChoiceOverride Field="@nameof(SettingsProfileData.TroubleshooterEnabled)" Label="@FieldLabel(nameof(SettingsProfileData.TroubleshooterEnabled))" Options="OnOffOptions"
+                                    Value="@(_model.TroubleshooterEnabled?.ToString().ToLowerInvariant())" ValueChanged="SetTroubleshooterEnabled"
+                                    Inherited="@OnOff(_inherited.TroubleshooterEnabled)" Errors="@ErrorsFor(nameof(SettingsProfileData.TroubleshooterEnabled))" />
+                    <NumberOverride Field="@nameof(SettingsProfileData.TroubleshooterMaxAttempts)" Label="@FieldLabel(nameof(SettingsProfileData.TroubleshooterMaxAttempts))" Min="1" @bind-Value="_model.TroubleshooterMaxAttempts"
+                                    Inherited="@_inherited.TroubleshooterMaxAttempts.ToString()" Errors="@ErrorsFor(nameof(SettingsProfileData.TroubleshooterMaxAttempts))" />
+                </SectionCard>
+
                 <SectionCard Id="section-tester" Title="Tester">
                     <TextOverride Field="@nameof(SettingsProfileData.TesterRunInstructions)" Label="@FieldLabel(nameof(SettingsProfileData.TesterRunInstructions))" Multiline="true" Rows="5"
                                   @bind-Value="_model.TesterRunInstructions" Inherited="@_inherited.TesterRunInstructions"
@@ -174,12 +182,15 @@ else
     [
         ("section-general", "General"),
         ("section-limits", "Concurrency & retries"),
+        ("section-troubleshooter", "Troubleshooter"),
         ("section-tester", "Tester"),
         ("section-roles", "Agent roles"),
     ];
 
     private static readonly IReadOnlyList<(string Value, string Label)> DependencyModes =
         Enum.GetValues<SpecDependencyMode>().Select(mode => (mode.ToString(), DisplayNames.For(mode))).ToArray();
+
+    private static readonly IReadOnlyList<(string Value, string Label)> OnOffOptions = [("true", "On"), ("false", "Off")];
 
     private static readonly IReadOnlyList<(string Value, string Label)> ReasoningEfforts =
         new[] { "low", "medium", "high", "xhigh" }.Select(value => (value, value)).ToArray();
@@ -197,6 +208,8 @@ else
         [nameof(SettingsProfileData.MaxRetries)] = "Max retries",
         [nameof(SettingsProfileData.ParentReviewCycleLimit)] = "Parent review cycle limit",
         [nameof(SettingsProfileData.TesterCycleLimit)] = "Tester cycle limit",
+        [nameof(SettingsProfileData.TroubleshooterEnabled)] = "Try to resolve problems automatically with an agent",
+        [nameof(SettingsProfileData.TroubleshooterMaxAttempts)] = "Troubleshooter attempts per problem",
         [nameof(SettingsProfileData.TesterRunInstructions)] = "Run instructions",
         [nameof(SettingsProfileData.TestPortRange)] = "Test port range",
     };
@@ -434,6 +447,11 @@ else
 
     private void SetDependencyMode(string? value) =>
         _model!.SpecDependencyMode = Enum.TryParse(value, out SpecDependencyMode mode) ? mode : null;
+
+    private void SetTroubleshooterEnabled(string? value) =>
+        _model!.TroubleshooterEnabled = bool.TryParse(value, out bool enabled) ? enabled : null;
+
+    private static string OnOff(bool value) => value ? "On" : "Off";
 
     private void ResetPortRange() => (_model!.PortStart, _model.PortEnd) = (null, null);
 

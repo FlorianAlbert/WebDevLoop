@@ -31,7 +31,9 @@ public static class InheritedSettings
                     entry.Value.Model,
                     entry.Value.ReasoningEffort,
                     entry.Value.PromptTemplate,
-                    (int)entry.Value.Timeout.TotalSeconds)));
+                    (int)entry.Value.Timeout.TotalSeconds)),
+            defaults.TroubleshooterEnabled,
+            defaults.TroubleshooterMaxAttempts);
     }
 
     /// <summary>What a repository inherits: the global layer over the embedded defaults.</summary>
@@ -52,6 +54,8 @@ public static class InheritedSettings
             MaxRetries = global.MaxRetries ?? baseline.MaxRetries,
             ParentReviewCycleLimit = global.ParentReviewCycleLimit ?? baseline.ParentReviewCycleLimit,
             TesterCycleLimit = global.TesterCycleLimit ?? baseline.TesterCycleLimit,
+            TroubleshooterEnabled = global.TroubleshooterEnabled ?? baseline.TroubleshooterEnabled,
+            TroubleshooterMaxAttempts = global.TroubleshooterMaxAttempts ?? baseline.TroubleshooterMaxAttempts,
             TesterRunInstructions = Text(global.TesterRunInstructions, baseline.TesterRunInstructions),
             TestPortRange = global.TestPortRange ?? baseline.TestPortRange,
             Roles = baseline.Roles.ToDictionary(entry => entry.Key, entry => Role(global.Roles?.GetValueOrDefault(entry.Key), entry.Value)),

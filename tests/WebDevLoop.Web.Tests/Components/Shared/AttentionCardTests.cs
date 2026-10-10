@@ -37,6 +37,51 @@ public sealed class AttentionCardTests
         Assert.Empty(cut.FindAll("[data-testid=attention-auto-fix]"));
     }
 
+    [Fact]
+    public void A_troubleshooter_diagnosis_is_shown_before_what_was_tried_and_its_steps_lead_the_list()
+    {
+        using var harness = new RunDetailHarness();
+        AttentionReason diagnosed = AttentionData.Full().WithDiagnosis(
+            new AttentionDiagnosis("Troubleshooter", "The database is not installed on this machine.", ["Ran dotnet test"]),
+            ["Install PostgreSQL 16."],
+            [AttentionActionKind.Skip]);
+
+        var cut = Render(harness, diagnosed, withControls: true);
+
+        Assert.Equal("The database is not installed on this machine.", cut.Find("[data-testid=attention-diagnosis]").TextContent.Trim());
+        Assert.Contains("What the Troubleshooter found", cut.Markup);
+        Assert.Contains("Troubleshooter: Ran dotnet test", cut.Find("[data-testid=attention-tried]").TextContent);
+        Assert.Equal("Install PostgreSQL 16.", cut.FindAll("[data-testid=attention-step]")[0].TextContent.Trim());
+        Assert.Equal("control-skip", cut.FindAll("[data-testid=attention-actions] button")[0].GetAttribute("data-testid"));
+        Assert.True(cut.Markup.IndexOf("attention-diagnosis", StringComparison.Ordinal) < cut.Markup.IndexOf("attention-tried", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Without_a_diagnosis_there_is_no_diagnosis_section_and_no_running_banner()
+    {
+        using var harness = new RunDetailHarness();
+
+        var cut = Render(harness, AttentionData.Full());
+
+        Assert.Empty(cut.FindAll("[data-testid=attention-diagnosis]"));
+        Assert.Empty(cut.FindAll("[data-testid=attention-troubleshooter-active]"));
+    }
+
+    [Fact]
+    public void A_running_troubleshooter_is_announced_and_the_card_says_pressing_a_button_stops_it()
+    {
+        using var harness = new RunDetailHarness();
+
+        var cut = harness.Render<AttentionCard>(p => p
+            .Add(c => c.Reason, AttentionData.Full())
+            .Add(c => c.TroubleshooterActive, true));
+
+        var banner = cut.Find("[data-testid=attention-troubleshooter-active]");
+        Assert.Equal("status", banner.GetAttribute("role"));
+        Assert.Contains("Troubleshooter agent is looking into this", banner.TextContent);
+        Assert.Contains("stops it", banner.TextContent);
+    }
+
     [Theory]
     [InlineData(AttentionCause.WebDevLoop, "WebDevLoop got stuck")]
     [InlineData(AttentionCause.You, "You need to fix something")]

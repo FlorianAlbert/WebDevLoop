@@ -226,4 +226,32 @@ public sealed class ResultContractTests
         Assert.Throws<InvalidAgentReportException>(() => new ExplorationReport(ReportStatus.Blocked, " ", []));
         Assert.Equal(["/work/notes/run1/architecture.md"], new ExplorationReport(ReportStatus.Completed, "s", ["/work/notes/run1/architecture.md"]).NotesFiles);
     }
+
+    [Fact]
+    public void resolved_troubleshooting_requires_a_verification_and_needs_user_requires_user_steps()
+    {
+        Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.Resolved, "fixed", ["reset"], " ", [], []));
+        Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.NeedsUser, "token expired", [], "", [], [AttentionActionKind.Retry]));
+        Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, " ", [], "", [], []));
+
+        var resolved = new TroubleshooterReport(TroubleshooterOutcome.Resolved, " fixed ", ["git reset --hard"], "git status is clean", [], [AttentionActionKind.Retry]);
+        var needsUser = new TroubleshooterReport(TroubleshooterOutcome.NeedsUser, "token expired", [], "", ["Sign in again"], [AttentionActionKind.Retry, AttentionActionKind.Skip]);
+        var cannotResolve = new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, "unknown failure", [], "", [], []);
+
+        Assert.Equal("git status is clean", resolved.Verification);
+        Assert.Equal(["Sign in again"], needsUser.UserSteps);
+        Assert.Equal([AttentionActionKind.Retry, AttentionActionKind.Skip], needsUser.SuggestedButtons);
+        Assert.Empty(cannotResolve.SuggestedButtons);
+    }
+
+    [Fact]
+    public void troubleshooting_rejects_blank_list_entries_missing_lists_and_repeated_buttons()
+    {
+        Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, "x", [" "], "", [], []));
+        Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, "x", null!, "", [], []));
+        Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, "x", [], "", null!, []));
+        Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, "x", [], "", [], null!));
+        Assert.Throws<InvalidAgentReportException>(() =>
+            new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, "x", [], "", [], [AttentionActionKind.Retry, AttentionActionKind.Retry]));
+    }
 }

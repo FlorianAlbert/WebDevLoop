@@ -79,6 +79,16 @@ public static class DisplayNames
                 1 => " (it already tried 1 thing)",
                 var tried => $" (it already tried {tried} things)",
             }}",
+            "AttentionTroubleshooterStarted" => "The Troubleshooter agent started looking into it",
+            "AttentionTroubleshooterFinished" => Text(payload, "outcome") switch
+            {
+                "Resolved" => Sentence(summary) ?? "The Troubleshooter agent fixed it and WebDevLoop verified the result",
+                "ClaimRejected" => "The Troubleshooter agent said it was fixed, but WebDevLoop's own check disagreed",
+                "Failed" => "The Troubleshooter agent session failed",
+                "TimedOut" => "The Troubleshooter agent ran out of time",
+                "Cancelled" => "The Troubleshooter agent session was cancelled",
+                _ => $"The Troubleshooter agent looked into it: {Sentence(summary) ?? "no diagnosis"}",
+            },
             "ControlRetry" => "You retried it",
             "ControlAutoRetry" => "WebDevLoop retried it automatically",
             "ControlSkip" => $"You skipped the ticket{Dependents(payload)}",

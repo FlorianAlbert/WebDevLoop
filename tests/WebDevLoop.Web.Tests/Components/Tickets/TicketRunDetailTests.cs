@@ -134,6 +134,34 @@ public sealed class TicketRunDetailTests
             cut.FindAll("[data-testid=attention-card] button[data-testid^=control-]").Select(button => button.GetAttribute("data-testid")));
     }
 
+    [Fact]
+    public void The_card_says_a_troubleshooter_is_working_while_its_step_runs_and_the_step_is_listed_with_its_role()
+    {
+        using var harness = HarnessWithTicket(TicketRunStatus.NeedsAttention);
+        harness.Queries.Steps.Add(Views.Step("s9", StepKind.Troubleshoot, AgentRole.Troubleshooter, StepStatus.Running));
+
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        Assert.NotEmpty(cut.FindAll("[data-testid=attention-troubleshooter-active]"));
+        Assert.Contains("Troubleshooter", cut.Find("[data-testid=step-row-s9]").TextContent);
+    }
+
+    [Fact]
+    public void A_finished_troubleshooter_shows_its_diagnosis_on_the_card_and_no_running_banner()
+    {
+        using var harness = HarnessWithTicket(TicketRunStatus.NeedsAttention);
+        harness.Queries.Replace(harness.Queries.Tickets[0] with
+        {
+            Attention = AttentionData.Full().WithDiagnosis(new AttentionDiagnosis("Troubleshooter", "A stale lock file blocks git.", ["Looked at .git"]), [], []),
+        });
+        harness.Queries.Steps.Add(Views.Step("s9", StepKind.Troubleshoot, AgentRole.Troubleshooter, StepStatus.Succeeded));
+
+        var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
+
+        Assert.Equal("A stale lock file blocks git.", cut.Find("[data-testid=attention-diagnosis]").TextContent.Trim());
+        Assert.Empty(cut.FindAll("[data-testid=attention-troubleshooter-active]"));
+    }
+
     private static RunDetailHarness HarnessWithDependents()
     {
         var harness = new RunDetailHarness();

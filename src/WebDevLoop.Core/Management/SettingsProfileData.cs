@@ -30,6 +30,10 @@ public sealed record SettingsProfileData
 
     public int? TesterCycleLimit { get; init; }
 
+    public bool? TroubleshooterEnabled { get; init; }
+
+    public int? TroubleshooterMaxAttempts { get; init; }
+
     public string? TesterRunInstructions { get; init; }
 
     public PortRangeData? TestPortRange { get; init; }

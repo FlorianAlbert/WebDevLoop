@@ -40,6 +40,8 @@ internal static class AgentReportToolFactory
             AgentReportTools.ConflictResolution, "conflict resolution result", payload => payload.ToDomain()),
         AgentRole.Tester => Create<TestPayload>(
             AgentReportTools.Test, "test result", payload => payload.ToDomain()),
+        AgentRole.Troubleshooter => Create<TroubleshooterPayload>(
+            AgentReportTools.Troubleshooting, "troubleshooting result", payload => payload.ToDomain()),
         _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown agent role."),
     };
 

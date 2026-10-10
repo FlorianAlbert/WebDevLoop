@@ -54,6 +54,22 @@ public sealed class SettingsEditModelTests
     }
 
     [Fact]
+    public void troubleshooter_values_round_trip_and_zero_attempts_is_a_local_error()
+    {
+        var original = new SettingsProfileData { TroubleshooterEnabled = false, TroubleshooterMaxAttempts = 3 };
+
+        var model = SettingsEditModel.FromData(original);
+        SettingsProfileData data = model.ToData();
+
+        Assert.Equal(original with { Roles = null }, data with { Roles = null });
+        Assert.Empty(model.LocalErrors());
+
+        model.TroubleshooterMaxAttempts = 0;
+
+        Assert.Contains(model.LocalErrors(), error => error.Field == nameof(SettingsProfileData.TroubleshooterMaxAttempts));
+    }
+
+    [Fact]
     public void a_role_with_only_one_override_keeps_the_other_fields_null()
     {
         var model = SettingsEditModel.FromData(new SettingsProfileData());

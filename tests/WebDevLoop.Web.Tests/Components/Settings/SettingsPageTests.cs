@@ -171,6 +171,95 @@ public sealed class SettingsPageTests : BunitContext
     }
 
     [Fact]
+    public async Task the_troubleshooter_switch_and_attempts_show_the_defaults_in_the_global_editor()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        Assert.Contains("Try to resolve problems automatically with an agent", Field(page, "TroubleshooterEnabled").TextContent);
+        Assert.Contains("Troubleshooter attempts per problem", Field(page, "TroubleshooterMaxAttempts").TextContent);
+        Assert.Equal("Default (On)", page.Find("[data-field='TroubleshooterEnabled'] select option[value='']").TextContent);
+        Assert.Equal("2", Placeholder(page, "TroubleshooterMaxAttempts"));
+        Assert.Contains("Every attempt costs model usage", page.Find("#section-troubleshooter").TextContent);
+    }
+
+    [Fact]
+    public async Task the_repository_troubleshooter_switch_is_inherit_on_or_off_and_shows_the_global_value()
+    {
+        _manager.Global = new SettingsProfileData { TroubleshooterEnabled = false, TroubleshooterMaxAttempts = 4 };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
+
+        Assert.Equal("Inherited", Origin(page, "TroubleshooterEnabled"));
+        Assert.Equal("Inherit (Off)", page.Find("[data-field='TroubleshooterEnabled'] select option[value='']").TextContent);
+        Assert.Equal(["Inherit (Off)", "On", "Off"], page.FindAll("[data-field='TroubleshooterEnabled'] select option").Select(option => option.TextContent).ToArray());
+        Assert.Equal("4", Placeholder(page, "TroubleshooterMaxAttempts"));
+
+        await page.Find("[data-field='TroubleshooterEnabled'] select").ChangeAsync("true");
+        await SaveAsync(page);
+
+        Assert.True(Assert.Single(_manager.SavedRepository).Data.TroubleshooterEnabled);
+    }
+
+    [Fact]
+    public async Task the_troubleshooter_values_are_saved_to_the_global_layer()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        await page.Find("[data-field='TroubleshooterEnabled'] select").ChangeAsync("false");
+        await page.Find("[data-field='TroubleshooterMaxAttempts'] input").ChangeAsync("3");
+        await SaveAsync(page);
+
+        SettingsProfileData saved = Assert.Single(_manager.SavedGlobal);
+        Assert.False(saved.TroubleshooterEnabled);
+        Assert.Equal(3, saved.TroubleshooterMaxAttempts);
+    }
+
+    [Fact]
+    public async Task zero_troubleshooter_attempts_show_a_validation_message_and_block_saving()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        await page.Find("[data-field='TroubleshooterMaxAttempts'] input").ChangeAsync("0");
+        await SaveAsync(page);
+
+        Assert.Contains(Errors(page, "TroubleshooterMaxAttempts"), error => error.Contains("Must be 1 or more"));
+        Assert.Empty(_manager.SavedGlobal);
+    }
+
+    [Fact]
+    public async Task the_troubleshooter_role_is_listed_and_editable_like_the_other_roles()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+        RoleSettings troubleshooter = SettingsTestData.Defaults.For(AgentRole.Troubleshooter);
+
+        Assert.Equal("Troubleshooter", page.Find("[data-role='Troubleshooter'] [data-testid=role-toggle]").TextContent.Trim());
+        Assert.Equal(troubleshooter.Model, Placeholder(page, "Roles.Troubleshooter.Model"));
+        Assert.Equal(((int)troubleshooter.Timeout.TotalSeconds).ToString(), Placeholder(page, "Roles.Troubleshooter.TimeoutSeconds"));
+        Assert.Contains("{attention_code}", page.Find("[data-role='Troubleshooter'] [data-testid=placeholders]").TextContent);
+        Assert.DoesNotContain("{app_url}", page.Find("[data-role='Troubleshooter'] [data-testid=placeholders]").TextContent);
+
+        await page.Find("[data-field='Roles.Troubleshooter.Model'] input").ChangeAsync("gpt-fix");
+        await page.Find("[data-field='Roles.Troubleshooter.ReasoningEffort'] select").ChangeAsync("xhigh");
+        await page.Find("[data-field='Roles.Troubleshooter.TimeoutSeconds'] input").ChangeAsync("900");
+        await SaveAsync(page);
+
+        Assert.Equal(new RoleSettingsOverride("gpt-fix", "xhigh", null, 900), Assert.Single(_manager.SavedGlobal).Roles![AgentRole.Troubleshooter]);
+    }
+
+    [Fact]
+    public async Task a_troubleshooter_prompt_with_a_placeholder_of_another_role_is_rejected()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        await page.Find("[data-field='Roles.Troubleshooter.PromptTemplate'] textarea").InputAsync("Fix {attention_code} at {app_url}");
+
+        Assert.Contains(Errors(page, "Roles.Troubleshooter.PromptTemplate"), error => error.Contains("not available for the Troubleshooter role"));
+
+        await SaveAsync(page);
+
+        Assert.Empty(_manager.SavedGlobal);
+    }
+
+    [Fact]
     public async Task role_model_reasoning_effort_and_timeout_are_editable_and_show_the_inherited_values()
     {
         IRenderedComponent<SettingsPage> page = await RenderAsync();

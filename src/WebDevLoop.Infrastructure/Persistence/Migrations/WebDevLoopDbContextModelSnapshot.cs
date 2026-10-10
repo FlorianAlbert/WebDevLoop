@@ -15,7 +15,7 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261010125622_AttentionReasons";
+    public override string LastMigrationId => "20261010150022_TroubleshooterSettings";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -364,6 +364,12 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<string>("TesterRunInstructions")
                     .HasColumnType("TEXT");
+
+                b.Property<bool?>("TroubleshooterEnabled")
+                    .HasColumnType("INTEGER");
+
+                b.Property<int?>("TroubleshooterMaxAttempts")
+                    .HasColumnType("INTEGER");
 
                 b.Property<int>("Version")
                     .IsConcurrencyToken()

@@ -24,6 +24,7 @@ public static class SettingsValidator
         RequireAtLeast(errors, nameof(profile.MaxRetries), profile.MaxRetries, MinimumRetries);
         RequireAtLeast(errors, nameof(profile.ParentReviewCycleLimit), profile.ParentReviewCycleLimit, MinimumPositiveValue);
         RequireAtLeast(errors, nameof(profile.TesterCycleLimit), profile.TesterCycleLimit, MinimumPositiveValue);
+        RequireAtLeast(errors, nameof(profile.TroubleshooterMaxAttempts), profile.TroubleshooterMaxAttempts, MinimumPositiveValue);
         ValidatePortRange(errors, profile.TestPortRange);
 
         foreach ((AgentRole role, RoleSettingsOverride roleSettings) in profile.Roles.OrderBy(entry => entry.Key))

@@ -593,6 +593,7 @@ h1, .h1, .alert, dd, .card-body, code, .attention-card, .run-controls__consequen
 .attention-card__title { margin: 0; font-size: var(--wdl-text-lg); }
 .attention-card__summary { margin: 0 0 var(--wdl-space-1); font-size: var(--wdl-text-base); font-weight: 600; }
 .attention-card__why { margin: 0 0 var(--wdl-space-3); color: color-mix(in srgb, var(--wdl-text) 80%, transparent); }
+.attention-card__diagnosis { margin: 0; white-space: pre-wrap; }
 .attention-card__heading { margin: var(--wdl-space-3) 0 var(--wdl-space-1); font-size: var(--wdl-text-sm); }
 .attention-card__list { margin: 0; padding-left: 1.25rem; }
 .attention-card__steps { margin: 0; padding-left: 1.5rem; display: grid; gap: var(--wdl-space-2); }

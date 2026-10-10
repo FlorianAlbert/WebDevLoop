@@ -28,6 +28,23 @@
     }
     else
     {
+        @if (TroubleshooterActive)
+        {
+            <div class="attention-card__auto" role="status" data-testid="attention-troubleshooter-active">
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <div>
+                    <strong>A Troubleshooter agent is looking into this…</strong>
+                    <span class="d-block quiet-note">You can wait for its result. Pressing a button below stops it.</span>
+                </div>
+            </div>
+        }
+
+        @if (Reason.Diagnosis is { } diagnosis)
+        {
+            <h3 class="attention-card__heading">What the @diagnosis.Author found</h3>
+            <p class="attention-card__diagnosis" data-testid="attention-diagnosis">@diagnosis.Summary</p>
+        }
+
         @if (HasTried)
         {
             <h3 class="attention-card__heading">What WebDevLoop already tried</h3>
@@ -112,6 +129,9 @@
 
     /// <summary>The control buttons; leave empty for a read-only card (e.g. on a step page).</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>A Troubleshooter session is still working on this item, so the user may prefer to wait for its diagnosis.</summary>
+    [Parameter] public bool TroubleshooterActive { get; set; }
 
     private string TitleId => "attention-title";
 

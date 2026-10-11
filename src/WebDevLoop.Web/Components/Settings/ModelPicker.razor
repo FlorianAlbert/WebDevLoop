@@ -2,15 +2,17 @@
 
 @if (ReadOnly)
 {
-    <ReadOnlySettingField Field="@Field" Label="Model" Value="@EffectiveValue" Errors="@Errors" />
+    <ReadOnlySettingField Field="@Field" Label="Model" Value="@EffectiveValue" IsOverridden="@(!string.IsNullOrEmpty(Value))"
+                          Inherited="@Inherited" Errors="@Errors" />
 }
 else
 {
-    <OverrideFieldFrame Field="@Field" Label="Model" Errors="@Errors">
+    <OverrideFieldFrame Field="@Field" Label="Model" IsOverridden="@(!string.IsNullOrEmpty(Value))" Inherited="@ModelLabel(Inherited)"
+                        ShowReset="@IsAvailable(Inherited)" Errors="@Errors" OnReset="Reset">
         <select id="@InputId" class="form-select @OverrideFieldFrame.InvalidClass(Errors)"
                 aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@($"{IdHint} {OverrideFieldFrame.DescribedBy(Field, Errors)}")"
                 @onchange="Changed">
-            <option value="" selected="@string.IsNullOrEmpty(Value)" disabled="@(!IsAvailable(Inherited))">Default (@ModelLabel(Inherited))</option>
+            <option value="" selected="@string.IsNullOrEmpty(Value)" disabled="@(!IsAvailable(Inherited))">@(Inherits ? "Inherit" : "Default") (@ModelLabel(Inherited))</option>
             @if (!string.IsNullOrEmpty(Value) && !IsAvailable(EffectiveValue))
             {
                 <option value="@Value" selected disabled>@Value (unavailable)</option>
@@ -25,6 +27,8 @@ else
 }
 
 @code {
+    [CascadingParameter(Name = "SettingsInherits")] public bool Inherits { get; set; } = true;
+
     [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
 
     [Parameter, EditorRequired] public IReadOnlyList<ModelCatalogEntry> Models { get; set; } = [];
@@ -56,4 +60,6 @@ else
 
     private Task Changed(ChangeEventArgs args) =>
         ValueChanged.InvokeAsync(SettingsEditModel.NullIfBlank(args.Value?.ToString()));
+
+    private Task Reset() => ValueChanged.InvokeAsync(null);
 }

@@ -2,16 +2,22 @@
 
 @if (ReadOnly)
 {
-    <ReadOnlySettingField Field="@Field" Label="Reasoning Effort" Value="@EffectiveValue" Errors="@Errors" />
+    <ReadOnlySettingField Field="@Field" Label="Reasoning Effort" Value="@EffectiveValue" IsOverridden="@(!string.IsNullOrEmpty(Value))"
+                          Inherited="@Inherited" Errors="@Errors" />
 }
 else
 {
-    <OverrideFieldFrame Field="@Field" Label="Reasoning Effort" Errors="@Errors">
+    <OverrideFieldFrame Field="@Field" Label="Reasoning Effort" IsOverridden="@(!string.IsNullOrEmpty(Value))" Inherited="@Inherited"
+                        ShowReset="@InheritedEffortSupported" Errors="@Errors" OnReset="Reset">
         <select id="@OverrideFieldFrame.InputIdFor(Field)" class="form-select w-auto @OverrideFieldFrame.InvalidClass(Errors)"
                 disabled="@(SupportedEfforts.Count == 0)"
                 aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)"
                 @onchange="Changed">
-            <option value="" selected="@(string.IsNullOrEmpty(Value) || !CurrentEffortSupported)" disabled="@(!InheritedEffortSupported || !CurrentEffortSupported)">
+            @if (!string.IsNullOrEmpty(Value) && SupportedEfforts.Count > 0 && !CurrentEffortSupported)
+            {
+                <option selected disabled>@Value (unsupported)</option>
+            }
+            <option value="" selected="@(string.IsNullOrEmpty(Value) || SupportedEfforts.Count == 0)" disabled="@(!InheritedEffortSupported)">
                 @EmptyLabel()
             </option>
             @foreach (string effort in SupportedEfforts)
@@ -27,6 +33,8 @@ else
 }
 
 @code {
+    [CascadingParameter(Name = "SettingsInherits")] public bool Inherits { get; set; } = true;
+
     [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
 
     [Parameter] public ModelCatalogEntry? Model { get; set; }
@@ -61,14 +69,16 @@ else
             return "Reasoning Effort is not supported";
         }
 
-        if (!CurrentEffortSupported || !InheritedEffortSupported)
+        if (!InheritedEffortSupported)
         {
             return "Choose a Reasoning Effort";
         }
 
-        return $"Default ({Inherited})";
+        return $"{(Inherits ? "Inherit" : "Default")} ({Inherited})";
     }
 
     private Task Changed(ChangeEventArgs args) =>
         ValueChanged.InvokeAsync(SettingsEditModel.NullIfBlank(args.Value?.ToString()));
+
+    private Task Reset() => ValueChanged.InvokeAsync(null);
 }

@@ -112,22 +112,19 @@ else if (_model is not null)
                 </SectionCard>
 
                 <SectionCard Id="section-roles" Title="Agent roles" Description="Model, reasoning effort, timeout and prompt for each agent.">
-                    @if (IsGlobal)
+                    <button type="button" class="btn btn-outline-secondary mb-3" data-testid="refresh-models" disabled="@(_refreshingModels || _isSaving)"
+                            aria-busy="@(_refreshingModels ? "true" : null)" @onclick="RefreshModelsAsync">
+                        @(_refreshingModels ? "Refreshing models..." : "Refresh models")
+                    </button>
+                    @if (_modelRefreshError is not null)
                     {
-                        <button type="button" class="btn btn-outline-secondary mb-3" data-testid="refresh-models" disabled="@(_refreshingModels || _isSaving)"
-                                aria-busy="@(_refreshingModels ? "true" : null)" @onclick="RefreshModelsAsync">
-                            @(_refreshingModels ? "Refreshing models..." : "Refresh models")
-                        </button>
-                        @if (_modelRefreshError is not null)
-                        {
-                            <div class="alert alert-warning" role="alert" data-testid="model-refresh-error">@_modelRefreshError</div>
-                        }
-                        else if (_modelsRefreshed)
-                        {
-                            <div class="text-success mb-3" role="status" data-testid="model-refresh-status">Models refreshed.</div>
-                        }
+                        <div class="alert alert-warning" role="alert" data-testid="model-refresh-error">@_modelRefreshError</div>
                     }
-                    @if (IsGlobal && !ModelsAvailable)
+                    else if (_modelsRefreshed)
+                    {
+                        <div class="text-success mb-3" role="status" data-testid="model-refresh-status">Models refreshed.</div>
+                    }
+                    @if (!ModelsAvailable)
                     {
                         <div class="alert alert-warning" role="alert" data-testid="models-unavailable">
                             Models unavailable, retry. Current Model and Reasoning Effort values are read-only.
@@ -150,23 +147,12 @@ else if (_model is not null)
                                 }
                             </button>
                             <div class="settings-role__body" id="@panelId" hidden="@(!expanded)">
-                                @if (IsGlobal)
-                                {
-                                    <ModelPicker Field="@(prefix + nameof(RoleSettingsOverride.Model))" Models="@ModelCatalog.Models"
-                                                 @bind-Value="roleModel.Model" Inherited="@inheritedRole.Model" ReadOnly="@(!ModelsAvailable)"
-                                                 Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
-                                    <ReasoningEffortPicker Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Model="@SelectedModel(roleModel, inheritedRole)"
-                                                           @bind-Value="roleModel.ReasoningEffort" Inherited="@inheritedRole.ReasoningEffort" ReadOnly="@(!ModelsAvailable)"
-                                                           Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
-                                }
-                                else
-                                {
-                                    <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.Model))" Label="Model" @bind-Value="roleModel.Model"
-                                                  Inherited="@inheritedRole.Model" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
-                                    <ChoiceOverride Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Label="Reasoning effort" Options="ReasoningEfforts"
-                                                    Value="@roleModel.ReasoningEffort" ValueChanged="value => roleModel.ReasoningEffort = value"
-                                                    Inherited="@inheritedRole.ReasoningEffort" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
-                                }
+                                <ModelPicker Field="@(prefix + nameof(RoleSettingsOverride.Model))" Models="@ModelCatalog.Models"
+                                             @bind-Value="roleModel.Model" Inherited="@inheritedRole.Model" ReadOnly="@(!ModelsAvailable)"
+                                             Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
+                                <ReasoningEffortPicker Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Model="@SelectedModel(roleModel, inheritedRole)"
+                                                       @bind-Value="roleModel.ReasoningEffort" Inherited="@inheritedRole.ReasoningEffort" ReadOnly="@(!ModelsAvailable)"
+                                                       Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
                                 <NumberOverride Field="@(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" Label="Session timeout" Unit="seconds" Min="1" @bind-Value="roleModel.TimeoutSeconds"
                                                 Inherited="@inheritedRole.TimeoutSeconds.ToString()" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" />
                                 <PromptTemplateField Role="role" Value="@(roleModel.PromptTemplate ?? string.Empty)" ValueChanged="text => roleModel.PromptTemplate = text"
@@ -229,9 +215,6 @@ else
         Enum.GetValues<SpecDependencyMode>().Select(mode => (mode.ToString(), DisplayNames.For(mode))).ToArray();
 
     private static readonly IReadOnlyList<(string Value, string Label)> OnOffOptions = [("true", "On"), ("false", "Off")];
-
-    private static readonly IReadOnlyList<(string Value, string Label)> ReasoningEfforts =
-        new[] { "low", "medium", "high", "xhigh" }.Select(value => (value, value)).ToArray();
 
     private static readonly Dictionary<string, string> FieldLabels = new()
     {
@@ -515,7 +498,7 @@ else
 
     private IEnumerable<SettingsValidationError> ReasoningEffortErrors()
     {
-        if (!IsGlobal || !ModelsAvailable)
+        if (!ModelsAvailable)
         {
             yield break;
         }

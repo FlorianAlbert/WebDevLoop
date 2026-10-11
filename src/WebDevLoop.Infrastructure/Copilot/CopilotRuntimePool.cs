@@ -55,7 +55,7 @@ internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenP
 
     public async Task<IReadOnlyList<ModelCatalogEntry>> ListModelsAsync(CancellationToken cancellationToken)
     {
-        await using CopilotRuntimeHandle handle = await AcquireAsync(null, new Dictionary<string, string>(), cancellationToken);
+        await using CopilotRuntimeHandle handle = await AcquireAsync(null, options.InheritedEnvironment(), cancellationToken);
         return await handle.Runtime.ListModelsAsync(handle.Token.Value, cancellationToken);
     }
 

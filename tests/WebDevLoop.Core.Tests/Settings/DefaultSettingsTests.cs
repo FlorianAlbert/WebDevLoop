@@ -34,6 +34,21 @@ public sealed class DefaultSettingsTests
         });
     }
 
+    [Theory]
+    [InlineData(AgentRole.Explorer, "claude-sonnet-5.5")]
+    [InlineData(AgentRole.Implementer, "claude-sonnet-5.5")]
+    [InlineData(AgentRole.ReviewerCodingStandards, "claude-opus-5.5")]
+    [InlineData(AgentRole.ReviewerSpecification, "claude-opus-5.5")]
+    [InlineData(AgentRole.ConflictResolver, "claude-sonnet-5.5")]
+    [InlineData(AgentRole.Tester, "claude-sonnet-5.5")]
+    [InlineData(AgentRole.Troubleshooter, "claude-sonnet-5.5")]
+    public void every_role_gets_its_shipped_model(AgentRole role, string expectedModel)
+    {
+        EffectiveSettings defaults = DefaultSettings.Create(new FakeTemplates(), DataRoot);
+
+        Assert.Equal(expectedModel, defaults.For(role).Model);
+    }
+
     [Fact]
     public void troubleshooter_is_enabled_with_two_attempts_and_a_high_effort_role()
     {

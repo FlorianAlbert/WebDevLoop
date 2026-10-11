@@ -26,8 +26,8 @@ public static class DefaultSettings
 
     public static TestPortRange TestPortRange { get; } = new(41000, 41999);
 
-    private const string StandardModel = "claude-sonnet-5";
-    private const string ReviewModel = "claude-opus-5";
+    private const string StandardModel = "claude-sonnet-5.5";
+    private const string ReviewModel = "claude-opus-5.5";
     private const string MediumEffort = "medium";
     private const string HighEffort = "high";
 

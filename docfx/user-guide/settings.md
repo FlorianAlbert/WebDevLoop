@@ -98,7 +98,10 @@ Every agent role has its own model, reasoning effort, session timeout and prompt
 
 The prompt template is read-only until you click **Override**. **Reset to default template** brings back the shipped text. A template with an unknown placeholder cannot be saved. If a template cannot be filled in at run time, the ticket needs attention with the code "prompt template cannot be filled in". Fix it here.
 
-Defaults for the models are chosen by WebDevLoop. Check the field for the current value.
+The shipped default Model is `claude-sonnet-5.5` for standard roles and `claude-opus-5.5` for both review roles.
+If a default is missing from your Model Catalog, the **Agent models** diagnostic tells you to choose an available Model
+in settings; WebDevLoop never substitutes one automatically. Existing stored settings and recorded step launches keep
+their Model IDs unchanged and need no migration.
 
 ## Other settings
 

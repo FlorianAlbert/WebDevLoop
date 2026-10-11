@@ -11,6 +11,9 @@
 | Step | One agent session or app action on a ticket or run, for example Implement or Review. |
 | Agent | A Copilot session with a fixed job (role). |
 | Role | The job of an agent: Explorer, Implementer, Reviewer (coding standards), Reviewer (specification), Conflict resolver, Tester or Troubleshooter. |
+| Model | An AI model an agent role can run on, identified by a stable ID and shown under a display name. |
+| Model Catalog | The set of Models currently available to the signed-in GitHub account, as reported by Copilot. |
+| Reasoning Effort | How much thinking a Model is asked to spend on a step; each Model supports its own subset of efforts. |
 | Explorer | The agent that looks at the repository before tickets start. |
 | Troubleshooter | The agent that looks into stuck tickets before you are asked. |
 | DAG | The ticket graph: tickets are nodes and "blocked by" links are arrows. It has no circles. |
@@ -41,7 +44,7 @@
 | Abort | Stop a ticket or run for good. |
 | Override | A repository setting that replaces the global value. |
 | Inherited | A repository setting that uses the global value. |
-| Diagnostic-only mode | The state where a prerequisite check failed. You can read everything but no work starts. |
+| Diagnostic-only mode | The state where a prerequisite check failed or has not run yet. Pages and settings stay reachable, but no new work starts. |
 | Prerequisite check | A test on the Health page, for example "git CLI" or "GitHub authentication". |
 | GitHub App | The app on GitHub that you sign in with. It decides which repositories WebDevLoop may reach. |
 | Current repository | The repository selected in the sidebar. It only decides what the Queue and Settings pages show. |

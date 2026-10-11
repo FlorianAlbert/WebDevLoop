@@ -51,7 +51,7 @@ Only an invalid configuration stops the process. A broken database or a failing 
 - The [public WebDevLoop GitHub App](https://github.com/apps/webdevloop) uses `https://localhost:7233/auth/github/callback`. Use the `https` launch profile for it. Installation does not replace local `GitHub:AppClientId`/`GitHub:AppClientSecret` configuration; see [GitHub App user sign-in](git-and-github.md#github-app-user-sign-in).
 - `WebDevLoopOptions.Load` validates every value and throws <xref:WebDevLoop.Web.DependencyInjection.WebDevLoopConfigurationException> with **all** problems in one message.
 - Timer values are in <xref:WebDevLoop.Web.DependencyInjection.WorkflowWorkerOptions>. The full key list with defaults is in the [README](https://github.com/FlorianAlbert/WebDevLoop#configuration).
-- Settings users change at runtime (limits, prompts, models, workspace root, test ports) are **not** here. They live in the database. See [Domain model](domain-model.md).
+- Settings users change at runtime (limits, prompts, Models, workspace root, test ports) are **not** here. They live in the database. See [Domain model](domain-model.md).
 - `StartupSettings` holds the global settings that process-wide adapters are built from (for example the workspace root). They are resolved once at startup, so a change needs a restart.
 
 ### Data directory
@@ -103,7 +103,7 @@ strings, or launch/resume configuration, and never silently substitutes or drops
 
 The Model Catalog is exposed through <xref:WebDevLoop.Core.Ports.IModelCatalog> and is held only in process memory.
 Startup fetches it using the same signed-in GitHub identity and runtime pool as agent sessions. Failed refreshes return an
-error and retain the last-known catalog, including whether a fetch ever succeeded; an empty successful listing is distinct
+error and retain the last-known Model Catalog, including whether a fetch ever succeeded; an empty successful listing is distinct
 from a never-fetched catalog. Model IDs and Reasoning Effort strings remain in the existing settings storage without a migration.
 
 All executable checks share the same process probe. On Linux, commands are launched directly using the executable name or path. On Windows, extensionless names are resolved using `PATH` and `PATHEXT`, so npm launchers such as `playwright-cli.cmd` work alongside native `.exe` tools. Explicit paths, including paths with spaces, are supported on both platforms.

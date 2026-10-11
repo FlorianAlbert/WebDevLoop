@@ -21,10 +21,19 @@ already have open sub-issues, otherwise the run needs attention (add the sub-iss
 
 Every prerequisite is checked at startup and on demand (Health page, `GET /api/prerequisites`). When one fails, the app
 still starts, in **diagnostic-only mode**: the UI, `/api/health` (`503`), `/api/prerequisites`, the read endpoints, and the
-OpenAPI document are served, mutating workflow endpoints answer `503` with the failing checks, and no workflow worker runs.
-Fix the problem and press **Re-check** on the Health page; the workflow starts as soon as the checks pass. An invalid
+OpenAPI document are served, mutating workflow endpoints answer `503` with the failing checks, and no new workflow work starts.
+Settings remain editable. If validation fails while running, new agent launches pause and in-flight steps finish.
+Fix the problem and press **Re-check** on the Health page; the workflow resumes as soon as the checks pass. An invalid
 configuration value (e.g. a non-positive interval or a malformed URL) fails fast at startup with a message
 listing every problem.
+
+The **Agent models** check runs after **GitHub authentication** and validates every role's effective Model and
+Reasoning Effort in global settings and every repository override against the **Model Catalog** available to your
+signed-in GitHub account through Copilot. A never-fetched Model Catalog, an unknown Model or an unsupported
+Reasoning Effort keeps the whole app diagnostic-only; the diagnostic names each offending role, Model and scope and
+links to Settings. Choose available values and save: validation resumes work automatically once all checks pass.
+If the Model Catalog cannot be fetched, use **Refresh models** in Settings to retry; Health's **Re-check** only
+validates the current Model Catalog.
 
 ## GitHub sign-in
 
@@ -135,7 +144,7 @@ section; `src/WebDevLoop.Web/appsettings.json` lists them with their defaults.
 | `AgentLogs:MaxEntriesPerStep`, `BatchSize`, `FlushInterval`, `PageSize` | `5000`, `50`, `00:00:01`, `1000` | Persisted live agent logs |
 
 Workflow behaviour is edited in the app (Settings page or `/api/settings`) and stored in the database: global values with
-nullable per-repository overrides for models, reasoning effort, prompt templates, timeouts, the active-spec limit, the
+nullable per-repository overrides for Models, Reasoning Effort, prompt templates, timeouts, the active-spec limit, the
 dependency mode (`WaitForMerge`/`StackOnTop`), implementer concurrency, review/retry/cycle limits, tester run
 instructions, the test port range, and the Troubleshooter switch and attempt limit. The global settings are seeded from the embedded defaults
 (including the prompt templates) on first start. The workspace root and the Copilot home are global-only and startup-scoped:
@@ -146,10 +155,24 @@ repository's local path (`PATCH /api/repos/{id}`); the startup log warns about e
 current root, and until fixed its tickets need attention. The repository
 selected in the UI is remembered across restarts (`<DataDirectory>/ui-state.json`); it is view context only and never affects scheduling.
 
-In global Settings, pick each role's Model by display name from the Model Catalog; choices also show the Model ID,
-which remains the stored value. Reasoning Effort choices follow the selected Model's supported efforts.
+In global Settings and repository overrides, pick each role's Model by display name from the Model Catalog; choices
+also show the Model ID, which remains the stored value. Reasoning Effort choices follow the effective Model's supported
+efforts and are disabled for Models without reasoning support. Repository overrides can inherit the global Model and
+Reasoning Effort independently when those inherited values are supported.
 **Refresh models** fetches current Models and re-validates settings without restarting. Without a Model Catalog,
-current Model and Reasoning Effort values are read-only with a retry message; failed refreshes keep the last-known catalog.
+current Model and Reasoning Effort values are read-only with **Models unavailable, retry**; failed refreshes keep the
+last-known Model Catalog. The Model Catalog is fetched at startup, after GitHub sign-in, after settings saves and on
+manual refresh; it is held only in memory and is not refreshed periodically.
+
+The shipped default Models are `claude-sonnet-5.5` for standard roles and `claude-opus-5.5` for review roles.
+If a default is missing from your Model Catalog, choose an available Model in Settings; no automatic substitution
+occurs. Existing stored Model IDs and recorded launches remain unchanged, with no migration.
+
+If a Model disappears during an agent launch or turn, the runner confirms its loss against a freshly fetched Model Catalog.
+The step goes to **Needs attention** with `ModelUnavailable`, new launches pause, and no retry budget is consumed.
+Use **Open Settings** on the Action needed card, choose an available Model and supported Reasoning Effort for the
+affected role, and save. Once validation passes, return to the ticket or run and press **Retry**; saving does not
+automatically retry the parked phase. See the [user guide](docfx/user-guide/needs-attention.md#modelunavailable).
 
 ## Running
 
@@ -248,10 +271,10 @@ Before the user is asked, every item that enters `NeedsAttention` goes through t
 
 ### The Troubleshooter
 
-The Troubleshooter is an agent role like the others: Settings → Agent roles has its own model, reasoning effort, timeout and
+The Troubleshooter is an agent role like the others: Settings → Agent roles has its own Model, Reasoning Effort, timeout and
 prompt template (`Resources/Prompts/Troubleshooter.md`, defaults, validation and global/per-repository inheritance work as for
 every role). Settings → Troubleshooter has **Try to resolve problems automatically with an agent** (default on; global switch
-with a per-repository override) and **Troubleshooter attempts per problem** (default 2), because every attempt costs model usage.
+with a per-repository override) and **Troubleshooter attempts per problem** (default 2), because every attempt costs Model usage.
 
 - **Which problems escalate.** The decision is encoded per reason code in `TroubleshooterEscalation` (every code has an
   explicit rule and rationale; a test fails when a code has none). Escalating: `ImplementationFailed`, `ImplementerBlocked`,
@@ -288,7 +311,7 @@ with a per-repository override) and **Troubleshooter attempts per problem** (def
   worktree is a clean checkout of the ticket branch, no commit of the branch was lost — a rewritten branch is restored —
   and, for new commits or branch problems, the branch contains the integration tip). New commits are reviewed before the work
   continues; otherwise the failed phase resumes like the user's Retry. A claim that does not hold is discarded and recorded.
-- **Visibility.** The session is a normal step (role *Troubleshooter*, kind *Troubleshoot*, model, status, log) on the ticket
+- **Visibility.** The session is a normal step (role *Troubleshooter*, kind *Troubleshoot*, Model, status, log) on the ticket
   and run pages and in the run's timeline (`AttentionTroubleshooterStarted` / `AttentionTroubleshooterFinished`). When it does
   not resolve the problem, its diagnosis, the actions it took, its steps for you and its suggested buttons populate the
   **Action needed** card ("What the Troubleshooter found", "What WebDevLoop already tried", "What you can do").

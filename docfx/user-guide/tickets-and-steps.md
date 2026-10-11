@@ -54,7 +54,7 @@ The **Steps** table lists every agent step of the ticket.
 | --- | --- |
 | Step | The kind of step. Click it to open the step page. |
 | Role | The agent role that ran it. |
-| Model | The model and reasoning effort, for example `gpt-6-luna (high)`. |
+| Model | The Model ID and Reasoning Effort, for example `claude-sonnet-5.5 (high)`. |
 | Status | Pending, Running, Succeeded, Failed, Timed out, Cancelled or Needs attention. |
 | Attempt | How many times this step was started. |
 | Review iteration | The review round of a review step. |
@@ -95,7 +95,7 @@ The header shows the status and links to the spec run and the ticket.
 
 | Section | What it shows |
 | --- | --- |
-| Details | Role, model, attempt, Copilot session, branch, worktree, prompt hash, start and end time, and the timeout. |
+| Details | Role, Model, attempt, Copilot session, branch, worktree, prompt hash, start and end time, and the timeout. |
 | Controls | Steps have no controls. Use the buttons on the ticket or run page. |
 | Role policy | What the agent was allowed to do: the allowed capabilities, the denied commands, whether it had a GitHub token, and the tool it reports with. |
 | Structured result | The report the agent sent when it finished. |

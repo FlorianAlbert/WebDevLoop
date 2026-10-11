@@ -1,6 +1,6 @@
 # Settings
 
-The Settings page controls how WebDevLoop behaves: which models the agents use, their prompts and timeouts, the limits, and how specs depend on each other.
+The Settings page controls how WebDevLoop behaves: which Models the agents use, their prompts and timeouts, the limits, and how specs depend on each other.
 
 ## Global settings and repository overrides
 
@@ -64,7 +64,7 @@ The workspace root and the Copilot base directory are read once at startup. A ch
 | Setting | Meaning | Default |
 | --- | --- | --- |
 | Try to resolve problems automatically with an agent | Turns the Troubleshooter on or off. | On |
-| Troubleshooter attempts per problem | How many sessions it may use for one problem. Every attempt costs model usage. | 2 |
+| Troubleshooter attempts per problem | How many sessions it may use for one problem. Every attempt costs Model usage. | 2 |
 
 See [Needs attention](needs-attention.md#the-troubleshooter).
 
@@ -77,7 +77,11 @@ See [Needs attention](needs-attention.md#the-troubleshooter).
 
 ## Agent roles
 
-Every agent role has its own model, reasoning effort, session timeout and prompt. Click a role to open it. A repository shows **Customized** next to roles with overrides.
+Every agent role has its own Model, Reasoning Effort, session timeout and prompt. Click a role to open it. A repository shows **Customized** next to roles with overrides.
+
+The **Model Catalog** is the set of Models currently available to your signed-in GitHub account, as reported by Copilot.
+**Reasoning Effort** controls how much thinking the Model spends on a step; each Model supports its own subset of efforts.
+See the [Glossary](glossary.md) for these terms.
 
 In global settings and repository overrides, choose a **Model** from the **Model Catalog**. Each choice shows its display name followed by
 its ID; the selected ID is also shown below the field and is what settings store. The **Reasoning Effort** dropdown
@@ -88,12 +92,9 @@ In a repository override, **Inherit** keeps following the global Model or Reason
 Effort choices follow the effective Model, whether inherited or overridden. **Reset to inherited** removes the
 override without copying the global value into repository settings; it is offered when the inherited value is supported.
 
-Use **Refresh models** to fetch newly available Models without restarting or losing unsaved changes. This also
-re-validates the configured Models and is available in both scopes. A failed refresh reports the error and keeps the last-known Model Catalog.
-With no available Models, the page says **Models unavailable, retry** and shows current Model and Reasoning Effort
-values read-only; retry with **Refresh models**. Unavailable stored or default Models are never replaced automatically.
-
-![An agent role opened in the settings](images/settings-roles.png)
+Settings stay editable in diagnostic-only mode so you can fix an **Agent models** failure. The diagnostic identifies
+every invalid role and scope; even one invalid repository override pauses new launches across the whole app.
+Save valid settings to resume automatically once every prerequisite passes. See [Health](health.md#agent-models).
 
 | Role | Job | Default timeout |
 | --- | --- | --- |
@@ -118,6 +119,21 @@ The shipped default Model is `claude-sonnet-5.5` for standard roles and `claude-
 If a default is missing from your Model Catalog, the **Agent models** diagnostic tells you to choose an available Model
 in settings; WebDevLoop never substitutes one automatically. Existing stored settings and recorded step launches keep
 their Model IDs unchanged and need no migration.
+
+### Refresh models
+
+Use **Refresh models** under **Agent roles** to fetch newly available Models without restarting or losing unsaved changes.
+It is available in global settings and repository overrides, and re-validates all configured Models and Reasoning Efforts.
+An unsaved choice does not change validation of the stored settings; click **Save settings** to apply it.
+
+The Model Catalog is fetched at startup, after GitHub sign-in, after saving settings, and on **Refresh models**.
+It is held only in memory for the current process, not saved across restarts, and is not refreshed periodically.
+**Re-check** on Health validates the current Model Catalog; it does not fetch new Models.
+
+A failed refresh reports the error and keeps the last-known Model Catalog, so a transient outage alone does not stop
+work that has already been validated. With no available Models, the page says **Models unavailable, retry** and shows
+current Model and Reasoning Effort values read-only; retry with **Refresh models**. Without a successful fetch, no new
+work starts. Unavailable stored or default Models are never replaced automatically.
 
 ## Other settings
 

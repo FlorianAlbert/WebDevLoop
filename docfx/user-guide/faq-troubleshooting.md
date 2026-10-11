@@ -5,6 +5,18 @@
 **Why can't I queue a spec? The form is disabled.**
 WebDevLoop is in diagnostic-only mode. Open [Health](health.md), fix the failed checks and click **Re-check**. The most common cause is that you are not signed in to GitHub. See [GitHub](github.md).
 
+**Health says "Agent models" failed. How do I fix it?**
+The diagnostic lists each unavailable Model or unsupported Reasoning Effort with its role and settings scope.
+Open [Settings, Agent roles](settings.md#agent-roles), select the global or repository scope, pick supported values
+from the Model Catalog and save. Check every listed scope: one invalid repository override pauses all repositories.
+Work resumes automatically when all checks pass. If no Model Catalog is available, use **Refresh models** to retry.
+See [Agent models](health.md#agent-models).
+
+**Why can't I edit the Model or Reasoning Effort?**
+With no available Models, settings show **Models unavailable, retry** and the current values read-only. Sign in to
+GitHub if needed, then use [Refresh models](settings.md#refresh-models). **Re-check** on Health only validates the
+current Model Catalog; it does not fetch it. A failed refresh keeps the last-known Model Catalog and reports the error.
+
 **The browser warns about the certificate.**
 The app uses the .NET development certificate. Trust it once with `dotnet dev-certs https --trust`.
 
@@ -68,7 +80,7 @@ After the review limit, the ticket asks for your decision. Read the findings. Sk
 **The pull requests were closed without merging.**
 The run needs attention. Reopen them and **Retry**, or abort the run and queue the spec again.
 
-**The Troubleshooter costs too much model usage.**
+**The Troubleshooter costs too much Model usage.**
 Turn it off or lower the attempts in [Settings](settings.md#troubleshooter).
 
 **An agent log shows "Permission denied".**

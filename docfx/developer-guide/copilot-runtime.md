@@ -75,7 +75,7 @@ non-empty. For a Model without reasoning support, Reasoning Effort is not applic
 This validation policy does not change the stored settings or runner contract: the runner passes the configured string
 unchanged to launch and resume configurations.
 
-The app retains immutable snapshots in memory only. Failed refreshes return the error and leave the last-known catalog
+The app retains immutable snapshots in memory only. Failed refreshes return the error and leave the last-known Model Catalog
 unchanged. Nothing is stored across process restarts, and no Model is automatically substituted. See
 [Startup and prerequisites](startup-and-prerequisites.md#prerequisites-and-readiness) for Model validation and diagnostics.
 
@@ -85,11 +85,11 @@ A Core runner builds one <xref:WebDevLoop.Core.Agents.AgentRunRequest>:
 | --- | --- |
 | `StepRunId`, `SessionId` | The step row (the session id is generated and saved before the call) |
 | `Repository` | The repository the work is for (named in auth errors) |
-| `Settings` | <xref:WebDevLoop.Core.Agents.AgentModelSettings>: model, reasoning effort, timeout (from the effective settings of the role) |
+| `Settings` | <xref:WebDevLoop.Core.Agents.AgentModelSettings>: Model, Reasoning Effort, timeout (from the effective settings of the role) |
 | `Prompt` | The prompt template rendered by Core (placeholders such as `{skills_root}` already filled) |
 | `Policy` | `RoleCapabilityPolicies.For(role, new AgentWorkspace(workingDirectory, notesDirectory))` |
 
-The result is an <xref:WebDevLoop.Core.Agents.AgentRunResult>: either a parsed `AgentReport` or one of the non-reported <xref:WebDevLoop.Core.Agents.AgentRunOutcome> values (`MissingReport`, `InvalidReport`, `TimedOut`, `Cancelled`, `AuthenticationFailed`, `SessionNotFound`, `Failed`). Core then verifies the report against Git (it never trusts it) and finishes the step.
+The result is an <xref:WebDevLoop.Core.Agents.AgentRunResult>: either a parsed `AgentReport` or one of the non-reported <xref:WebDevLoop.Core.Agents.AgentRunOutcome> values (`MissingReport`, `InvalidReport`, `TimedOut`, `Cancelled`, `AuthenticationFailed`, `SessionNotFound`, `ModelUnavailable`, `Failed`). Core then verifies the report against Git (it never trusts it) and finishes the step.
 
 ## Runtime lifecycle
 
@@ -197,11 +197,17 @@ Step by step in `CopilotAgentRunner.RunAsync` (`Copilot/CopilotAgentRunner.cs`):
 | Valid report call | `Reported` | `Reported` |
 | Report call fails validation | `Rejected` | `InvalidReport` |
 | Session goes idle without a report | `Missing` | `MissingReport` |
-| Session error event | `Errored` | `Failed` (or auth retry) |
+| Session error event | `Errored` | `Failed`, `ModelUnavailable` after confirmed Model loss, or auth retry |
 | Timeout elapsed | - (`TimeoutException`) | `TimedOut`, session aborted |
 | Caller cancelled | - | `Cancelled`, session aborted |
 
 The first event that completes the turn wins. `AbortAsync(sessionId)` aborts the in-flight turn of an active session (idempotent for unknown ones). Core calls it when a run is aborted (`ActiveWorkStopper`), when recovery finishes an interrupted step, and when a tester attempt ends.
+
+After a generic launch or turn failure, the runner refreshes the Model Catalog and re-validates readiness. Only a
+successful fresh fetch that no longer includes the configured Model returns `ModelUnavailable`. A still-listed Model
+or a failed refresh preserves ordinary failure and retry behavior. Confirmed Model loss pauses new launches and parks
+the affected step without spending retry budget; the user fixes settings and then retries through the
+[attention flow](../user-guide/needs-attention.md#modelunavailable).
 
 ## Tools and policies
 
@@ -212,7 +218,7 @@ Session config (`Copilot/Sdk/SdkSessionConfigFactory.cs`):
 | Setting | Value |
 | --- | --- |
 | Working directory | The role's workspace (ticket worktree, checkout, ...) |
-| Model, reasoning effort | From `AgentModelSettings` |
+| Model, Reasoning Effort | From `AgentModelSettings` |
 | Available tools | Built-in tools chosen from the role's capabilities, plus the role's report tool |
 | Excluded tools | All MCP tools (`mcp:*`) |
 | Skills | `EnableSkills = true`, `SkillDirectories = [<skills root>]` |
@@ -314,7 +320,7 @@ The *Copilot runtime* prerequisite checks that the file exists and runs `--versi
 | `WebDevLoop:Copilot:IdleTimeout` | `00:10:00` | Idle runtime eviction |
 | `WebDevLoop:Workflow:RuntimeMaintenanceInterval` | `00:01:00` | How often the maintenance worker runs |
 | Global setting `CopilotBaseDirectory` | `<DataDirectory>/copilot` | Copilot home; startup-scoped, global only |
-| Per-role settings (Settings page) | - | Model, reasoning effort, timeout, prompt template |
+| Per-role settings (Settings page) | - | Model, Reasoning Effort, timeout, prompt template |
 
 See [Startup and prerequisites](startup-and-prerequisites.md) for all options.
 

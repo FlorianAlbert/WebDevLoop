@@ -74,8 +74,11 @@ to no supported Reasoning Efforts. The adapter uses this typed RPC rather than `
 successful results are cached until disconnect and whose authentication is runtime-scoped. The typed RPC is marked
 experimental by the SDK, like the existing session token-provider hooks.
 
-The prerequisite check requires every configured Reasoning Effort to be in the Model's supported set when that set is
-non-empty. For a Model without reasoning support, Reasoning Effort is not applicable and the check skips the comparison.
+<xref:WebDevLoop.Core.Agents.ModelCatalogEntry> owns the Reasoning Effort support rule: selectable efforts match the
+supported set using ordinal, case-sensitive comparison, and an empty set offers no selectable effort. The prerequisite
+check, settings editor and picker share this rule. The prerequisite check and settings editor validate configured efforts
+when that set is non-empty. For a Model without reasoning support, Reasoning Effort is not applicable and validation
+skips the comparison.
 This validation policy does not change the stored settings or runner contract: the runner passes the configured string
 unchanged to launch and resume configurations.
 

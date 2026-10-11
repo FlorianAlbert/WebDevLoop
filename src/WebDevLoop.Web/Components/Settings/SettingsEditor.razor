@@ -277,9 +277,6 @@ else
     private ModelCatalogEntry? SelectedModel(RoleEditModel role, EffectiveRoleSettingsView inherited) =>
         ModelCatalog.Models.FirstOrDefault(model => model.Id == (role.Model ?? inherited.Model));
 
-    private IReadOnlyList<string> SupportedEfforts(RoleEditModel role, EffectiveRoleSettingsView inherited) =>
-        SelectedModel(role, inherited)?.SupportedReasoningEfforts ?? [];
-
     private async Task RefreshModelsAsync()
     {
         if (_refreshingModels || _isSaving)
@@ -506,9 +503,9 @@ else
         foreach ((AgentRole role, RoleEditModel edit) in _model!.Roles)
         {
             EffectiveRoleSettingsView inherited = _inherited.Roles[role];
-            IReadOnlyList<string> efforts = SupportedEfforts(edit, inherited);
+            ModelCatalogEntry? model = SelectedModel(edit, inherited);
             string effort = edit.ReasoningEffort ?? inherited.ReasoningEffort;
-            if (efforts.Count > 0 && !efforts.Contains(effort))
+            if (model is { SupportedReasoningEfforts.Count: > 0 } && !model.SupportsReasoningEffort(effort))
             {
                 yield return new SettingsValidationError($"Roles.{role}.{nameof(RoleSettingsOverride.ReasoningEffort)}",
                     $"Reasoning Effort '{effort}' is not supported by Model '{edit.Model ?? inherited.Model}'. Choose a supported effort.");

@@ -18,7 +18,7 @@ internal static class ModelSelectionValidator
                 yield return $"{scope.Name}: {role}, Model '{configured.Model}' is not in the Model Catalog.";
             }
             else if (model.SupportedReasoningEfforts.Count > 0
-                && !model.SupportedReasoningEfforts.Contains(configured.ReasoningEffort, StringComparer.Ordinal))
+                && !model.SupportsReasoningEffort(configured.ReasoningEffort))
             {
                 yield return $"{scope.Name}: {role}, Model '{configured.Model}', Reasoning Effort '{configured.ReasoningEffort}' is not supported.";
             }

@@ -5,7 +5,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using WebDevLoop.Infrastructure.GitHub.Auth;
-using WebDevLoop.Infrastructure.Prerequisites;
+using WebDevLoop.Web.Background;
 using WebDevLoop.Web.Components.Layout;
 
 namespace WebDevLoop.Web.GitHubAuth;
@@ -64,7 +64,7 @@ public static class GitHubSignInEndpoints
     private static async Task<IResult> CallbackAsync(
         HttpContext http,
         [FromServices] GitHubUserSession session,
-        [FromServices] DiagnosticReadiness readiness,
+        [FromServices] ModelCatalogReadiness models,
         [FromServices] IDataProtectionProvider protection,
         [FromQuery] string? code,
         [FromQuery] string? state,
@@ -101,7 +101,7 @@ public static class GitHubSignInEndpoints
             return FailureRedirect(exception.Message);
         }
 
-        await readiness.RefreshAsync(cancellationToken);
+        await models.RefreshAsync(cancellationToken);
         return Results.LocalRedirect(pending.ReturnUrl);
     }
 

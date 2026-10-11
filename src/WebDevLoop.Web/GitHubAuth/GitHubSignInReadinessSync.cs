@@ -1,15 +1,15 @@
 using WebDevLoop.Infrastructure.GitHub.Auth;
-using WebDevLoop.Infrastructure.Prerequisites;
+using WebDevLoop.Web.Background;
 
 namespace WebDevLoop.Web.GitHubAuth;
 
 /// <summary>
-/// Refreshes the prerequisite evaluation after every sign-in change (including a sign-in that expired during a token
-/// refresh), so the GitHub authentication check and the readiness mode follow the sign-in without a manual re-check.
+/// Re-fetches the Model Catalog and evaluates prerequisites after every sign-in change (including an expired sign-in),
+/// so readiness follows the signed-in account without a manual re-check.
 /// </summary>
 public sealed partial class GitHubSignInReadinessSync(
     IGitHubSignInState signIn,
-    DiagnosticReadiness readiness,
+    ModelCatalogReadiness models,
     ILogger<GitHubSignInReadinessSync> logger) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
@@ -30,7 +30,7 @@ public sealed partial class GitHubSignInReadinessSync(
     {
         try
         {
-            await readiness.RefreshAsync(CancellationToken.None);
+            await models.RefreshAsync(CancellationToken.None);
         }
         catch (Exception exception)
         {

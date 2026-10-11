@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Control;
+using WebDevLoop.Web.Background;
 
 namespace WebDevLoop.Web.DependencyInjection;
 
@@ -28,7 +29,8 @@ public static class WebApiServiceCollectionExtensions
     {
         services.TryAddScoped<IWorkspaceRootProvider, GlobalWorkspaceRootProvider>();
         services.TryAddScoped<IRepositoryRegistry, RepositoryRegistry>();
-        services.TryAddScoped<ISettingsManager, SettingsManager>();
+        services.TryAddScoped<SettingsManager>();
+        services.TryAddScoped<ISettingsManager, ValidatingSettingsManager>();
         services.TryAddScoped<ISpecEnqueuer, SpecEnqueuer>();
         services.TryAddSingleton(RunControlOptions.Default);
         services.TryAddScoped<RunControlJournal>();

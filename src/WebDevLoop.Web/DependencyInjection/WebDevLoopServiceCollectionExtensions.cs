@@ -25,6 +25,7 @@ public static class WebDevLoopServiceCollectionExtensions
         services.AddWebDevLoopDashboardUi();
         services.AddRazorComponents().AddInteractiveServerComponents();
         services.TryAddSingleton<IAppInitializer, AppInitializer>();
+        services.TryAddSingleton<ModelCatalogReadiness>();
         services.AddGitHubSignInReadinessSync();
         if (options.Workflow.Enabled)
         {
@@ -43,6 +44,7 @@ public static class WebDevLoopServiceCollectionExtensions
     {
         services.AddHostedService<AgentLogShutdownFlush>();
         services.AddHostedService(provider => provider.GetRequiredService<BackgroundWorkRunner>());
+        services.AddHostedService<SchedulerReadinessSync>();
         services.AddHostedService<WorkflowEventSubscriptions>();
         services.AddHostedService<RecoveryWorker>();
         services.AddHostedService<OutboxDispatchWorker>();

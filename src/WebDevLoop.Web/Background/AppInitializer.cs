@@ -45,13 +45,8 @@ public sealed partial class AppInitializer(
             await WarnAboutClonesOutsideWorkspaceRootAsync(persisted.WorkspaceRootDirectory, cancellationToken);
         }
 
-        ModelCatalogRefreshResult models = await services.GetRequiredService<IModelCatalog>().RefreshAsync(cancellationToken);
-        if (models.Error is { } modelError)
-        {
-            LogModelCatalogUnavailable(logger, modelError);
-        }
-
-        ReadinessSnapshot snapshot = await services.GetRequiredService<DiagnosticReadiness>().RefreshAsync(cancellationToken);
+        await services.GetRequiredService<ModelCatalogReadiness>().RefreshAsync(cancellationToken);
+        ReadinessSnapshot snapshot = services.GetRequiredService<DiagnosticReadiness>().Current;
         if (snapshot.Mode == ReadinessMode.Operational)
         {
             LogOperational(logger, options.ResolvedDataDirectory);
@@ -113,9 +108,6 @@ public sealed partial class AppInitializer(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Prerequisites are met (data directory {DataDirectory}); the workflow starts after startup recovery.")]
     private static partial void LogOperational(ILogger logger, string dataDirectory);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The Model Catalog could not be fetched: {Error}. The last-known catalog, if any, is retained.")]
-    private static partial void LogModelCatalogUnavailable(ILogger logger, string error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Prerequisite '{Check}' failed: {Message} Remediation: {Remediation}")]
     private static partial void LogFailedPrerequisite(ILogger logger, string check, string message, string remediation);

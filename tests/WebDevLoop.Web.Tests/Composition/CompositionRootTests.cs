@@ -93,7 +93,7 @@ public sealed class CompositionRootTests
         Type[] workers = [.. host.Services.GetServices<IHostedService>().Select(service => service.GetType()).Where(type => type.Namespace == typeof(BackgroundWorkRunner).Namespace)];
 
         Assert.Equal(
-            [typeof(AgentLogShutdownFlush), typeof(BackgroundWorkRunner), typeof(WorkflowEventSubscriptions), typeof(RecoveryWorker), typeof(OutboxDispatchWorker),
+            [typeof(AgentLogShutdownFlush), typeof(BackgroundWorkRunner), typeof(SchedulerReadinessSync), typeof(WorkflowEventSubscriptions), typeof(RecoveryWorker), typeof(OutboxDispatchWorker),
              typeof(MergeTrackingWorker), typeof(CopilotRuntimeMaintenanceWorker), typeof(OutboxRetentionWorker)],
             workers);
     }

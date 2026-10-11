@@ -7,12 +7,184 @@ using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Infrastructure.Prerequisites;
+using WebDevLoop.Web.Background;
 
 namespace WebDevLoop.Web.Tests.Workflow;
 
 public sealed class ModelCatalogScenarioTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task manual_refresh_pauses_on_model_loss_and_resumes_when_the_catalog_is_valid_again()
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        await using var host = new WorkflowHost(scenario);
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        SchedulerStartGate gate = host.Services.GetRequiredService<SchedulerStartGate>();
+        await gate.WaitUntilOpenAsync(Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        ModelCatalogReadiness models = host.Services.GetRequiredService<ModelCatalogReadiness>();
+        var available = host.Models.Models;
+        host.Models.Models = [];
+
+        Assert.True((await models.RefreshAsync(Ct)).Succeeded);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/health", Ct)).StatusCode);
+        Assert.False(gate.IsOpen);
+        Assert.Empty(scenario.Journal.Calls);
+        host.Models.Models = available;
+
+        Assert.True((await models.RefreshAsync(Ct)).Succeeded);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/health", Ct)).StatusCode);
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Contains(scenario.Journal.Calls, call => call.Role == AgentRole.Implementer);
+    }
+
+    [Fact]
+    public async Task github_sign_in_refetches_models_and_revalidates_before_resuming_work()
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        await using var host = new WorkflowHost(scenario);
+        host.SignIn.Login = null;
+        host.Models.Failure = "Nobody is signed in.";
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/health", Ct)).StatusCode);
+
+        host.Models.Failure = null;
+        host.SignIn.ChangeLogin("test-user");
+        await api.WaitForHealthStatusAsync(HttpStatusCode.OK);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Contains(scenario.Journal.Calls, call => call.Role == AgentRole.Implementer);
+    }
+
+    [Fact]
+    public async Task a_retry_within_an_in_flight_phase_waits_for_model_validation_to_pass()
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        var script = new AgentScript();
+        script.HangingImplementers.Add(101);
+        script.FailFirstImplementation.Add(101);
+        await using var host = new WorkflowHost(scenario, script);
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await script.HangingImplementerStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        using HttpResponseMessage invalid = await client.PutAsJsonAsync("/api/settings/global", new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride>
+            {
+                [AgentRole.Implementer] = new() { Model = "unavailable-model" },
+            },
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+        int launches = scenario.Journal.Calls.Count;
+        script.ReleaseHangingImplementer.TrySetResult();
+        await api.WaitForTicketStepStatusAsync(run, nameof(StepStatus.Failed));
+        await Task.Delay(TimeSpan.FromMilliseconds(750), Ct);
+        Assert.Equal(launches, scenario.Journal.Calls.Count);
+        Assert.Equal(0, scenario.Journal.ActiveImplementers);
+
+        using HttpResponseMessage fixedSettings = await client.PutAsJsonAsync("/api/settings/global", new SettingsProfileData(), Ct);
+        Assert.Equal(HttpStatusCode.OK, fixedSettings.StatusCode);
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Equal(2, scenario.Journal.Calls.Count(call => call.Role == AgentRole.Implementer));
+    }
+
+    [Fact]
+    public async Task in_flight_steps_finish_when_validation_fails_and_pending_work_resumes_after_settings_are_fixed()
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        var script = new AgentScript();
+        script.HangingImplementers.Add(101);
+        await using var host = new WorkflowHost(scenario, script);
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await script.HangingImplementerStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        using HttpResponseMessage invalid = await client.PutAsJsonAsync("/api/settings/global", new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride>
+            {
+                [AgentRole.ReviewerCodingStandards] = new() { Model = "unavailable-model" },
+            },
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/health", Ct)).StatusCode);
+        int launches = scenario.Journal.Calls.Count;
+        script.ReleaseHangingImplementer.TrySetResult();
+        await api.WaitForTicketStatusAsync(run, 101, nameof(TicketRunStatus.Implementing), untilDifferent: true);
+        await Task.Delay(TimeSpan.FromMilliseconds(750), Ct);
+        Assert.Equal(launches, scenario.Journal.Calls.Count);
+        Assert.Equal(0, scenario.Journal.ActiveImplementers);
+        JsonElement ticket = Assert.Single(await api.TicketsAsync(run));
+        Assert.Equal(nameof(TicketRunStatus.Reviewing), ticket.GetProperty("status").GetString());
+
+        using HttpResponseMessage fixedSettings = await client.PutAsJsonAsync("/api/settings/global", new SettingsProfileData(), Ct);
+        Assert.Equal(HttpStatusCode.OK, fixedSettings.StatusCode);
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Single(scenario.Journal.Calls, call => call.Role == AgentRole.Implementer);
+        Assert.Contains(scenario.Journal.Calls, call => call.Role == AgentRole.ReviewerCodingStandards);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task fixing_settings_reopens_the_gate_and_resumes_work_without_restarting(bool repositoryOverride)
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        await using var host = new WorkflowHost(scenario);
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        SchedulerStartGate gate = host.Services.GetRequiredService<SchedulerStartGate>();
+        await gate.WaitUntilOpenAsync(Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        string settingsUrl = repositoryOverride ? $"/api/repos/{repositoryId}/settings" : "/api/settings/global";
+
+        using HttpResponseMessage invalid = await client.PutAsJsonAsync(settingsUrl, new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride>
+            {
+                [AgentRole.Implementer] = new() { Model = "unavailable-model" },
+            },
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, invalid.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/health", Ct)).StatusCode);
+        Assert.False(gate.IsOpen);
+        Assert.Empty(scenario.Journal.Calls);
+
+        host.Models.Models = [.. host.Models.Models, new("replacement-model", "Replacement Model", ["high"])];
+        using HttpResponseMessage fixedSettings = await client.PutAsJsonAsync(settingsUrl, new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride>
+            {
+                [AgentRole.Implementer] = new() { Model = "replacement-model" },
+            },
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, fixedSettings.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/health", Ct)).StatusCode);
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Contains(scenario.Journal.Calls, call => call.Role == AgentRole.Implementer);
+    }
 
     [Theory]
     [InlineData(false)]
@@ -314,10 +486,9 @@ public sealed class ModelCatalogScenarioTests
         host.Models.Models = [];
         host.Models.Failure = "Transient Copilot outage.";
 
-        ModelCatalogRefreshResult refreshed = await host.Models.Catalog.RefreshAsync(Ct);
+        ModelCatalogRefreshResult refreshed = await host.Services.GetRequiredService<ModelCatalogReadiness>().RefreshAsync(Ct);
         Assert.False(refreshed.Succeeded);
         Assert.Equal("Transient Copilot outage.", refreshed.Error);
-        await host.Services.GetRequiredService<DiagnosticReadiness>().RefreshAsync(Ct);
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/health", Ct)).StatusCode);
         Assert.True(host.Models.Catalog.HasFetched);

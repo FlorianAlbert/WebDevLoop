@@ -6,7 +6,7 @@ The rule: **the app is the coordinator, agents are workers.** An agent edits fil
 
 ## Roles
 
-<xref:WebDevLoop.Core.Domain.AgentRole> has seven roles. Each one is a separate Copilot session with its own model, reasoning effort, timeout and prompt template (settings can override them per repository).
+<xref:WebDevLoop.Core.Domain.AgentRole> has seven roles. Each one is a separate Copilot session with its own Model, Reasoning Effort, timeout and prompt template (settings can override them per repository).
 
 | Role | Step kind | Run by | Works in | What it does |
 | --- | --- | --- | --- | --- |
@@ -20,7 +20,7 @@ The rule: **the app is the coordinator, agents are workers.** An agent edits fil
 
 The two reviewers run **concurrently** and never see each other's results. The same two roles review tickets and the final integration branch; only the scope differs (`ReviewScope.Ticket` or `ReviewScope.ParentSpec`).
 
-Default models, reasoning effort and timeouts per role are in <xref:WebDevLoop.Core.Settings.DefaultSettings> and are seeded into the global settings on first start.
+Default Models, Reasoning Efforts and timeouts per role are in <xref:WebDevLoop.Core.Settings.DefaultSettings> and are seeded into the global settings on first start.
 
 ## Life of one agent turn
 
@@ -45,7 +45,7 @@ sequenceDiagram
     R->>DB: finish step with StructuredResultJson, change state, append event
 ```
 
-Everything the runner needs is in <xref:WebDevLoop.Core.Agents.AgentRunRequest>: step id, session id, repository, model settings, the rendered prompt, and the <xref:WebDevLoop.Core.Agents.RoleCapabilityPolicy>. The result is <xref:WebDevLoop.Core.Agents.AgentRunResult>.
+Everything the runner needs is in <xref:WebDevLoop.Core.Agents.AgentRunRequest>: step id, session id, repository, Model settings, the rendered prompt, and the <xref:WebDevLoop.Core.Agents.RoleCapabilityPolicy>. The result is <xref:WebDevLoop.Core.Agents.AgentRunResult>.
 
 | <xref:WebDevLoop.Core.Agents.AgentRunOutcome> | Meaning | Typical runner reaction |
 | --- | --- | --- |
@@ -56,9 +56,15 @@ Everything the runner needs is in <xref:WebDevLoop.Core.Agents.AgentRunRequest>:
 | `Cancelled` | Abort or shutdown | Step `Cancelled` |
 | `AuthenticationFailed` | Copilot token rejected twice (runtime replaced once) | Fail; needs attention |
 | `SessionNotFound` | Resume found no session | Start a fresh session |
+| `ModelUnavailable` | A successful fresh Model Catalog fetch confirms the configured Model is missing | Needs attention; pause new launches, consume no retry budget |
 | `Failed` | Anything else | Retry in a fresh session |
 
 Runners retry failed turns up to `MaxRetries` (so `MaxRetries + 1` attempts) in **fresh sessions**. The session id comes from the step id (`webdevloop-<step id>`) and is saved before the work starts, so a restart resumes the same session.
+
+`ModelUnavailable` is the exception to ordinary retry behavior: runners park the affected step and phase immediately.
+The Action needed card offers **Open Settings**, then the user returns to press **Retry** after Model and Reasoning
+Effort validation passes. A still-listed Model or a failed refresh retains ordinary failure behavior. See
+[Domain model](domain-model.md#attention) and the [user recovery flow](../user-guide/needs-attention.md#modelunavailable).
 
 See [Copilot runtime](copilot-runtime.md) for the runtime pool, authentication and SDK adapter.
 

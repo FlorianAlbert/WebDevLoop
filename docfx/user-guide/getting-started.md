@@ -69,6 +69,12 @@ Until you sign in, every page shows a **Sign in with GitHub** banner, and WebDev
 2. Authorize the App on GitHub. You come back to WebDevLoop.
 3. Open [Health](health.md). All checks should say **Passed** and the readiness mode should say **Operational**. If a check fails, the page shows a **Fix** hint.
 
+Sign-in fetches your **Model Catalog** and validates the configured Models and Reasoning Efforts. If **Agent models**
+fails because a shipped default is unavailable to your account, open [Settings, Agent roles](settings.md#agent-roles),
+pick an available Model and supported Reasoning Effort for each affected role, and save. WebDevLoop keeps settings
+reachable in diagnostic-only mode and becomes operational automatically once all checks pass; it never substitutes
+a different Model for you. If the Model Catalog could not be fetched, retry with [Refresh models](settings.md#refresh-models).
+
 ## Register your first repository
 
 1. Open [Repositories](repositories.md) and click **Add repository**.
@@ -93,4 +99,4 @@ By default one spec per repository runs at a time. More specs wait in the queue.
 
 - Learn the screens: [Dashboard](dashboard.md), [Queue](queue.md), [Spec runs](runs.md).
 - If a run stops, read [Needs attention](needs-attention.md).
-- Tune models and limits in [Settings](settings.md).
+- Tune Models and limits in [Settings](settings.md).

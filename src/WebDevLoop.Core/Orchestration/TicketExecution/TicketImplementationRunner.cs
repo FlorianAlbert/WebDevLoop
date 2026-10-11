@@ -280,6 +280,9 @@ public sealed class TicketImplementationRunner(
                 return new Verdict(StepStatus.Cancelled, ImplementationOutcome.Cancelled, run.FailureReason, null);
             case { Outcome: AgentRunOutcome.TimedOut }:
                 return Verdict.Retryable(StepStatus.TimedOut, run.FailureReason!, null);
+            case { Outcome: AgentRunOutcome.ModelUnavailable }:
+                return new Verdict(StepStatus.NeedsAttention, ImplementationOutcome.Failed, run.FailureReason, null,
+                    Attention: AttentionReasons.ModelUnavailable(run.FailureReason!));
             default:
                 return Verdict.Retryable(StepStatus.Failed, run.FailureReason!, null);
         }

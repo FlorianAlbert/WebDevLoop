@@ -60,6 +60,7 @@ public sealed class TroubleshooterStageTests : IDisposable
 
     [Theory]
     [InlineData(AttentionCode.PromptNotRenderable)]
+    [InlineData(AttentionCode.ModelUnavailable)]
     [InlineData(AttentionCode.ReviewIterationsExhausted)]
     [InlineData(AttentionCode.IntegrationBranchMoved)]
     [InlineData(AttentionCode.StackBranchExists)]

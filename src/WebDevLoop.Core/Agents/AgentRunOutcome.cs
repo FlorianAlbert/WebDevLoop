@@ -19,4 +19,7 @@ public enum AgentRunOutcome
     SessionNotFound,
 
     Failed,
+
+    /// <summary>A freshly fetched Model Catalog confirmed that the requested Model is unavailable.</summary>
+    ModelUnavailable,
 }

@@ -67,6 +67,8 @@ public sealed class CompositionRootTests
             AttentionCode.TicketHasNoChanges,
         ];
         Assert.Equal(expected.Order(), remediated);
+        Assert.DoesNotContain(AttentionCode.ModelUnavailable, remediated);
+        Assert.False(TroubleshooterEscalation.For(AttentionCode.ModelUnavailable).Escalates);
     }
 
     [Fact]

@@ -60,4 +60,7 @@ public enum AttentionCode
 
     /// <summary>Stored before reasons were structured, or created by an older version; only used to render such rows.</summary>
     Unclassified,
+
+    /// <summary>The step's Model is no longer available in a freshly fetched Model Catalog.</summary>
+    ModelUnavailable,
 }

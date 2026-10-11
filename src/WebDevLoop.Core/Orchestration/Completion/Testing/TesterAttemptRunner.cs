@@ -82,6 +82,7 @@ public sealed class TesterAttemptRunner(
 
         return verdict switch
         {
+            { Attention: { } attention } => new TesterAttempt(TesterAttemptOutcome.ModelUnavailable, step.Id, Failure: verdict.Failure, Attention: attention),
             { Report: { } report } => new TesterAttempt(TesterAttemptOutcome.Reported, step.Id, report),
             { Status: StepStatus.Cancelled } => new TesterAttempt(TesterAttemptOutcome.Cancelled, step.Id, Failure: verdict.Failure),
             _ => new TesterAttempt(TesterAttemptOutcome.Failed, step.Id, Failure: verdict.Failure),
@@ -257,6 +258,8 @@ public sealed class TesterAttemptRunner(
         { Report: { } other } => new Verdict(StepStatus.Failed, null, $"The tester returned an unexpected {other.GetType().Name}."),
         { Outcome: AgentRunOutcome.Cancelled } => new Verdict(StepStatus.Cancelled, null, result.FailureReason),
         { Outcome: AgentRunOutcome.TimedOut } => new Verdict(StepStatus.TimedOut, null, result.FailureReason),
+        { Outcome: AgentRunOutcome.ModelUnavailable } => new Verdict(StepStatus.NeedsAttention, null, result.FailureReason,
+            AttentionReasons.ModelUnavailable(result.FailureReason!, forTicket: false)),
         _ => new Verdict(StepStatus.Failed, null, result.FailureReason),
     };
 
@@ -309,7 +312,7 @@ public sealed class TesterAttemptRunner(
     {
         DateTimeOffset now = clock.UtcNow;
         string? resultJson = verdict.Report is { } report ? TestStepRecord.From(context.Spec.TestCycle, context.Head, report).ToJson() : null;
-        step.Finish(verdict.Status, now, resultJson, verdict.Failure);
+        StepRunConclusion.Finish(step, verdict.Status, verdict.Attention, resultJson, verdict.Failure, now);
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, null, step.Id, step.Status, now));
     }
 
@@ -322,5 +325,5 @@ public sealed class TesterAttemptRunner(
     private sealed record Claim(RoleSettings Role, StepRun? Step = null, TestLease? Lease = null, string? Prompt = null, TesterAttempt? Failure = null);
 
     /// <param name="Report">The accepted report; null when the step did not succeed.</param>
-    private sealed record Verdict(StepStatus Status, TestReport? Report, string? Failure);
+    private sealed record Verdict(StepStatus Status, TestReport? Report, string? Failure, AttentionReason? Attention = null);
 }

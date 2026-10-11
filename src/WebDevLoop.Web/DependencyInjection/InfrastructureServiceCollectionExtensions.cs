@@ -121,7 +121,10 @@ public static class InfrastructureServiceCollectionExtensions
             },
             skills));
         services.TryAddSingleton<IAgentRunner>(provider => new GatedAgentRunner(
-            provider.GetRequiredService<CopilotAgentServices>().Runner,
+            new ModelAwareAgentRunner(
+                provider.GetRequiredService<CopilotAgentServices>().Runner,
+                provider.GetRequiredService<ModelCatalogReadiness>(),
+                provider.GetRequiredService<ILogger<ModelAwareAgentRunner>>()),
             provider.GetRequiredService<SchedulerStartGate>()));
         services.TryAddSingleton<ICopilotRuntimePool>(provider => provider.GetRequiredService<CopilotAgentServices>().RuntimePool);
         services.TryAddSingleton<IModelCatalog>(provider => provider.GetRequiredService<CopilotAgentServices>().ModelCatalog);

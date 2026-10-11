@@ -11,11 +11,11 @@ internal sealed class WorkflowApi(HttpClient client, CapturedLogs? logs = null)
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public async Task<int> RegisterRepositoryAsync(WorkflowScenario scenario)
+    public async Task<int> RegisterRepositoryAsync(WorkflowScenario scenario, string? localPath = null)
     {
         using HttpResponseMessage response = await client.PostAsJsonAsync(
             "/api/repos",
-            new { owner = scenario.Issues.Repository.Owner, name = scenario.Issues.Repository.Name, cloneUrl = scenario.Sandbox.RemotePath },
+            new { owner = scenario.Issues.Repository.Owner, name = scenario.Issues.Repository.Name, cloneUrl = scenario.Sandbox.RemotePath, localPath },
             Ct);
         await EnsureAsync(response, HttpStatusCode.Created);
         return (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetInt32();
@@ -87,6 +87,37 @@ internal sealed class WorkflowApi(HttpClient client, CapturedLogs? logs = null)
 
             await Task.Delay(PollInterval, deadline.Token);
         }
+    }
+
+    public async Task<JsonElement> WaitForStepStatusAsync(string stepId, string status)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            JsonElement step = await GetAsync($"/api/steps/{stepId}");
+            string? current = step.GetProperty("status").GetString();
+            if (current == status)
+            {
+                return step;
+            }
+
+            Assert.True(current is "Pending" or "Running", $"Step {stepId} ended without reaching {status}: {step}");
+            await Task.Delay(PollInterval, deadline.Token);
+        }
+    }
+
+    public async Task<JsonElement> WaitForStepOwnerStatusAsync(JsonElement step, string status)
+    {
+        string runId = step.GetProperty("specRunId").GetString()!;
+        if (step.GetProperty("ticketRunId").GetString() is { } ticketId)
+        {
+            JsonElement ticket = await GetAsync($"/api/ticket-runs/{ticketId}");
+            await WaitForTicketStatusAsync(runId, ticket.GetProperty("issueNumber").GetInt32(), status);
+            return await GetAsync($"/api/ticket-runs/{ticketId}");
+        }
+
+        return await WaitForStatusAsync(runId, status, TimeSpan.FromSeconds(10));
     }
 
     /// <summary>Polls the run until it reaches <paramref name="status"/>; fails fast with the run's state when it needs attention.</summary>

@@ -1,0 +1,74 @@
+@using WebDevLoop.Core.Agents
+
+@if (ReadOnly)
+{
+    <ReadOnlySettingField Field="@Field" Label="Reasoning Effort" Value="@EffectiveValue" Errors="@Errors" />
+}
+else
+{
+    <OverrideFieldFrame Field="@Field" Label="Reasoning Effort" Errors="@Errors">
+        <select id="@OverrideFieldFrame.InputIdFor(Field)" class="form-select w-auto @OverrideFieldFrame.InvalidClass(Errors)"
+                disabled="@(SupportedEfforts.Count == 0)"
+                aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)"
+                @onchange="Changed">
+            <option value="" selected="@(string.IsNullOrEmpty(Value) || !CurrentEffortSupported)" disabled="@(!InheritedEffortSupported || !CurrentEffortSupported)">
+                @EmptyLabel()
+            </option>
+            @foreach (string effort in SupportedEfforts)
+            {
+                <option value="@effort" selected="@(effort == Value)">@effort</option>
+            }
+        </select>
+        @if (SupportedEfforts.Count > 0 && !CurrentEffortSupported)
+        {
+            <div class="form-text text-warning" role="alert">Current Reasoning Effort '@EffectiveValue' is not supported by this Model. Choose a supported effort.</div>
+        }
+    </OverrideFieldFrame>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
+
+    [Parameter] public ModelCatalogEntry? Model { get; set; }
+
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Inherited { get; set; } = string.Empty;
+
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private string EffectiveValue => Value ?? Inherited;
+
+    private IReadOnlyList<string> SupportedEfforts => Model?.SupportedReasoningEfforts ?? [];
+
+    private bool InheritedEffortSupported => SupportedEfforts.Contains(Inherited);
+
+    private bool CurrentEffortSupported => SupportedEfforts.Contains(EffectiveValue);
+
+    private string EmptyLabel()
+    {
+        if (Model is null)
+        {
+            return "Select an available Model";
+        }
+
+        if (SupportedEfforts.Count == 0)
+        {
+            return "Reasoning Effort is not supported";
+        }
+
+        if (!CurrentEffortSupported || !InheritedEffortSupported)
+        {
+            return "Choose a Reasoning Effort";
+        }
+
+        return $"Default ({Inherited})";
+    }
+
+    private Task Changed(ChangeEventArgs args) =>
+        ValueChanged.InvokeAsync(SettingsEditModel.NullIfBlank(args.Value?.ToString()));
+}

@@ -1,23 +1,46 @@
 using AngleSharp.Dom;
 using Bunit;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
-using Microsoft.AspNetCore.Components;
+using WebDevLoop.Infrastructure.Prerequisites;
+using WebDevLoop.Web.Background;
 using WebDevLoop.Web.Components.Repositories;
 using WebDevLoop.Web.Components.Settings;
+using WebDevLoop.Web.Tests.Api;
+using WebDevLoop.Web.Tests.Workflow;
 
 namespace WebDevLoop.Web.Tests.Components.Settings;
 
 public sealed class SettingsPageTests : BunitContext
 {
     private readonly RecordingSettingsManager _manager = new();
+    private readonly ScriptedModelCatalog _catalog = new()
+    {
+        Models =
+        [
+            new("claude-sonnet-5.5", "Claude Sonnet 5.5", ["medium", "high"]),
+            new("claude-opus-5.5", "Claude Opus 5.5", ["medium", "high"]),
+            new("gpt-test", "Test Model", ["low"]),
+            new("gpt-fix", "Fix Model", ["xhigh"]),
+        ],
+    };
 
-    private async Task<IRenderedComponent<SettingsPage>> RenderAsync(int? repositoryId = null, string? query = null, int? currentRepositoryId = null)
+    private async Task<IRenderedComponent<SettingsPage>> RenderAsync(int? repositoryId = null, string? query = null, int? currentRepositoryId = null, bool fetchCatalog = true)
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
         Services.AddSingleton<ISettingsManager>(_manager);
+        if (fetchCatalog)
+        {
+            await _catalog.Catalog.RefreshAsync(CancellationToken.None);
+        }
+
+        Services.AddSingleton<IModelCatalog>(_catalog.Catalog);
+        Services.AddSingleton(new DiagnosticReadiness(new FakePrerequisiteValidator(), new FakeClock()));
+        Services.AddSingleton<ModelCatalogReadiness>();
         Services.AddSingleton<WebDevLoop.Core.Queries.IRepositoryQueries>(new StubRepositoryQueries());
         Services.AddSingleton(SettingsTestData.Defaults);
         CurrentRepositorySelection selection = new();
@@ -48,6 +71,250 @@ public sealed class SettingsPageTests : BunitContext
         Field(page, field).QuerySelectorAll("[data-testid=error]").Select(error => error.TextContent.Trim()).ToArray();
 
     private static Task SaveAsync(IRenderedComponent<SettingsPage> page) => page.Find("[data-testid=save]").ClickAsync();
+
+    [Fact]
+    public async Task the_global_model_dropdown_shows_display_names_and_ids_and_saves_the_model_id()
+    {
+        _catalog.Models =
+        [
+            new("claude-sonnet-5.5", "Claude Sonnet 5.5", ["medium", "high"]),
+            new("model-preview", "Preview Model", ["medium"]),
+        ];
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        foreach (AgentRole role in Enum.GetValues<AgentRole>())
+        {
+            IElement option = page.Find($"[data-field='Roles.{role}.Model'] select option[value='model-preview']");
+            Assert.Equal("Preview Model (model-preview)", option.TextContent);
+        }
+
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("model-preview");
+        Assert.Equal("Model ID: model-preview", Field(page, "Roles.Tester.Model").QuerySelector(".form-text")!.TextContent);
+        await SaveAsync(page);
+
+        Assert.Equal("model-preview", Assert.Single(_manager.SavedGlobal).Roles![AgentRole.Tester].Model);
+    }
+
+    [Fact]
+    public async Task reasoning_effort_choices_follow_the_selected_model_and_save_a_supported_effort()
+    {
+        _catalog.Models =
+        [
+            new("claude-sonnet-5.5", "Claude Sonnet 5.5", ["medium", "high"]),
+            new("focused-model", "Focused Model", ["low"]),
+        ];
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        Assert.Equal(["medium", "high"], EffortChoices(page));
+
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("focused-model");
+
+        Assert.Equal(["low"], EffortChoices(page));
+
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("low");
+        await SaveAsync(page);
+
+        Assert.Equal(new RoleSettingsOverride("focused-model", "low"), Assert.Single(_manager.SavedGlobal).Roles![AgentRole.Tester]);
+    }
+
+    private static string[] EffortChoices(IRenderedComponent<SettingsPage> page) =>
+        page.FindAll("[data-field='Roles.Tester.ReasoningEffort'] select option")
+            .Where(option => !string.IsNullOrEmpty(option.GetAttribute("value")))
+            .Select(option => option.GetAttribute("value")!).ToArray();
+
+    [Fact]
+    public async Task a_model_without_reasoning_support_disables_the_effort_field_without_replacing_stored_values()
+    {
+        _catalog.Models = [new("basic-model", "Basic Model", [])];
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("basic-model", "high") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        Assert.True(page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").HasAttribute("disabled"));
+        Assert.Empty(EffortChoices(page));
+
+        await MakeDirtyAsync(page);
+        await SaveAsync(page);
+
+        Assert.Equal(new RoleSettingsOverride("basic-model", "high"), Assert.Single(_manager.SavedGlobal).Roles![AgentRole.Tester]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task without_a_catalog_current_model_and_effort_are_read_only_and_other_settings_remain_editable(bool fetchedEmptyCatalog)
+    {
+        _catalog.Models = [];
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("stored-model", "xhigh") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(fetchCatalog: fetchedEmptyCatalog);
+
+        Assert.Contains("Models unavailable, retry", page.Find("[data-testid=models-unavailable]").TextContent);
+        IElement model = page.Find("[data-field='Roles.Tester.Model'] input");
+        IElement effort = page.Find("[data-field='Roles.Tester.ReasoningEffort'] input");
+        Assert.True(model.HasAttribute("readonly"));
+        Assert.True(effort.HasAttribute("readonly"));
+        Assert.Equal("stored-model", model.GetAttribute("value"));
+        Assert.Equal("xhigh", effort.GetAttribute("value"));
+        Assert.Equal("claude-sonnet-5.5", page.Find("[data-field='Roles.Implementer.Model'] input").GetAttribute("value"));
+        Assert.True(page.Find("[data-testid=save]").HasAttribute("disabled"));
+
+        await MakeDirtyAsync(page);
+        await SaveAsync(page);
+
+        SettingsProfileData saved = Assert.Single(_manager.SavedGlobal);
+        Assert.Equal("edited", saved.BaseBranch);
+        Assert.Equal(new RoleSettingsOverride("stored-model", "xhigh"), saved.Roles![AgentRole.Tester]);
+        Assert.False(saved.Roles.ContainsKey(AgentRole.Implementer));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task refresh_models_picks_up_new_models_without_restarting_or_discarding_unsaved_changes(bool fetchedCatalog)
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync(fetchCatalog: fetchedCatalog);
+        await MakeDirtyAsync(page);
+        _catalog.Models =
+        [
+            new("claude-sonnet-5.5", "Claude Sonnet 5.5", ["medium", "high"]),
+            new("new-model", "New Model", ["medium"]),
+        ];
+
+        await page.Find("[data-testid=refresh-models]").ClickAsync();
+
+        Assert.Equal("Refresh models", page.Find("[data-testid=refresh-models]").TextContent.Trim());
+        Assert.Equal("New Model (new-model)", page.Find("[data-field='Roles.Tester.Model'] select option[value='new-model']").TextContent);
+        Assert.Empty(page.FindAll("[data-testid=models-unavailable]"));
+        Assert.Equal("edited", page.Find("[data-field='BaseBranch'] input").GetAttribute("value"));
+        Assert.NotEmpty(page.FindAll("[data-testid=dirty-note]"));
+
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("new-model");
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("medium");
+        await SaveAsync(page);
+
+        SettingsProfileData saved = Assert.Single(_manager.SavedGlobal);
+        Assert.Equal("edited", saved.BaseBranch);
+        Assert.Equal(new RoleSettingsOverride("new-model", "medium"), saved.Roles![AgentRole.Tester]);
+    }
+
+    [Fact]
+    public async Task changing_models_requires_replacing_an_unsupported_stored_effort_before_saving()
+    {
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("claude-sonnet-5.5", "high") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("gpt-test");
+        await SaveAsync(page);
+
+        Assert.Equal(["low"], EffortChoices(page));
+        Assert.True(page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[value='']").HasAttribute("disabled"));
+        Assert.Contains(Errors(page, "Roles.Tester.ReasoningEffort"), error => error.Contains("'high'") && error.Contains("not supported"));
+        Assert.Empty(_manager.SavedGlobal);
+
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("low");
+        await SaveAsync(page);
+
+        Assert.Equal(new RoleSettingsOverride("gpt-test", "low"), Assert.Single(_manager.SavedGlobal).Roles![AgentRole.Tester]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task an_unavailable_current_model_is_shown_but_cannot_be_chosen_or_silently_replaced(bool storedModel)
+    {
+        _catalog.Models = [new("available-model", "Available Model", ["medium"])];
+        if (storedModel)
+        {
+            _manager.Global = new SettingsProfileData
+            {
+                Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("retired-model", "high") },
+            };
+        }
+
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+        string expectedId = storedModel ? "retired-model" : "claude-sonnet-5.5";
+
+        IElement current = page.Find("[data-field='Roles.Tester.Model'] option[selected]");
+        Assert.Contains(expectedId, current.TextContent);
+        Assert.Contains("unavailable", current.TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.True(current.HasAttribute("disabled"));
+        Assert.False(page.Find("[data-field='Roles.Tester.Model'] option[value='available-model']").HasAttribute("selected"));
+        Assert.True(page.Find("[data-testid=save]").HasAttribute("disabled"));
+
+        await MakeDirtyAsync(page);
+        await SaveAsync(page);
+
+        SettingsProfileData saved = Assert.Single(_manager.SavedGlobal);
+        if (storedModel)
+        {
+            Assert.Equal("retired-model", saved.Roles![AgentRole.Tester].Model);
+        }
+        else
+        {
+            Assert.True(saved.Roles is null or { Count: 0 });
+        }
+    }
+
+    [Fact]
+    public async Task choosing_defaults_restores_the_default_model_choices_and_saves_no_role_override()
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync();
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("gpt-test");
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("low");
+
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync(string.Empty);
+
+        Assert.Equal(["medium", "high"], EffortChoices(page));
+
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("medium");
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync(string.Empty);
+        Assert.True(page.Find("[data-testid=save]").HasAttribute("disabled"));
+
+        await MakeDirtyAsync(page);
+        await SaveAsync(page);
+
+        Assert.True(Assert.Single(_manager.SavedGlobal).Roles is null or { Count: 0 });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task failed_refresh_is_reported_keeps_any_last_known_catalog_and_can_be_retried(bool fetchedCatalog)
+    {
+        IRenderedComponent<SettingsPage> page = await RenderAsync(fetchCatalog: fetchedCatalog);
+        _catalog.Failure = "Copilot is temporarily unavailable";
+
+        await page.Find("[data-testid=refresh-models]").ClickAsync();
+
+        Assert.Contains("Copilot is temporarily unavailable", page.Find("[data-testid=model-refresh-error]").TextContent);
+        Assert.False(page.Find("[data-testid=refresh-models]").HasAttribute("disabled"));
+        if (fetchedCatalog)
+        {
+            Assert.NotNull(page.Find("[data-field='Roles.Tester.Model'] option[value='gpt-test']"));
+            Assert.Equal(["medium", "high"], EffortChoices(page));
+            Assert.Empty(page.FindAll("[data-testid=models-unavailable]"));
+        }
+        else
+        {
+            Assert.NotEmpty(page.FindAll("[data-testid=models-unavailable]"));
+            Assert.True(page.Find("[data-field='Roles.Tester.Model'] input").HasAttribute("readonly"));
+        }
+
+        _catalog.Failure = null;
+        await page.Find("[data-testid=refresh-models]").ClickAsync();
+
+        Assert.Empty(page.FindAll("[data-testid=model-refresh-error]"));
+        Assert.Equal("Models refreshed.", page.Find("[data-testid=model-refresh-status]").TextContent.Trim());
+        Assert.NotNull(page.Find("[data-field='Roles.Tester.Model'] option[value='gpt-test']"));
+    }
 
     [Fact]
     public async Task empty_per_repo_override_saves_null_and_continues_showing_the_effective_global_value()
@@ -232,12 +499,12 @@ public sealed class SettingsPageTests : BunitContext
         RoleSettings troubleshooter = SettingsTestData.Defaults.For(AgentRole.Troubleshooter);
 
         Assert.Equal("Troubleshooter", page.Find("[data-role='Troubleshooter'] [data-testid=role-toggle]").TextContent.Trim());
-        Assert.Equal(troubleshooter.Model, Placeholder(page, "Roles.Troubleshooter.Model"));
+        Assert.Contains(troubleshooter.Model, page.Find("[data-field='Roles.Troubleshooter.Model'] option[value='']").TextContent);
         Assert.Equal(((int)troubleshooter.Timeout.TotalSeconds).ToString(), Placeholder(page, "Roles.Troubleshooter.TimeoutSeconds"));
         Assert.Contains("{attention_code}", page.Find("[data-role='Troubleshooter'] [data-testid=placeholders]").TextContent);
         Assert.DoesNotContain("{app_url}", page.Find("[data-role='Troubleshooter'] [data-testid=placeholders]").TextContent);
 
-        await page.Find("[data-field='Roles.Troubleshooter.Model'] input").ChangeAsync("gpt-fix");
+        await page.Find("[data-field='Roles.Troubleshooter.Model'] select").ChangeAsync("gpt-fix");
         await page.Find("[data-field='Roles.Troubleshooter.ReasoningEffort'] select").ChangeAsync("xhigh");
         await page.Find("[data-field='Roles.Troubleshooter.TimeoutSeconds'] input").ChangeAsync("900");
         await SaveAsync(page);
@@ -264,11 +531,11 @@ public sealed class SettingsPageTests : BunitContext
     {
         IRenderedComponent<SettingsPage> page = await RenderAsync();
         RoleSettings tester = SettingsTestData.Defaults.For(AgentRole.Tester);
-        Assert.Equal(tester.Model, Placeholder(page, "Roles.Tester.Model"));
+        Assert.Contains(tester.Model, page.Find("[data-field='Roles.Tester.Model'] option[value='']").TextContent);
         Assert.Equal(((int)tester.Timeout.TotalSeconds).ToString(), Placeholder(page, "Roles.Tester.TimeoutSeconds"));
         Assert.Empty(page.FindAll("[data-field='Roles.Tester.ReasoningEffort'] datalist"));
 
-        await page.Find("[data-field='Roles.Tester.Model'] input").ChangeAsync("gpt-test");
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("gpt-test");
         await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("low");
         await page.Find("[data-field='Roles.Tester.TimeoutSeconds'] input").ChangeAsync("120");
         await SaveAsync(page);

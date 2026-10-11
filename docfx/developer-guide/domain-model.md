@@ -126,6 +126,15 @@ automatically repairs it. The SDK boundary exposes generic exceptions and sessio
 Model error, so the runner uses refresh-and-compare after any generic agent launch or turn failure instead of matching
 error wording.
 
+Confirmed `ModelUnavailable` steps consume no retry budget. Their launch attempts remain in the step history, but do
+not count towards the conflict resolver's persisted bound or the troubleshooter's attempt and unchanged-state guards.
+The other agent retry loops stop at this attention reason rather than spending retries. The card links to agent roles
+with **Open Settings**: choose an available Model and supported Reasoning Effort, save, and return to press **Retry**
+after validation passes. Validation reopens the launch gate; the parked phase resumes through the existing control flow.
+Ticket reviews retain successful axis results, and a parked review fix reuses its saved findings and reclaims implementer
+capacity without spending another review iteration. Parent review and testing resume their existing cycle after Model
+loss rather than spending a new cycle; successful parent-review axis results remain reusable.
+
 `SpecRun` and `TicketRun` also store `NeedsAttentionFrom`, the status they were in when parked. A retry uses it to resume the failed phase (see [run lifecycle](run-lifecycle.md#needs-attention)).
 
 ## Settings profile
@@ -163,8 +172,8 @@ Defaults are in <xref:WebDevLoop.Core.Settings.DefaultSettings>. Prompt template
 | One finding becomes one ticket | Unique index on (spec, fingerprint) of `FindingIssuances`; `RecordCreated` is idempotent. |
 | One active test lease per spec and per port | Filtered unique indexes on `TestLeases`. |
 | Concurrent writers cannot overwrite each other | Each save updates `WHERE Version = n` and sets `n + 1`; a mismatch or a unique-index violation is `SaveOutcome.ConcurrencyConflict`. |
-| Ticket `Attempt` and `ReviewIteration` identify a review round | `TransitionTo(Implementing)` increments `Attempt` and resets `ReviewIteration`; `FixingReviewFindings` increments `ReviewIteration`; a retry into `Reviewing` starts a new attempt. |
-| Spec cycle counters count phases entered | `ReviewCycle` increments on entering `ParentReviewing`, `TestCycle` on entering `Testing`. |
+| Ticket `Attempt` and `ReviewIteration` identify a review round | `TransitionTo(Implementing)` increments `Attempt` and resets `ReviewIteration`; `FixingReviewFindings` increments `ReviewIteration`; an ordinary retry into `Reviewing` starts a new attempt. Confirmed Model loss preserves the review round, undoing a failed fix's iteration claim until capacity is reclaimed. |
+| Spec cycle counters count phases entered | `ReviewCycle` increments on entering `ParentReviewing`, `TestCycle` on entering `Testing`. Resuming the same phase after confirmed Model loss preserves its cycle. |
 
 ## Where to look in the code
 

@@ -11,7 +11,7 @@ namespace WebDevLoop.Core.Tests.Ports.Fakes;
 /// </summary>
 public sealed class ScriptedAgentRunner : IAgentRunner
 {
-    private readonly Dictionary<AgentRole, Queue<Func<AgentRunRequest, AgentReport>>> _scripts = [];
+    private readonly Dictionary<AgentRole, Queue<Func<AgentRunRequest, AgentRunResult>>> _scripts = [];
 
     public List<AgentRunRequest> Started { get; } = [];
 
@@ -22,11 +22,14 @@ public sealed class ScriptedAgentRunner : IAgentRunner
     /// <summary>Sessions whose persisted state is gone: resuming them reports <see cref="AgentRunOutcome.SessionNotFound"/>.</summary>
     public HashSet<AgentSessionId> MissingSessions { get; } = [];
 
-    public ScriptedAgentRunner Script(AgentRole role, Func<AgentRunRequest, AgentReport> turn)
+    public ScriptedAgentRunner Script(AgentRole role, Func<AgentRunRequest, AgentReport> turn) =>
+        ScriptResult(role, request => AgentRunResult.Reported(turn(request)));
+
+    public ScriptedAgentRunner ScriptResult(AgentRole role, Func<AgentRunRequest, AgentRunResult> turn)
     {
-        if (!_scripts.TryGetValue(role, out Queue<Func<AgentRunRequest, AgentReport>>? turns))
+        if (!_scripts.TryGetValue(role, out Queue<Func<AgentRunRequest, AgentRunResult>>? turns))
         {
-            _scripts[role] = turns = new Queue<Func<AgentRunRequest, AgentReport>>();
+            _scripts[role] = turns = new Queue<Func<AgentRunRequest, AgentRunResult>>();
         }
 
         turns.Enqueue(turn);
@@ -55,14 +58,14 @@ public sealed class ScriptedAgentRunner : IAgentRunner
 
     private AgentRunResult Play(AgentRunRequest request)
     {
-        if (!_scripts.TryGetValue(request.Role, out Queue<Func<AgentRunRequest, AgentReport>>? turns) || turns.Count == 0)
+        if (!_scripts.TryGetValue(request.Role, out Queue<Func<AgentRunRequest, AgentRunResult>>? turns) || turns.Count == 0)
         {
             return AgentRunResult.NotReported(AgentRunOutcome.MissingReport, $"No scripted turn for {request.Role}.");
         }
 
         try
         {
-            return AgentRunResult.Reported(turns.Dequeue()(request));
+            return turns.Dequeue()(request);
         }
         catch (InvalidAgentReportException exception)
         {

@@ -2,6 +2,7 @@ using Bunit;
 using Microsoft.AspNetCore.Components;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Queries;
+using WebDevLoop.Web.Components.Runs;
 using WebDevLoop.Web.Components.Shared;
 using WebDevLoop.Web.Components.Tickets;
 using WebDevLoop.Web.Tests.Components.Support;
@@ -10,14 +11,21 @@ namespace WebDevLoop.Web.Tests.Components.Shared;
 
 public sealed class AttentionCardTests
 {
-    private static IRenderedComponent<AttentionCard> Render(RunDetailHarness harness, AttentionReason reason, bool withControls = false) =>
+    private static IRenderedComponent<AttentionCard> Render(
+        RunDetailHarness harness, AttentionReason reason, bool withControls = false, bool forTicket = true) =>
         harness.Render<AttentionCard>(p =>
         {
             p.Add(c => c.Reason, reason);
-            if (withControls)
+            if (withControls && forTicket)
             {
                 p.AddChildContent<TicketRunControls>(c => c
                     .Add(x => x.Ticket, Views.Ticket("t1", 10, TicketRunStatus.NeedsAttention))
+                    .Add(x => x.Attention, reason));
+            }
+            else if (withControls)
+            {
+                p.AddChildContent<SpecRunControls>(c => c
+                    .Add(x => x.Spec, Views.Spec(status: SpecRunStatus.NeedsAttention))
                     .Add(x => x.Attention, reason));
             }
         });
@@ -269,6 +277,27 @@ public sealed class AttentionCardTests
 
         Assert.Contains("develop", cut.Find("[data-testid=failure-reason]").TextContent);
         Assert.Contains(cut.FindAll("[data-testid=attention-link]"), link => link.GetAttribute("href") == "/settings#section-general");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Model_unavailable_offers_open_settings_then_the_existing_retry(bool forTicket)
+    {
+        using var harness = new RunDetailHarness();
+        AttentionReason reason = AttentionReasons.ModelUnavailable("Model is missing.", forTicket);
+
+        var cut = Render(harness, reason, withControls: true, forTicket: forTicket);
+
+        var link = cut.Find("[data-testid=attention-link]");
+        Assert.Equal("/settings#section-roles", link.GetAttribute("href"));
+        Assert.Equal("Open Settings", link.TextContent.Trim());
+        Assert.Null(link.GetAttribute("target"));
+        var steps = cut.FindAll("[data-testid=attention-step]");
+        Assert.Contains("Model", steps[0].TextContent);
+        Assert.Equal("After saving Settings and validation passes, return to this page and press Retry.", steps[1].TextContent.Trim());
+        Assert.Equal("Retry", cut.Find("[data-testid=control-retry]").TextContent.Trim());
+        Assert.Contains("No retry budget was consumed", cut.Find("[data-testid=consequence-retry]").TextContent);
     }
 
     [Fact]

@@ -89,8 +89,39 @@ public sealed class TicketRun : VersionedEntity
                 ReviewIteration = 0;
                 break;
             case TicketRunStatus.FixingReviewFindings:
-                ReviewIteration++;
+                ClaimReviewIteration();
                 break;
+        }
+    }
+
+    private void ClaimReviewIteration() => ReviewIteration++;
+
+    private void ReleaseReviewIterationClaim() => ReviewIteration--;
+
+    private void ResumeReviewRound(bool afterModelLoss, TicketRunStatus? failedIn)
+    {
+        if (!afterModelLoss)
+        {
+            // A new identity prevents earlier results from being read back as the current round.
+            Attempt++;
+            ReviewIteration = 0;
+            return;
+        }
+
+        if (failedIn == TicketRunStatus.FixingReviewFindings)
+        {
+            // The saved findings must reclaim capacity before the same fix iteration starts again.
+            ReleaseReviewIterationClaim();
+        }
+    }
+
+    private void TransitionAfterRetry(TicketRunStatus target, DateTimeOffset at, bool afterModelLoss)
+    {
+        TicketRunStatus? failedIn = NeedsAttentionFrom;
+        TransitionTo(target, at);
+        if (target == TicketRunStatus.Reviewing)
+        {
+            ResumeReviewRound(afterModelLoss, failedIn);
         }
     }
 
@@ -98,7 +129,7 @@ public sealed class TicketRun : VersionedEntity
     /// The user's Retry of a ticket in <see cref="TicketRunStatus.NeedsAttention"/>: it resumes the phase that failed. A
     /// failed review (including exhausted review iterations) starts a fresh review round with a full iteration budget on
     /// the implemented commit; a failed integration resumes its saga; anything else, or a ticket without an implemented
-    /// commit, is implemented again.
+    /// commit, is implemented again. Confirmed Model loss preserves the saved review round and findings instead.
     /// </summary>
     /// <param name="integrationInProgress">
     /// The ticket's integration saga already squashed (its commit may be on the integration branch): whatever phase failed,
@@ -107,6 +138,7 @@ public sealed class TicketRun : VersionedEntity
     /// <param name="resumeAt">
     /// A remediation that already repaired the phase's input resumes the ticket there instead of where <see cref="NeedsAttentionFrom"/> says
     /// (e.g. a ticket branch brought up to date with the integration branch is reviewed rather than implemented again).
+    /// An explicit target starts a fresh review round rather than reusing a round interrupted by Model loss.
     /// </param>
     /// <returns>The status the ticket moved to.</returns>
     public TicketRunStatus Retry(DateTimeOffset at, bool integrationInProgress = false, TicketRunStatus? resumeAt = null)
@@ -124,14 +156,7 @@ public sealed class TicketRun : VersionedEntity
             (TicketRunStatus.Integrating, not null) => TicketRunStatus.Integrating,
             _ => TicketRunStatus.Ready,
         };
-        TransitionTo(target, at);
-        if (target == TicketRunStatus.Reviewing)
-        {
-            // A new round identity (attempt, iteration) so earlier round results are not read back as the current round.
-            Attempt++;
-            ReviewIteration = 0;
-        }
-
+        TransitionAfterRetry(target, at, afterModelLoss: Attention?.Code == AttentionCode.ModelUnavailable && resumeAt is null);
         return target;
     }
 

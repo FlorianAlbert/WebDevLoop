@@ -16,7 +16,8 @@ namespace WebDevLoop.Core.Orchestration.Integration;
 /// works in the ticket's own worktree under the conflict-resolver policy (edits confined to that worktree, no GitHub
 /// token, no push/PR/stack commands) and merges the integration tip into the ticket branch locally. The app verifies the
 /// reported head (branch tip, worktree HEAD, contains the integration tip) before the saga retries the squash. Each
-/// resolution is a persisted <see cref="StepKind.ResolveConflict"/> step; at most <c>MaxRetries + 1</c> are attempted per ticket.
+/// resolution is a persisted <see cref="StepKind.ResolveConflict"/> step; at most <c>MaxRetries + 1</c> are attempted per ticket,
+/// excluding confirmed Model loss.
 /// </summary>
 public sealed class ConflictResolutionRunner(
     ITicketRunRepository ticketRuns,
@@ -47,8 +48,9 @@ public sealed class ConflictResolutionRunner(
     {
         IReadOnlyList<StepRun> steps = await stepRuns.ListByTicketRunAsync(context.Ticket.Id, cancellationToken);
         int attempt = steps.Count(step => step.Kind == StepKind.ResolveConflict) + 1;
+        int consumed = steps.Count(step => step.Kind == StepKind.ResolveConflict && step.Attention?.Code != AttentionCode.ModelUnavailable);
         int maxAttempts = context.Settings.MaxRetries + 1;
-        if (attempt > maxAttempts)
+        if (consumed >= maxAttempts)
         {
             return ConflictResolution.Failed(
                 $"Squash-merging still conflicts in {string.Join(", ", conflictingFiles)} after {maxAttempts} conflict resolution attempt(s).");

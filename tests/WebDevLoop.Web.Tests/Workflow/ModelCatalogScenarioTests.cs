@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Recovery.Startup;
@@ -14,6 +15,147 @@ namespace WebDevLoop.Web.Tests.Workflow;
 public sealed class ModelCatalogScenarioTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Theory]
+    [InlineData(StepKind.ResolveConflict, AgentRole.ConflictResolver)]
+    [InlineData(StepKind.Fix, AgentRole.Implementer)]
+    [InlineData(StepKind.Implement, AgentRole.Implementer)]
+    [InlineData(StepKind.Explore, AgentRole.Explorer)]
+    [InlineData(StepKind.Review, AgentRole.ReviewerSpecification)]
+    [InlineData(StepKind.ParentReview, AgentRole.ReviewerCodingStandards)]
+    [InlineData(StepKind.Test, AgentRole.Tester)]
+    public async Task model_loss_does_not_exhaust_a_phase_with_zero_retries(StepKind kind, AgentRole role)
+    {
+        using WorkflowScenario scenario = CreateModelLossScenario(kind, role, out AgentScript script);
+        await using var host = new WorkflowHost(scenario, script);
+        ModelLossRecovery recovery = await ParkModelLossAsync(scenario, host);
+
+        await FixModelSettingsAsync(host, recovery, role);
+        await RetryAfterModelLossAsync(recovery);
+
+        AgentCall recovered = Assert.Single(scenario.Journal.Calls,
+            call => call.Kind == kind && call.Role == role && call.StepRunId != recovery.FailedStepId);
+        JsonElement resolved = await recovery.Api.GetAsync($"/api/steps/{recovered.StepRunId}");
+        Assert.Equal(nameof(StepStatus.Succeeded), resolved.GetProperty("status").GetString());
+        Assert.Equal("replacement-model", resolved.GetProperty("model").GetString());
+        Assert.Equal(2, scenario.Journal.Calls.Count(call => call.Kind == kind && call.Role == role));
+    }
+
+    [Theory]
+    [InlineData(StepKind.Implement, AgentRole.Implementer)]
+    [InlineData(StepKind.Explore, AgentRole.Explorer)]
+    public async Task model_loss_blocks_retry_until_settings_validation_passes(StepKind kind, AgentRole role)
+    {
+        using WorkflowScenario scenario = CreateModelLossScenario(kind, role, out AgentScript script);
+        await using var host = new WorkflowHost(scenario, script);
+        ModelLossRecovery recovery = await ParkModelLossAsync(scenario, host);
+
+        using HttpResponseMessage retried = await recovery.Client.PostAsync($"{recovery.OwnerUrl}/retry", null, Ct);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, retried.StatusCode);
+        Assert.False(host.Services.GetRequiredService<SchedulerStartGate>().IsOpen);
+    }
+
+    [Theory]
+    [InlineData(StepKind.Implement, AgentRole.Implementer)]
+    [InlineData(StepKind.Explore, AgentRole.Explorer)]
+    public async Task fixing_model_settings_leaves_the_owner_parked_until_explicit_retry(StepKind kind, AgentRole role)
+    {
+        using WorkflowScenario scenario = CreateModelLossScenario(kind, role, out AgentScript script);
+        await using var host = new WorkflowHost(scenario, script);
+        ModelLossRecovery recovery = await ParkModelLossAsync(scenario, host);
+
+        await FixModelSettingsAsync(host, recovery, role);
+
+        JsonElement owner = await recovery.Api.GetAsync(recovery.OwnerUrl);
+        Assert.Equal("NeedsAttention", owner.GetProperty("status").GetString());
+    }
+
+    [Theory]
+    [InlineData(StepKind.ParentReview, AgentRole.ReviewerCodingStandards, "reviewCycle")]
+    [InlineData(StepKind.Test, AgentRole.Tester, "testCycle")]
+    public async Task retry_after_model_loss_preserves_the_spec_cycle(StepKind kind, AgentRole role, string cycleProperty)
+    {
+        using WorkflowScenario scenario = CreateModelLossScenario(kind, role, out AgentScript script);
+        await using var host = new WorkflowHost(scenario, script);
+        ModelLossRecovery recovery = await ParkModelLossAsync(scenario, host);
+        await FixModelSettingsAsync(host, recovery, role);
+
+        JsonElement awaitingMerge = await RetryAfterModelLossAsync(recovery);
+
+        Assert.Equal(1, awaitingMerge.GetProperty(cycleProperty).GetInt32());
+    }
+
+    [Theory]
+    [InlineData(StepKind.Review, AgentRole.ReviewerSpecification, AgentRole.ReviewerCodingStandards)]
+    [InlineData(StepKind.ParentReview, AgentRole.ReviewerCodingStandards, AgentRole.ReviewerSpecification)]
+    public async Task retry_after_model_loss_reuses_the_successful_review_axis(
+        StepKind kind, AgentRole failedRole, AgentRole preservedRole)
+    {
+        using WorkflowScenario scenario = CreateModelLossScenario(kind, failedRole, out AgentScript script);
+        await using var host = new WorkflowHost(scenario, script);
+        ModelLossRecovery recovery = await ParkModelLossAsync(scenario, host);
+        await FixModelSettingsAsync(host, recovery, failedRole);
+
+        await RetryAfterModelLossAsync(recovery);
+
+        Assert.Single(scenario.Journal.Calls, call => call.Kind == kind && call.Role == preservedRole);
+    }
+
+    private static async Task<ModelLossRecovery> ParkModelLossAsync(WorkflowScenario scenario, WorkflowHost host)
+    {
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        using HttpResponseMessage configured = await client.PutAsJsonAsync("/api/settings/global",
+            new SettingsProfileData { MaxRetries = 0, MaxReviewIterations = 2 }, Ct);
+        Assert.Equal(HttpStatusCode.OK, configured.StatusCode);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario, Path.Combine(scenario.Sandbox.DataDirectory, "workspaces", "repo"));
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        StepRunId stepId = await host.Script.FailingTurnStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        IReadOnlyList<ModelCatalogEntry> available = host.Models.Models;
+        host.Models.Models = [];
+        host.Script.ReleaseFailingTurn.TrySetResult();
+        JsonElement failed = await api.WaitForStepStatusAsync(stepId.Value, nameof(StepStatus.NeedsAttention));
+        JsonElement owner = await api.WaitForStepOwnerStatusAsync(failed, "NeedsAttention");
+        Assert.Equal("ModelUnavailable", owner.GetProperty("attention").GetProperty("code").GetString());
+        string ownerUrl = failed.GetProperty("ticketRunId").GetString() is { } ticketId
+            ? $"/api/ticket-runs/{ticketId}"
+            : $"/api/spec-runs/{run}";
+        return new ModelLossRecovery(client, api, run, stepId, ownerUrl, available);
+    }
+
+    private static async Task FixModelSettingsAsync(WorkflowHost host, ModelLossRecovery recovery, AgentRole role)
+    {
+        host.Models.Models = [.. recovery.AvailableModels, new("replacement-model", "Replacement Model", ["high"])];
+        host.Script.FailingKind = null;
+        using HttpResponseMessage saved = await recovery.Client.PutAsJsonAsync("/api/settings/global", new SettingsProfileData
+        {
+            MaxRetries = 0,
+            MaxReviewIterations = 2,
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride>
+            {
+                [role] = new() { Model = "replacement-model", ReasoningEffort = "high" },
+            },
+        }, Ct);
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        using HttpResponseMessage health = await recovery.Client.GetAsync("/api/health", Ct);
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+    }
+
+    private static async Task<JsonElement> RetryAfterModelLossAsync(ModelLossRecovery recovery)
+    {
+        using HttpResponseMessage retried = await recovery.Client.PostAsync($"{recovery.OwnerUrl}/retry", null, Ct);
+        Assert.Equal(HttpStatusCode.OK, retried.StatusCode);
+        return await recovery.Api.WaitForStatusAsync(recovery.RunId, nameof(SpecRunStatus.AwaitingMerge));
+    }
+
+    private sealed record ModelLossRecovery(
+        HttpClient Client,
+        WorkflowApi Api,
+        string RunId,
+        StepRunId FailedStepId,
+        string OwnerUrl,
+        IReadOnlyList<ModelCatalogEntry> AvailableModels);
 
     [Theory]
     [InlineData(StepKind.Explore, AgentRole.Explorer, AttentionCode.ModelUnavailable)]

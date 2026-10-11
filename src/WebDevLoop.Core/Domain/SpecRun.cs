@@ -89,6 +89,7 @@ public sealed class SpecRun : VersionedEntity
             throw new InvalidStatusTransitionException(nameof(SpecRun), Status, next);
         }
 
+        AdvanceCycle(next);
         Status = next;
         StatusChangedAt = at;
         FailureReason = null;
@@ -104,12 +105,6 @@ public sealed class SpecRun : VersionedEntity
             case SpecRunStatus.Preparing:
                 StartedAt ??= at;
                 break;
-            case SpecRunStatus.ParentReviewing:
-                ReviewCycle++;
-                break;
-            case SpecRunStatus.Testing:
-                TestCycle++;
-                break;
             case SpecRunStatus.ReadyForReview:
                 ReadyAt = at;
                 break;
@@ -118,6 +113,26 @@ public sealed class SpecRun : VersionedEntity
         if (next.IsTerminal())
         {
             CompletedAt = at;
+        }
+    }
+
+    private void AdvanceCycle(SpecRunStatus next)
+    {
+        if (Status == SpecRunStatus.NeedsAttention
+            && Attention?.Code == AttentionCode.ModelUnavailable
+            && NeedsAttentionFrom == next)
+        {
+            return;
+        }
+
+        switch (next)
+        {
+            case SpecRunStatus.ParentReviewing:
+                ReviewCycle++;
+                break;
+            case SpecRunStatus.Testing:
+                TestCycle++;
+                break;
         }
     }
 

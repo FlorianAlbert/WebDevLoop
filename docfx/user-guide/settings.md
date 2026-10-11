@@ -15,10 +15,12 @@ Choose the level in **Edit settings for**. The page opens on the current reposit
 
 In a repository, every field shows where its value comes from:
 
-- **Inherited** (grey text): the repository uses the global value. The field is empty and shows the inherited value as a hint.
+- **Inherited** (grey text): the repository uses the global value. The field is empty and shows the inherited value as a hint, or the dropdown selects **Inherit**.
 - **Overridden** (blue label): you set a value. It shows `Inherited: <value>` below the field and a **Reset to inherited** link.
 
-To override a value, type it in. To go back, click **Reset to inherited**, or empty the field.
+To override a value, enter it or choose it from the dropdown. To go back, click **Reset to inherited**, empty the
+field, or choose **Inherit** in the dropdown. Model and Reasoning Effort inheritance is offered when the inherited
+value is supported by the Model Catalog.
 
 ![Settings of a repository with inherited values](images/settings-repository.png)
 
@@ -77,13 +79,17 @@ See [Needs attention](needs-attention.md#the-troubleshooter).
 
 Every agent role has its own model, reasoning effort, session timeout and prompt. Click a role to open it. A repository shows **Customized** next to roles with overrides.
 
-In **Global settings**, choose a **Model** from the **Model Catalog**. Each choice shows its display name followed by
+In global settings and repository overrides, choose a **Model** from the **Model Catalog**. Each choice shows its display name followed by
 its ID; the selected ID is also shown below the field and is what settings store. The **Reasoning Effort** dropdown
 offers only efforts supported by that Model and is disabled when the Model has no reasoning support. When changing
 Models leaves an unsupported Reasoning Effort, choose a supported effort before saving.
 
+In a repository override, **Inherit** keeps following the global Model or Reasoning Effort independently. Reasoning
+Effort choices follow the effective Model, whether inherited or overridden. **Reset to inherited** removes the
+override without copying the global value into repository settings; it is offered when the inherited value is supported.
+
 Use **Refresh models** to fetch newly available Models without restarting or losing unsaved changes. This also
-re-validates the configured Models. A failed refresh reports the error and keeps the last-known Model Catalog.
+re-validates the configured Models and is available in both scopes. A failed refresh reports the error and keeps the last-known Model Catalog.
 With no available Models, the page says **Models unavailable, retry** and shows current Model and Reasoning Effort
 values read-only; retry with **Refresh models**. Unavailable stored or default Models are never replaced automatically.
 
@@ -101,8 +107,8 @@ values read-only; retry with **Refresh models**. Unavailable stored or default M
 
 | Field | Meaning |
 | --- | --- |
-| Model | The Copilot Model ID, chosen by display name in global settings. |
-| Reasoning Effort | In global settings, only efforts supported by the selected Model are offered. |
+| Model | The Copilot Model ID, chosen by display name; repository overrides can inherit the global Model. |
+| Reasoning Effort | Only efforts supported by the effective Model are offered; repository overrides can inherit the global Reasoning Effort. |
 | Session timeout | How long one agent session may run, in seconds. A step that takes longer is stopped. |
 | Prompt template | The instructions sent to the agent. The placeholders (shown below the field, like `{ticket issue number}`) are filled in for every session. |
 

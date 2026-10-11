@@ -1,4 +1,4 @@
-<OverrideFieldFrame Field="@Field" Label="@Label" Errors="@Errors">
+<OverrideFieldFrame Field="@Field" Label="@Label" IsOverridden="@IsOverridden" Inherited="@Inherited" ShowReset="false" Errors="@Errors">
     <input id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control" readonly value="@Value" />
 </OverrideFieldFrame>
 
@@ -8,6 +8,10 @@
     [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
 
     [Parameter] public string? Value { get; set; }
+
+    [Parameter] public bool IsOverridden { get; set; }
+
+    [Parameter] public string? Inherited { get; set; }
 
     [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
 }

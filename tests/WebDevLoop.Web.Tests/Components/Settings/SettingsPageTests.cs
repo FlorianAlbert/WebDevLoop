@@ -73,6 +73,110 @@ public sealed class SettingsPageTests : BunitContext
     private static Task SaveAsync(IRenderedComponent<SettingsPage> page) => page.Find("[data-testid=save]").ClickAsync();
 
     [Fact]
+    public async Task repository_model_and_effort_pickers_use_the_catalog_and_save_overrides_to_the_repository()
+    {
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("gpt-test", "low") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
+
+        foreach (AgentRole role in Enum.GetValues<AgentRole>())
+        {
+            Assert.Equal("Test Model (gpt-test)", page.Find($"[data-field='Roles.{role}.Model'] select option[value='gpt-test']").TextContent);
+        }
+
+        Assert.Equal("Inherit (Test Model (gpt-test))", page.Find("[data-field='Roles.Tester.Model'] option[value='']").TextContent);
+        Assert.Equal("Inherit (low)", page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[value='']").TextContent.Trim());
+        Assert.Equal(["low"], EffortChoices(page));
+
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("claude-sonnet-5.5");
+
+        Assert.Equal(["medium", "high"], EffortChoices(page));
+
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("medium");
+        await SaveAsync(page);
+
+        (int id, SettingsProfileData saved) = Assert.Single(_manager.SavedRepository);
+        Assert.Equal(1, id);
+        Assert.Equal(new RoleSettingsOverride("claude-sonnet-5.5", "medium"), saved.Roles![AgentRole.Tester]);
+        Assert.False(saved.Roles.ContainsKey(AgentRole.Implementer));
+        Assert.Empty(_manager.SavedGlobal);
+    }
+
+    [Fact]
+    public async Task resetting_repository_model_and_effort_restores_global_inheritance_and_saves_no_role_override()
+    {
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("gpt-test", "low") },
+        };
+        _manager.Repository = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("claude-sonnet-5.5", "high") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
+
+        Assert.Equal("Overridden", Origin(page, "Roles.Tester.Model"));
+        Assert.Equal("Overridden", Origin(page, "Roles.Tester.ReasoningEffort"));
+        Assert.Contains("Test Model (gpt-test)", InheritedText(page, "Roles.Tester.Model"));
+        Assert.Contains("low", InheritedText(page, "Roles.Tester.ReasoningEffort"));
+
+        await Field(page, "Roles.Tester.Model").QuerySelector("[data-testid=reset]")!.ClickAsync();
+
+        Assert.Equal("Inherited", Origin(page, "Roles.Tester.Model"));
+        Assert.Equal(["low"], EffortChoices(page));
+
+        await Field(page, "Roles.Tester.ReasoningEffort").QuerySelector("[data-testid=reset]")!.ClickAsync();
+
+        Assert.Equal("Inherited", Origin(page, "Roles.Tester.ReasoningEffort"));
+        Assert.Equal("Inherit (low)", page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[selected]").TextContent.Trim());
+
+        await SaveAsync(page);
+
+        Assert.True(Assert.Single(_manager.SavedRepository).Data.Roles is null or { Count: 0 });
+        Assert.Equal("Model ID: gpt-test", Field(page, "Roles.Tester.Model").QuerySelector(".form-text")!.TextContent);
+
+        await page.Find("[data-testid=scope]").ChangeAsync("global");
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("gpt-fix");
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("xhigh");
+        await SaveAsync(page);
+        await page.Find("[data-testid=scope]").ChangeAsync("1");
+
+        Assert.Equal("Model ID: gpt-fix", Field(page, "Roles.Tester.Model").QuerySelector(".form-text")!.TextContent);
+        Assert.Equal(["xhigh"], EffortChoices(page));
+        Assert.Equal("Inherit (xhigh)", page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[selected]").TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task repository_dropdowns_can_inherit_global_values_even_when_the_old_effort_is_unsupported()
+    {
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("gpt-test", "low") },
+        };
+        _manager.Repository = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("claude-sonnet-5.5", "high") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
+
+        await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync(string.Empty);
+
+        Assert.Equal(["low"], EffortChoices(page));
+        IElement inheritEffort = page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[value='']");
+        Assert.Equal("Inherit (low)", inheritEffort.TextContent.Trim());
+        Assert.False(inheritEffort.HasAttribute("disabled"));
+        Assert.False(inheritEffort.HasAttribute("selected"));
+        Assert.Contains("high", page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[selected]").TextContent);
+
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync(string.Empty);
+        await SaveAsync(page);
+
+        Assert.True(Assert.Single(_manager.SavedRepository).Data.Roles is null or { Count: 0 });
+    }
+
+    [Fact]
     public async Task the_global_model_dropdown_shows_display_names_and_ids_and_saves_the_model_id()
     {
         _catalog.Models =
@@ -93,6 +197,76 @@ public sealed class SettingsPageTests : BunitContext
         await SaveAsync(page);
 
         Assert.Equal("model-preview", Assert.Single(_manager.SavedGlobal).Roles![AgentRole.Tester].Model);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task repository_model_and_effort_can_inherit_independently(bool inheritModel)
+    {
+        _catalog.Models = [.. _catalog.Models, new("other-model", "Other Model", ["high"])];
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("claude-sonnet-5.5", "high") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
+
+        if (inheritModel)
+        {
+            await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("medium");
+            Assert.Equal("Inherited", Origin(page, "Roles.Tester.Model"));
+        }
+        else
+        {
+            await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("other-model");
+            Assert.Equal(["high"], EffortChoices(page));
+            Assert.Equal("Inherited", Origin(page, "Roles.Tester.ReasoningEffort"));
+            Assert.Equal("Inherit (high)", page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[selected]").TextContent.Trim());
+        }
+
+        await SaveAsync(page);
+
+        Assert.Equal(inheritModel ? new RoleSettingsOverride(ReasoningEffort: "medium") : new RoleSettingsOverride(Model: "other-model"),
+            Assert.Single(_manager.SavedRepository).Data.Roles![AgentRole.Tester]);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task repository_saving_requires_a_supported_effort_for_the_effective_model(bool inheritModel, bool inheritEffort)
+    {
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new(inheritModel ? "gpt-fix" : "gpt-test", "low") },
+        };
+        _manager.Repository = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new(ReasoningEffort: inheritEffort ? null : "low") },
+        };
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1);
+        if (inheritModel)
+        {
+            await MakeDirtyAsync(page);
+        }
+        else
+        {
+            await page.Find("[data-field='Roles.Tester.Model'] select").ChangeAsync("gpt-fix");
+        }
+
+        await SaveAsync(page);
+
+        Assert.Equal(["xhigh"], EffortChoices(page));
+        Assert.True(page.Find("[data-field='Roles.Tester.ReasoningEffort'] option[value='']").HasAttribute("disabled"));
+        Assert.Contains(Errors(page, "Roles.Tester.ReasoningEffort"), error => error.Contains("'low'") && error.Contains("'gpt-fix'") && error.Contains("not supported"));
+        Assert.Empty(_manager.SavedRepository);
+
+        await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("xhigh");
+        await SaveAsync(page);
+
+        Assert.Equal(new RoleSettingsOverride(inheritModel ? null : "gpt-fix", "xhigh"),
+            Assert.Single(_manager.SavedRepository).Data.Roles![AgentRole.Tester]);
     }
 
     [Fact]
@@ -122,15 +296,22 @@ public sealed class SettingsPageTests : BunitContext
             .Where(option => !string.IsNullOrEmpty(option.GetAttribute("value")))
             .Select(option => option.GetAttribute("value")!).ToArray();
 
-    [Fact]
-    public async Task a_model_without_reasoning_support_disables_the_effort_field_without_replacing_stored_values()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    public async Task a_model_without_reasoning_support_disables_the_effort_field_without_replacing_stored_values(int? repositoryId)
     {
         _catalog.Models = [new("basic-model", "Basic Model", [])];
         _manager.Global = new SettingsProfileData
         {
             Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("basic-model", "high") },
         };
-        IRenderedComponent<SettingsPage> page = await RenderAsync();
+        if (repositoryId is not null)
+        {
+            _manager.Repository = _manager.Global;
+        }
+
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: repositoryId);
 
         Assert.True(page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").HasAttribute("disabled"));
         Assert.Empty(EffortChoices(page));
@@ -138,7 +319,10 @@ public sealed class SettingsPageTests : BunitContext
         await MakeDirtyAsync(page);
         await SaveAsync(page);
 
-        Assert.Equal(new RoleSettingsOverride("basic-model", "high"), Assert.Single(_manager.SavedGlobal).Roles![AgentRole.Tester]);
+        SettingsProfileData saved = repositoryId is null
+            ? Assert.Single(_manager.SavedGlobal)
+            : Assert.Single(_manager.SavedRepository).Data;
+        Assert.Equal(new RoleSettingsOverride("basic-model", "high"), saved.Roles![AgentRole.Tester]);
     }
 
     [Theory]
@@ -173,11 +357,13 @@ public sealed class SettingsPageTests : BunitContext
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task refresh_models_picks_up_new_models_without_restarting_or_discarding_unsaved_changes(bool fetchedCatalog)
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    public async Task refresh_models_picks_up_new_models_without_restarting_or_discarding_unsaved_changes(bool fetchedCatalog, int? repositoryId)
     {
-        IRenderedComponent<SettingsPage> page = await RenderAsync(fetchCatalog: fetchedCatalog);
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: repositoryId, fetchCatalog: fetchedCatalog);
         await MakeDirtyAsync(page);
         _catalog.Models =
         [
@@ -197,9 +383,60 @@ public sealed class SettingsPageTests : BunitContext
         await page.Find("[data-field='Roles.Tester.ReasoningEffort'] select").ChangeAsync("medium");
         await SaveAsync(page);
 
-        SettingsProfileData saved = Assert.Single(_manager.SavedGlobal);
+        SettingsProfileData saved = repositoryId is null
+            ? Assert.Single(_manager.SavedGlobal)
+            : Assert.Single(_manager.SavedRepository).Data;
         Assert.Equal("edited", saved.BaseBranch);
         Assert.Equal(new RoleSettingsOverride("new-model", "medium"), saved.Roles![AgentRole.Tester]);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task repository_without_a_catalog_shows_read_only_effective_values_and_preserves_inheritance(bool fetchedEmptyCatalog, bool inheritFields)
+    {
+        _catalog.Models = [];
+        _manager.Global = new SettingsProfileData
+        {
+            Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("gpt-test", "low") },
+        };
+        if (!inheritFields)
+        {
+            _manager.Repository = new SettingsProfileData
+            {
+                Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("stored-model", "xhigh") },
+            };
+        }
+
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: 1, fetchCatalog: fetchedEmptyCatalog);
+
+        Assert.Contains("Models unavailable, retry", page.Find("[data-testid=models-unavailable]").TextContent);
+        IElement model = page.Find("[data-field='Roles.Tester.Model'] input");
+        IElement effort = page.Find("[data-field='Roles.Tester.ReasoningEffort'] input");
+        Assert.True(model.HasAttribute("readonly"));
+        Assert.True(effort.HasAttribute("readonly"));
+        Assert.Equal(inheritFields ? "gpt-test" : "stored-model", model.GetAttribute("value"));
+        Assert.Equal(inheritFields ? "low" : "xhigh", effort.GetAttribute("value"));
+        Assert.Equal(inheritFields ? "Inherited" : "Overridden", Origin(page, "Roles.Tester.Model"));
+        Assert.Equal(inheritFields ? "Inherited" : "Overridden", Origin(page, "Roles.Tester.ReasoningEffort"));
+        Assert.Empty(Field(page, "Roles.Tester.Model").QuerySelectorAll("[data-testid=reset]"));
+        Assert.Empty(Field(page, "Roles.Tester.ReasoningEffort").QuerySelectorAll("[data-testid=reset]"));
+
+        await MakeDirtyAsync(page);
+        await SaveAsync(page);
+
+        SettingsProfileData saved = Assert.Single(_manager.SavedRepository).Data;
+        Assert.Equal("edited", saved.BaseBranch);
+        if (inheritFields)
+        {
+            Assert.True(saved.Roles is null or { Count: 0 });
+        }
+        else
+        {
+            Assert.Equal(new RoleSettingsOverride("stored-model", "xhigh"), saved.Roles![AgentRole.Tester]);
+        }
     }
 
     [Fact]
@@ -226,20 +463,30 @@ public sealed class SettingsPageTests : BunitContext
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task an_unavailable_current_model_is_shown_but_cannot_be_chosen_or_silently_replaced(bool storedModel)
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    public async Task an_unavailable_current_model_is_shown_but_cannot_be_chosen_or_silently_replaced(bool storedModel, int? repositoryId)
     {
         _catalog.Models = [new("available-model", "Available Model", ["medium"])];
         if (storedModel)
         {
-            _manager.Global = new SettingsProfileData
+            SettingsProfileData settings = new()
             {
                 Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new("retired-model", "high") },
             };
+            if (repositoryId is null)
+            {
+                _manager.Global = settings;
+            }
+            else
+            {
+                _manager.Repository = settings;
+            }
         }
 
-        IRenderedComponent<SettingsPage> page = await RenderAsync();
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: repositoryId);
         string expectedId = storedModel ? "retired-model" : "claude-sonnet-5.5";
 
         IElement current = page.Find("[data-field='Roles.Tester.Model'] option[selected]");
@@ -252,7 +499,9 @@ public sealed class SettingsPageTests : BunitContext
         await MakeDirtyAsync(page);
         await SaveAsync(page);
 
-        SettingsProfileData saved = Assert.Single(_manager.SavedGlobal);
+        SettingsProfileData saved = repositoryId is null
+            ? Assert.Single(_manager.SavedGlobal)
+            : Assert.Single(_manager.SavedRepository).Data;
         if (storedModel)
         {
             Assert.Equal("retired-model", saved.Roles![AgentRole.Tester].Model);
@@ -285,11 +534,13 @@ public sealed class SettingsPageTests : BunitContext
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task failed_refresh_is_reported_keeps_any_last_known_catalog_and_can_be_retried(bool fetchedCatalog)
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    public async Task failed_refresh_is_reported_keeps_any_last_known_catalog_and_can_be_retried(bool fetchedCatalog, int? repositoryId)
     {
-        IRenderedComponent<SettingsPage> page = await RenderAsync(fetchCatalog: fetchedCatalog);
+        IRenderedComponent<SettingsPage> page = await RenderAsync(repositoryId: repositoryId, fetchCatalog: fetchedCatalog);
         _catalog.Failure = "Copilot is temporarily unavailable";
 
         await page.Find("[data-testid=refresh-models]").ClickAsync();

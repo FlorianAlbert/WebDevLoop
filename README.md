@@ -146,6 +146,11 @@ repository's local path (`PATCH /api/repos/{id}`); the startup log warns about e
 current root, and until fixed its tickets need attention. The repository
 selected in the UI is remembered across restarts (`<DataDirectory>/ui-state.json`); it is view context only and never affects scheduling.
 
+In global Settings, pick each role's Model by display name from the Model Catalog; choices also show the Model ID,
+which remains the stored value. Reasoning Effort choices follow the selected Model's supported efforts.
+**Refresh models** fetches current Models and re-validates settings without restarting. Without a Model Catalog,
+current Model and Reasoning Effort values are read-only with a retry message; failed refreshes keep the last-known catalog.
+
 ## Running
 
 ```bash

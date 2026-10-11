@@ -1,0 +1,13 @@
+<OverrideFieldFrame Field="@Field" Label="@Label" Errors="@Errors">
+    <input id="@OverrideFieldFrame.InputIdFor(Field)" class="form-control" readonly value="@Value" />
+</OverrideFieldFrame>
+
+@code {
+    [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+}

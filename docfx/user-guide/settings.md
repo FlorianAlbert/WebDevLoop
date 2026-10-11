@@ -77,6 +77,16 @@ See [Needs attention](needs-attention.md#the-troubleshooter).
 
 Every agent role has its own model, reasoning effort, session timeout and prompt. Click a role to open it. A repository shows **Customized** next to roles with overrides.
 
+In **Global settings**, choose a **Model** from the **Model Catalog**. Each choice shows its display name followed by
+its ID; the selected ID is also shown below the field and is what settings store. The **Reasoning Effort** dropdown
+offers only efforts supported by that Model and is disabled when the Model has no reasoning support. When changing
+Models leaves an unsupported Reasoning Effort, choose a supported effort before saving.
+
+Use **Refresh models** to fetch newly available Models without restarting or losing unsaved changes. This also
+re-validates the configured Models. A failed refresh reports the error and keeps the last-known Model Catalog.
+With no available Models, the page says **Models unavailable, retry** and shows current Model and Reasoning Effort
+values read-only; retry with **Refresh models**. Unavailable stored or default Models are never replaced automatically.
+
 ![An agent role opened in the settings](images/settings-roles.png)
 
 | Role | Job | Default timeout |
@@ -91,8 +101,8 @@ Every agent role has its own model, reasoning effort, session timeout and prompt
 
 | Field | Meaning |
 | --- | --- |
-| Model | The Copilot model name. |
-| Reasoning effort | `low`, `medium`, `high` or `xhigh`. |
+| Model | The Copilot Model ID, chosen by display name in global settings. |
+| Reasoning Effort | In global settings, only efforts supported by the selected Model are offered. |
 | Session timeout | How long one agent session may run, in seconds. A step that takes longer is stopped. |
 | Prompt template | The instructions sent to the agent. The placeholders (shown below the field, like `{ticket issue number}`) are filled in for every session. |
 

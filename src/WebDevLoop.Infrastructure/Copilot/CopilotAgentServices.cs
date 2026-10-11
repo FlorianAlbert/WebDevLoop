@@ -6,7 +6,8 @@ namespace WebDevLoop.Infrastructure.Copilot;
 
 /// <summary>
 /// Composition entry point for the Copilot feature: the SDK-backed <see cref="IAgentRunner"/>, the shared
-/// <see cref="ICopilotRuntimePool"/> it runs on, and the bundled skills catalog (also used by startup validation).
+/// <see cref="ICopilotRuntimePool"/> it runs on, the in-memory <see cref="IModelCatalog"/>, and the bundled skills catalog
+/// (also used by startup validation).
 /// Register it as a singleton and dispose it on shutdown to stop the runtimes.
 /// </summary>
 public sealed class CopilotAgentServices : IAsyncDisposable
@@ -18,6 +19,7 @@ public sealed class CopilotAgentServices : IAsyncDisposable
         _pool = pool;
         Runner = runner;
         Skills = skills;
+        ModelCatalog = new InMemoryModelCatalog(pool.ListModelsAsync);
     }
 
     public IAgentRunner Runner { get; }
@@ -25,6 +27,8 @@ public sealed class CopilotAgentServices : IAsyncDisposable
     public ICopilotRuntimePool RuntimePool => _pool;
 
     public BundledSkillsCatalog Skills { get; }
+
+    public IModelCatalog ModelCatalog { get; }
 
     public static CopilotAgentServices Create(
         ITokenProvider tokens,

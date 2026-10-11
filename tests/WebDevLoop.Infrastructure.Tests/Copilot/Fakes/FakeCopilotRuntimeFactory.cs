@@ -1,3 +1,4 @@
+using WebDevLoop.Core.Agents;
 using WebDevLoop.Infrastructure.Copilot.Runtime;
 
 namespace WebDevLoop.Infrastructure.Tests.Copilot.Fakes;
@@ -27,6 +28,9 @@ internal sealed class FakeCopilotRuntimeFactory : ICopilotRuntimeFactory
 
 internal sealed class FakeCopilotRuntime(FakeCopilotRuntimeFactory factory, int index, CopilotRuntimeLaunch launch) : ICopilotRuntime
 {
+    public Task<IReadOnlyList<ModelCatalogEntry>> ListModelsAsync(string gitHubToken, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ModelCatalogEntry>>([]);
+
     public int Index { get; } = index;
 
     public CopilotRuntimeLaunch Launch { get; } = launch;

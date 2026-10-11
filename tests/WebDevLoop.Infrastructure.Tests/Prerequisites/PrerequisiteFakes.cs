@@ -54,9 +54,11 @@ internal sealed class FakeLibGit2Probe(Func<string> load) : ILibGit2Probe
     public string LoadNativeLibrary() => load();
 }
 
-internal sealed class StubCheck(string name, Func<CancellationToken, Task<PrerequisiteCheck>> run) : IPrerequisiteCheck
+internal sealed class StubCheck(string name, Func<CancellationToken, Task<PrerequisiteCheck>> run, string? runsAfter = null) : IPrerequisiteCheck
 {
     public string Name => name;
+
+    public string? RunsAfter => runsAfter;
 
     public Task<PrerequisiteCheck> RunAsync(CancellationToken cancellationToken) => run(cancellationToken);
 

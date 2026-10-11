@@ -5,6 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Infrastructure.GitHub.Auth;
+using WebDevLoop.Infrastructure.Prerequisites;
 
 namespace WebDevLoop.Web.Tests.Workflow;
 
@@ -31,6 +33,10 @@ internal sealed class WorkflowHost(WorkflowScenario scenario, AgentScript? scrip
 
     public IdleCopilotRuntimePool Runtimes { get; } = new();
 
+    public ScriptedModelCatalog Models { get; } = new();
+
+    public ScriptedSignInState SignIn { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("WebDevLoop:DataDirectory", scenario.Sandbox.DataDirectory);
@@ -44,7 +50,19 @@ internal sealed class WorkflowHost(WorkflowScenario scenario, AgentScript? scrip
         {
             services.Replace(ServiceDescriptor.Singleton<IGitHubIssues>(scenario.Issues));
             services.Replace(ServiceDescriptor.Singleton<IGitHubPullsAndStacks>(scenario.Pulls));
-            services.Replace(ServiceDescriptor.Singleton<IPrerequisiteValidator>(Prerequisites));
+            services.Replace(ServiceDescriptor.Singleton<IModelCatalog>(Models.Catalog));
+            services.Replace(ServiceDescriptor.Singleton<IGitHubSignInState>(SignIn));
+            services.Replace(ServiceDescriptor.Singleton<IPrerequisiteValidator>(provider => new PrerequisiteValidator(
+            [
+                Prerequisites,
+                new GitHubAuthCheck(new PrerequisiteOptions
+                {
+                    WorkspaceRoot = scenario.Sandbox.DataDirectory,
+                    GitHubAuth = new GitHubAuthOptions { AppClientId = "test-client", AppClientSecret = "test-secret" },
+                    GitHubSignIn = SignIn,
+                }),
+                provider.GetRequiredService<AgentModelsCheck>(),
+            ])));
             services.Replace(ServiceDescriptor.Singleton<ICopilotRuntimePool>(Runtimes));
             services.Replace(ServiceDescriptor.Singleton<ITestTargetRunner>(new InstantTestTargets()));
             services.Replace(ServiceDescriptor.Singleton<IAgentRunner>(provider => new ScriptedAgentRunner(

@@ -1,4 +1,5 @@
 using LibGit2Sharp;
+using Microsoft.Data.Sqlite;
 using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Web.Tests.Workflow;
@@ -14,7 +15,7 @@ internal sealed class WorkflowSandbox : IDisposable
 
     public WorkflowSandbox()
     {
-        Root = Path.Combine(AppContext.BaseDirectory, "workflow-sandboxes", Guid.NewGuid().ToString("N"));
+        Root = Path.Combine(AppContext.BaseDirectory, "w", Path.GetRandomFileName());
         DataDirectory = Path.Combine(Root, "data");
         RemotePath = Path.Combine(Root, "origin.git");
         Directory.CreateDirectory(DataDirectory);
@@ -60,6 +61,11 @@ internal sealed class WorkflowSandbox : IDisposable
 
     public void Dispose()
     {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(DataDirectory, "webdevloop.db"),
+        }.ToString());
+        SqliteConnection.ClearPool(connection);
         if (!Directory.Exists(Root))
         {
             return;

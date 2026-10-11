@@ -21,8 +21,12 @@ internal enum TesterAttemptOutcome
 
     /// <summary>Another runner claimed the step or lease first, or a save lost a race.</summary>
     ConcurrencyConflict,
+
+    /// <summary>The tester's Model is confirmed missing; the step needs user attention.</summary>
+    ModelUnavailable,
 }
 
 /// <param name="StepRunId">The tester step; null when nothing was started.</param>
 /// <param name="Report">The accepted report; set exactly when <paramref name="Outcome"/> is <see cref="TesterAttemptOutcome.Reported"/>.</param>
-internal sealed record TesterAttempt(TesterAttemptOutcome Outcome, StepRunId? StepRunId = null, TestReport? Report = null, string? Failure = null);
+internal sealed record TesterAttempt(
+    TesterAttemptOutcome Outcome, StepRunId? StepRunId = null, TestReport? Report = null, string? Failure = null, AttentionReason? Attention = null);

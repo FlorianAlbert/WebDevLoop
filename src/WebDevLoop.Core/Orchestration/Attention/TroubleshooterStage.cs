@@ -136,6 +136,9 @@ public sealed class TroubleshooterStage(
             { Report: { } other } => await FinishAsync(step, attentionCase, state, StepStatus.Failed, null, $"The troubleshooter returned an unexpected {other.GetType().Name}.", null, false, "Failed", cancellationToken),
             { Outcome: AgentRunOutcome.Cancelled } => await FinishAsync(step, attentionCase, state, StepStatus.Cancelled, null, "The troubleshooter session was cancelled.", null, false, "Cancelled", cancellationToken),
             { Outcome: AgentRunOutcome.TimedOut } => await FinishAsync(step, attentionCase, state, StepStatus.TimedOut, null, $"The troubleshooter timed out: {run.FailureReason}", null, false, "TimedOut", cancellationToken),
+            { Outcome: AgentRunOutcome.ModelUnavailable } => await FinishAsync(
+                step, attentionCase, state, StepStatus.NeedsAttention, null, run.FailureReason, null, false, "ModelUnavailable", cancellationToken,
+                attention: AttentionReasons.ModelUnavailable(run.FailureReason!)),
             _ => await FinishAsync(step, attentionCase, state, StepStatus.Failed, null, $"The troubleshooter failed: {run.FailureReason}", null, false, "Failed", cancellationToken),
         };
     }
@@ -187,7 +190,8 @@ public sealed class TroubleshooterStage(
         CancellationToken cancellationToken,
         string? summary = null,
         AttentionResume? resume = null,
-        string? tried = null)
+        string? tried = null,
+        AttentionReason? attention = null)
     {
         string text = summary ?? failureReason ?? "The troubleshooter did not solve the problem.";
         if (await stepRuns.GetAsync(started.Id, cancellationToken) is not { Status: StepStatus.Running } step)
@@ -196,7 +200,7 @@ public sealed class TroubleshooterStage(
         }
 
         DateTimeOffset now = clock.UtcNow;
-        step.Finish(status, now, resultJson, failureReason);
+        StepRunConclusion.Finish(step, status, attention, resultJson, failureReason, now);
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
         runEvents.Add(TroubleshooterRunEvents.Finish(attentionCase, state.Fingerprint, step.Id, outcome, verified, text, diagnosis, now));
         if (await unitOfWork.SaveChangesAsync(cancellationToken) != SaveOutcome.Saved)

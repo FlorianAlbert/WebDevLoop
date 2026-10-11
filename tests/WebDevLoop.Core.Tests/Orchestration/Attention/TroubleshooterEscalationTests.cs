@@ -34,6 +34,7 @@ public sealed class TroubleshooterEscalationTests
 
     [Theory]
     [InlineData(AttentionCode.PromptNotRenderable)]
+    [InlineData(AttentionCode.ModelUnavailable)]
     [InlineData(AttentionCode.RepositoryNotRegistered)]
     [InlineData(AttentionCode.BaseBranchMissing)]
     [InlineData(AttentionCode.ReviewIterationsExhausted)]

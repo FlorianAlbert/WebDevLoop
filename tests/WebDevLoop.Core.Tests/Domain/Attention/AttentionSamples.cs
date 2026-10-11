@@ -51,6 +51,7 @@ internal static class AttentionSamples
         AttentionCode.TrunkMissingStack => AttentionReasons.TrunkMissingStack("Every PR is merged, but 'main' does not contain the top layer.", "main"),
         AttentionCode.InternalInconsistency => AttentionReasons.InternalInconsistency("Spec run or repository of ticket 't1' is missing.", forTicket: true),
         AttentionCode.Unclassified => AttentionReasons.Unclassified("old reason", forTicket: false),
+        AttentionCode.ModelUnavailable => AttentionReasons.ModelUnavailable("Model 'unavailable-model' for Implementer is missing from the freshly fetched Model Catalog."),
         _ => throw new ArgumentOutOfRangeException(nameof(code), code, "Add a sample for the new reason code."),
     };
 }

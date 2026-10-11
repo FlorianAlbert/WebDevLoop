@@ -68,7 +68,10 @@ internal sealed class WorkflowHost(WorkflowScenario scenario, AgentScript? scrip
             services.Replace(ServiceDescriptor.Singleton<ICopilotRuntimePool>(Runtimes));
             services.Replace(ServiceDescriptor.Singleton<ITestTargetRunner>(new InstantTestTargets()));
             services.Replace(ServiceDescriptor.Singleton<IAgentRunner>(provider => new GatedAgentRunner(
-                new ScriptedAgentRunner(provider.GetRequiredService<IServiceScopeFactory>(), scenario.Issues, Script, scenario.Journal),
+                new ModelAwareAgentRunner(
+                    new ScriptedAgentRunner(provider.GetRequiredService<IServiceScopeFactory>(), scenario.Issues, Script, scenario.Journal),
+                    provider.GetRequiredService<ModelCatalogReadiness>(),
+                    provider.GetRequiredService<ILogger<ModelAwareAgentRunner>>()),
                 provider.GetRequiredService<SchedulerStartGate>())));
         });
     }

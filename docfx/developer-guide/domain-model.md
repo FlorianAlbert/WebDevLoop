@@ -113,6 +113,19 @@ All are `readonly record struct`s that validate in the constructor, so an invali
 
 Wording for every code lives in one factory class, <xref:WebDevLoop.Core.Domain.AttentionReasons>. A guard test fails when work is parked with a free-form string or a code has no factory. The reason is stored as JSON next to the run, ticket or step.
 
+The tester, troubleshooter and conflict resolver share `StepRunConclusion` to finish steps through the domain methods:
+a step-level reason uses `MarkNeedsAttention`; without one, `Finish` preserves the ordinary outcome. Ticket-level
+guidance alone does not change a failed step into `NeedsAttention`.
+
+`ModelUnavailable` identifies a step whose configured Model has disappeared from the signed-in account's Model Catalog.
+After a launch or turn fails, the runner refreshes the catalog and revalidates scheduler readiness before reporting this
+code. Only a successful fresh fetch can confirm Model loss; a still-listed Model or a failed fetch retains ordinary
+failure and retry behavior. Confirmed loss parks the affected step in `NeedsAttention` and pauses new launches while
+agent settings are invalid. This is a user configuration problem, so neither known remediation nor the troubleshooter
+automatically repairs it. The SDK boundary exposes generic exceptions and session error events rather than a distinct
+Model error, so the runner uses refresh-and-compare after any generic agent launch or turn failure instead of matching
+error wording.
+
 `SpecRun` and `TicketRun` also store `NeedsAttentionFrom`, the status they were in when parked. A retry uses it to resume the failed phase (see [run lifecycle](run-lifecycle.md#needs-attention)).
 
 ## Settings profile

@@ -310,6 +310,29 @@ public sealed class TroubleshooterStageTests : IDisposable
     // ----- Bounds: no loops -------------------------------------------------------------------------------------
 
     [Fact]
+    public async Task model_loss_consumes_no_attempt_and_does_not_block_recovery_in_the_same_git_state()
+    {
+        _f.Run.GlobalSettings.TroubleshooterMaxAttempts = 1;
+        (TicketRun ticket, _) = Park(AttentionReasons.ImplementerBlocked("no database"), WorktreeStatus.Clean);
+        _f.Agents.ScriptResult(AgentRole.Troubleshooter,
+            _ => AgentRunResult.NotReported(AgentRunOutcome.ModelUnavailable, "The Model is no longer available."));
+        _f.Agents.Script(AgentRole.Troubleshooter,
+            _ => Report(TroubleshooterOutcome.NeedsUser, summary: "Install the missing database.", userSteps: ["Install PostgreSQL."]));
+
+        await _stage.TryAsync(Case(ticket), AttentionFixture.Token);
+        StepRun unavailable = Assert.Single(_f.Run.Store.Steps);
+        Assert.Equal(AttentionCode.ModelUnavailable, unavailable.Attention?.Code);
+        _f.Run.GlobalSettings.SetRole(AgentRole.Troubleshooter,
+            new RoleSettingsOverride("replacement-model", "high", AttentionFixture.ShippedTemplate(), 600));
+        AttentionStageResult recovered = await _stage.TryAsync(Case(ticket), AttentionFixture.Token);
+
+        Assert.True(recovered.Diagnosis is not null, recovered.Summary);
+        Assert.Equal("Install the missing database.", recovered.Diagnosis.Diagnosis.Summary);
+        Assert.Equal("replacement-model", _f.Agents.Started.Last().Settings.Model);
+        Assert.Equal(StepStatus.Succeeded, _f.Run.Store.Steps.Last().Status);
+    }
+
+    [Fact]
     public async Task attempts_are_limited_per_item_even_when_the_state_keeps_changing()
     {
         (TicketRun ticket, string path) = Park(AttentionReasons.ImplementerBlocked("no database"), WorktreeStatus.Clean, TicketRunStatus.Implementing);

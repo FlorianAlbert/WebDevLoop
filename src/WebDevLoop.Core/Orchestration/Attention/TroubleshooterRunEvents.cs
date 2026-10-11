@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Core.Orchestration.Attention;
@@ -14,10 +15,16 @@ public static class TroubleshooterRunEvents
     /// <summary>A session ended; carries the diagnosis and whether WebDevLoop could verify a claimed repair.</summary>
     public const string Finished = "AttentionTroubleshooterFinished";
 
+    /// <summary>A finished session whose confirmed Model loss consumes neither an attempt nor a state fingerprint.</summary>
+    public const string ModelUnavailableOutcome = nameof(AttentionCode.ModelUnavailable);
+
+    private const string StepProperty = "step";
+    private const string OutcomeProperty = "outcome";
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public static RunEvent Start(AttentionCase attentionCase, string fingerprint, StepRunId step, int attempt, DateTimeOffset at) => Create(
-        attentionCase, Started, new { code = attentionCase.Reason.Code.ToString(), fingerprint, step = step.Value, attempt }, at);
+        attentionCase, Started, new StartedPayload(attentionCase.Reason.Code.ToString(), fingerprint, step.Value, attempt), at);
 
     public static RunEvent Finish(
         AttentionCase attentionCase,
@@ -30,33 +37,43 @@ public static class TroubleshooterRunEvents
         DateTimeOffset at) => Create(
         attentionCase,
         Finished,
-        new
-        {
-            code = attentionCase.Reason.Code.ToString(),
+        new FinishedPayload(
+            attentionCase.Reason.Code.ToString(),
             fingerprint,
-            step = step.Value,
+            step.Value,
             outcome,
             verified,
             summary,
-            diagnosis = diagnosis is null ? null : new TroubleshooterFinding(
-                diagnosis.Diagnosis.Summary, diagnosis.Diagnosis.ActionsTaken, diagnosis.UserSteps, [.. diagnosis.SuggestedButtons.Select(button => button.ToString())]),
-        },
+            diagnosis is null ? null : new TroubleshooterFinding(
+                diagnosis.Diagnosis.Summary, diagnosis.Diagnosis.ActionsTaken, diagnosis.UserSteps, [.. diagnosis.SuggestedButtons.Select(button => button.ToString())])),
         at);
 
-    /// <summary>Sessions started for the case's owner and code since the user's last Retry; the bound on attempts.</summary>
+    /// <summary>Sessions started for the case's owner and code since the user's last Retry, excluding confirmed Model loss.</summary>
     public static int CountStarted(IEnumerable<RunEvent> events, AttentionCase attentionCase)
     {
         RunEvent[] own = Own(events, attentionCase);
         int lastUserRetry = Array.FindLastIndex(own, runEvent => runEvent.Type == "ControlRetry");
         string code = attentionCase.Reason.Code.ToString();
-        return own.Skip(lastUserRetry + 1).Count(runEvent => runEvent.Type == Started && Text(runEvent, "code") == code);
+        return ConsumingAttempts(own, startIndex: lastUserRetry + 1).Count(runEvent => Text(runEvent, "code") == code);
     }
 
-    /// <summary>Whether a session was already started for this owner, code and git state, at any time.</summary>
+    /// <summary>Whether a session was already started for this owner, code and git state, excluding confirmed Model loss.</summary>
     public static bool WasEscalated(IEnumerable<RunEvent> events, AttentionCase attentionCase, string fingerprint)
     {
         string code = attentionCase.Reason.Code.ToString();
-        return Own(events, attentionCase).Any(runEvent => runEvent.Type == Started && Text(runEvent, "code") == code && Text(runEvent, "fingerprint") == fingerprint);
+        return ConsumingAttempts(Own(events, attentionCase)).Any(runEvent => Text(runEvent, "code") == code && Text(runEvent, "fingerprint") == fingerprint);
+    }
+
+    private static IEnumerable<RunEvent> ConsumingAttempts(RunEvent[] own, int startIndex = 0)
+    {
+        HashSet<string> unavailable = own
+            .Where(runEvent => runEvent.Type == Finished && Text(runEvent, OutcomeProperty) == ModelUnavailableOutcome)
+            .Select(runEvent => Text(runEvent, StepProperty))
+            .OfType<string>()
+            .ToHashSet();
+        // Without a step id, Model loss cannot be confirmed for that start; retain its budget charge.
+        return own.Skip(startIndex).Where(runEvent => runEvent.Type == Started
+            && (Text(runEvent, StepProperty) is not { } step || !unavailable.Contains(step)));
     }
 
     /// <summary>The newest diagnosis a session left for this owner, code and git state, if it finished.</summary>
@@ -103,6 +120,21 @@ public static class TroubleshooterRunEvents
 
     private static RunEvent Create(AttentionCase attentionCase, string type, object payload, DateTimeOffset at) =>
         RunEvent.Create(attentionCase.SpecRunId, attentionCase.TicketRunId, type, JsonSerializer.Serialize(payload), at);
+
+    private sealed record StartedPayload(
+        [property: JsonPropertyName("code")] string Code,
+        [property: JsonPropertyName("fingerprint")] string Fingerprint,
+        [property: JsonPropertyName(StepProperty)] string Step,
+        [property: JsonPropertyName("attempt")] int Attempt);
+
+    private sealed record FinishedPayload(
+        [property: JsonPropertyName("code")] string Code,
+        [property: JsonPropertyName("fingerprint")] string Fingerprint,
+        [property: JsonPropertyName(StepProperty)] string Step,
+        [property: JsonPropertyName(OutcomeProperty)] string Outcome,
+        [property: JsonPropertyName("verified")] bool Verified,
+        [property: JsonPropertyName("summary")] string Summary,
+        [property: JsonPropertyName("diagnosis")] TroubleshooterFinding? Diagnosis);
 }
 
 /// <summary>The part of a finished session that is kept in its run event, to show the same diagnosis again for an unchanged state.</summary>

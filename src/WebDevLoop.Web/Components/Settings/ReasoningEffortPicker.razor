@@ -53,9 +53,9 @@ else
 
     private IReadOnlyList<string> SupportedEfforts => Model?.SupportedReasoningEfforts ?? [];
 
-    private bool InheritedEffortSupported => SupportedEfforts.Contains(Inherited);
+    private bool InheritedEffortSupported => Model?.SupportsReasoningEffort(Inherited) ?? false;
 
-    private bool CurrentEffortSupported => SupportedEfforts.Contains(EffectiveValue);
+    private bool CurrentEffortSupported => Model?.SupportsReasoningEffort(EffectiveValue) ?? false;
 
     private string EmptyLabel()
     {

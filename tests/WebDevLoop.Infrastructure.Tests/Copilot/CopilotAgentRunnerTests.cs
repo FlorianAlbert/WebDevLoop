@@ -4,6 +4,7 @@ using WebDevLoop.Core.Orchestration.Results;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Infrastructure.Copilot;
 using WebDevLoop.Infrastructure.Copilot.Runtime;
+using WebDevLoop.Infrastructure.Copilot.Sdk;
 using WebDevLoop.Infrastructure.Skills;
 using WebDevLoop.Infrastructure.Tests.Copilot.Fakes;
 using WebDevLoop.Infrastructure.Tests.GitHub.Auth;
@@ -50,6 +51,27 @@ public sealed class CopilotAgentRunnerTests : IAsyncDisposable
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private string SkillsRoot => Path.Combine(AppContext.BaseDirectory, BundledSkillsOptions.DefaultDirectoryName);
+
+    [Fact]
+    public async Task runner_preserves_configured_effort_in_new_and_resumed_sdk_sessions()
+    {
+        _factory.OnSend = turn =>
+        {
+            turn.Report(ImplementationReportJson);
+            return Task.CompletedTask;
+        };
+        var request = new AgentRunRequest(Step, Session, Repo,
+            new AgentModelSettings("gpt-test", "high", TimeSpan.FromSeconds(10)), "Implement ticket.",
+            RoleCapabilityPolicies.For(AgentRole.Implementer, new AgentWorkspace(Path.GetFullPath("test-worktree"))));
+
+        Assert.Equal(AgentRunOutcome.Reported, (await _runner.StartAsync(request, Ct)).Outcome);
+        Assert.Equal(AgentRunOutcome.Reported, (await _runner.ResumeAsync(request, Ct)).Outcome);
+
+        FakeCopilotRuntime runtime = Assert.Single(_factory.Runtimes);
+        Assert.Equal("high", SdkSessionConfigFactory.CreateSession(Assert.Single(runtime.Created)).ReasoningEffort);
+        Assert.Equal("high", SdkSessionConfigFactory.CreateResume(Assert.Single(runtime.Resumed)).ReasoningEffort);
+        Assert.Equal("high", request.Settings.ReasoningEffort);
+    }
 
     [Fact]
     public async Task start_creates_the_session_sends_the_prompt_and_returns_the_validated_report()

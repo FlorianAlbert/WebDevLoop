@@ -23,6 +23,92 @@ public sealed class PrerequisiteValidatorTests
     }
 
     [Fact]
+    public async Task agent_models_wait_for_authentication_and_do_not_mask_a_missing_sign_in()
+    {
+        var authentication = new TaskCompletionSource<PrerequisiteCheck>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var validator = new PrerequisiteValidator(
+        [
+            new StubCheck(GitHubAuthCheck.CheckName, _ => authentication.Task),
+            new StubCheck(AgentModelsCheck.CheckName, _ => throw new InvalidOperationException("A Model Catalog error must not mask sign-in."),
+                GitHubAuthCheck.CheckName),
+        ]);
+
+        Task<PrerequisiteReport> pending = validator.ValidateAsync(CancellationToken.None);
+        authentication.SetResult(new PrerequisiteCheck(GitHubAuthCheck.CheckName, PrerequisiteStatus.Failed, "Nobody is signed in to GitHub."));
+        PrerequisiteReport report = await pending;
+
+        Assert.Equal(GitHubAuthCheck.CheckName, Assert.Single(report.Checks, check => check.Status == PrerequisiteStatus.Failed).Name);
+        PrerequisiteCheck models = Assert.Single(report.Checks, check => check.Name == AgentModelsCheck.CheckName);
+        Assert.Equal(PrerequisiteStatus.Warning, models.Status);
+        Assert.Contains("GitHub authentication", models.Message);
+    }
+
+    [Theory]
+    [InlineData(PrerequisiteStatus.Passed, PrerequisiteStatus.Passed)]
+    [InlineData(PrerequisiteStatus.Warning, PrerequisiteStatus.Passed)]
+    [InlineData(PrerequisiteStatus.Failed, PrerequisiteStatus.Warning)]
+    public async Task dependencies_are_declared_by_checks_even_when_registered_after_the_dependent(
+        PrerequisiteStatus prerequisiteStatus, PrerequisiteStatus dependentStatus)
+    {
+        var prerequisite = new TaskCompletionSource<PrerequisiteCheck>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var validator = new PrerequisiteValidator(
+        [
+            new StubCheck("dependent", _ => Task.FromResult(new PrerequisiteCheck("dependent",
+                prerequisite.Task.IsCompletedSuccessfully ? PrerequisiteStatus.Passed : PrerequisiteStatus.Failed, "Dependency completed.")), "prerequisite"),
+            new StubCheck("prerequisite", _ => prerequisite.Task),
+            StubCheck.Returning("independent", PrerequisiteStatus.Passed),
+        ]);
+
+        Task<PrerequisiteReport> pending = validator.ValidateAsync(CancellationToken.None);
+        prerequisite.SetResult(new PrerequisiteCheck("prerequisite", prerequisiteStatus, "Dependency outcome."));
+        PrerequisiteReport report = await pending;
+
+        Assert.Equal(["dependent", "prerequisite", "independent"], report.Checks.Select(check => check.Name));
+        Assert.Equal(dependentStatus, report.Checks[0].Status);
+        Assert.Equal(PrerequisiteStatus.Passed, report.Checks[2].Status);
+    }
+
+    [Fact]
+    public async Task a_warning_prerequisite_cannot_hide_a_failed_dependent_check_and_make_the_app_ready()
+    {
+        var validator = new PrerequisiteValidator(
+        [
+            StubCheck.Returning("prerequisite", PrerequisiteStatus.Warning),
+            new StubCheck("dependent", _ => Task.FromResult(new PrerequisiteCheck(
+                "dependent", PrerequisiteStatus.Failed, "Invalid configuration.")), "prerequisite"),
+        ]);
+
+        PrerequisiteReport report = await validator.ValidateAsync(CancellationToken.None);
+
+        Assert.False(report.IsReady);
+        Assert.Equal("Invalid configuration.", Assert.Single(report.Checks,
+            check => check.Status == PrerequisiteStatus.Failed).Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task missing_or_cyclic_dependencies_are_reported_without_hiding_independent_checks(bool cyclic)
+    {
+        List<IPrerequisiteCheck> checks =
+        [
+            new StubCheck("dependent", _ => throw new InvalidOperationException("Must not run."), "missing"),
+            StubCheck.Returning("independent", PrerequisiteStatus.Passed),
+        ];
+        if (cyclic)
+        {
+            checks.Add(new StubCheck("missing", _ => throw new InvalidOperationException("Must not run."), "dependent"));
+        }
+
+        PrerequisiteReport report = await new PrerequisiteValidator(checks).ValidateAsync(CancellationToken.None);
+
+        PrerequisiteCheck dependent = Assert.Single(report.Checks, check => check.Name == "dependent");
+        Assert.Equal(PrerequisiteStatus.Failed, dependent.Status);
+        Assert.Contains("missing or cyclic", dependent.Message);
+        Assert.Equal(PrerequisiteStatus.Passed, Assert.Single(report.Checks, check => check.Name == "independent").Status);
+    }
+
+    [Fact]
     public async Task a_throwing_check_becomes_a_failed_result_without_hiding_the_others()
     {
         var throwing = new StubCheck("explosive", _ => throw new InvalidOperationException("boom"));

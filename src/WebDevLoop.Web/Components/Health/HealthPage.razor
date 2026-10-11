@@ -64,6 +64,10 @@ else
                                 {
                                     <div class="small text-body-secondary mt-1" data-testid="remediation"><strong>Fix:</strong> @check.Remediation</div>
                                 }
+                                @if (check.Name == AgentModelsCheck.CheckName && check.Status == PrerequisiteStatus.Failed)
+                                {
+                                    <a href="@AgentModelsCheck.SettingsPath">Open settings</a>
+                                }
                             </td>
                         </tr>
                     }

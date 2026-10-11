@@ -1,6 +1,8 @@
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Infrastructure.GitHub.Auth;
+using WebDevLoop.Infrastructure.Prerequisites;
 
 namespace WebDevLoop.Web.Tests.Workflow;
 
@@ -41,11 +43,30 @@ internal sealed class InstantTestTargets : ITestTargetRunner
 }
 
 /// <summary>Prerequisite results under test control; every check passes unless told otherwise.</summary>
-internal sealed class ScriptedPrerequisites : IPrerequisiteValidator
+internal sealed class ScriptedPrerequisites : IPrerequisiteValidator, IPrerequisiteCheck
 {
     public static readonly PrerequisiteCheck Passed = new("Git CLI", PrerequisiteStatus.Passed, "git 2.50");
 
     public PrerequisiteCheck[] Checks { get; set; } = [Passed];
 
+    public string Name => "Scripted prerequisites";
+
+    public Task<PrerequisiteCheck> RunAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(Checks.FirstOrDefault(check => check.Status == PrerequisiteStatus.Failed) ?? Passed);
+
     public Task<PrerequisiteReport> ValidateAsync(CancellationToken cancellationToken) => Task.FromResult(new PrerequisiteReport(Checks));
+}
+
+/// <summary>Sign-in at the GitHub boundary; no credentials or live GitHub access are needed by workflow scenarios.</summary>
+internal sealed class ScriptedSignInState : IGitHubSignInState
+{
+    public string? Login { get; set; } = "test-user";
+
+    public GitHubSignInStatus Status => new(true, Login, null, null);
+
+    public event Action? Changed
+    {
+        add { }
+        remove { }
+    }
 }

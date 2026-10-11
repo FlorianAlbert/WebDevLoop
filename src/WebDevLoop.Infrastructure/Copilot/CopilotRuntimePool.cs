@@ -30,7 +30,7 @@ internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenP
     /// <param name="repo">The repository the session works on (named in authentication errors).</param>
     /// <exception cref="CopilotAuthenticationException">Nobody is signed in to GitHub.</exception>
     public async Task<CopilotRuntimeHandle> AcquireAsync(
-        GitHubRepoRef repo,
+        GitHubRepoRef? repo,
         IReadOnlyDictionary<string, string> shellEnvironment,
         CancellationToken cancellationToken)
     {
@@ -51,6 +51,12 @@ internal sealed class CopilotRuntimePool(ICopilotRuntimeFactory factory, ITokenP
         {
             _gate.Release();
         }
+    }
+
+    public async Task<IReadOnlyList<ModelCatalogEntry>> ListModelsAsync(CancellationToken cancellationToken)
+    {
+        await using CopilotRuntimeHandle handle = await AcquireAsync(null, new Dictionary<string, string>(), cancellationToken);
+        return await handle.Runtime.ListModelsAsync(handle.Token.Value, cancellationToken);
     }
 
     public async Task<CopilotRuntimeLease> AcquireAsync(CopilotAuthIdentity identity, CancellationToken cancellationToken)

@@ -120,6 +120,7 @@ public static class InfrastructureServiceCollectionExtensions
             skills));
         services.TryAddSingleton<IAgentRunner>(provider => provider.GetRequiredService<CopilotAgentServices>().Runner);
         services.TryAddSingleton<ICopilotRuntimePool>(provider => provider.GetRequiredService<CopilotAgentServices>().RuntimePool);
+        services.TryAddSingleton<IModelCatalog>(provider => provider.GetRequiredService<CopilotAgentServices>().ModelCatalog);
     }
 
     /// <summary>appsettings.json lists every key with an empty value; empty means "not configured".</summary>

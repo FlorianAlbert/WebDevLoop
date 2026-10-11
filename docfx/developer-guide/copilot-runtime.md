@@ -53,10 +53,31 @@ Everything is built by <xref:WebDevLoop.Infrastructure.Copilot.CopilotAgentServi
 | --- | --- | --- |
 | <xref:WebDevLoop.Core.Ports.IAgentRunner> | `CopilotAgentRunner` | `StartAsync` (new session), `ResumeAsync` (existing session), `AbortAsync` |
 | <xref:WebDevLoop.Core.Ports.ICopilotRuntimePool> | `CopilotRuntimePool` | `AcquireAsync(identity)` (recovery), `ReplaceAsync`, `RefreshExpiringAsync`, `EvictIdleAsync` |
+| <xref:WebDevLoop.Core.Ports.IModelCatalog> | `InMemoryModelCatalog` | Current Models, supported Reasoning Efforts, successful-fetch state and on-demand refresh |
 | <xref:WebDevLoop.Core.Ports.IAgentLogSink> | `PersistentAgentLogStore` (see [Persistence and events](persistence-and-events.md#agent-log-persistence)) | Passed to the runner |
 | <xref:WebDevLoop.Core.Ports.ITokenProvider> | `GitHubUserSession` (see [Git and GitHub](git-and-github.md#github-app-user-sign-in)) | The signed-in user's token |
 
 Disposing `CopilotAgentServices` (container shutdown) stops every runtime.
+
+### Model Catalog
+
+Startup fetches the Model Catalog before prerequisite validation. Refreshes lease a runtime from the same pool as agent
+sessions and pass the signed-in user's current token explicitly, without using stored CLI credentials.
+
+In GitHub.Copilot.SDK 1.0.18, `client.Rpc.Models.ListAsync(gitHubToken: ..., cancellationToken: ...)` returns a `ModelList`.
+Each `Rpc.Model` provides `Id`, `Name` (display name), and optional `SupportedReasoningEfforts`; an absent efforts list maps
+to no supported Reasoning Efforts. The adapter uses this typed RPC rather than `CopilotClient.ListModelsAsync`, whose
+successful results are cached until disconnect and whose authentication is runtime-scoped. The typed RPC is marked
+experimental by the SDK, like the existing session token-provider hooks.
+
+The prerequisite check requires every configured Reasoning Effort to be in the Model's supported set when that set is
+non-empty. For a Model without reasoning support, Reasoning Effort is not applicable and the check skips the comparison.
+This validation policy does not change the stored settings or runner contract: the runner passes the configured string
+unchanged to launch and resume configurations.
+
+The app retains immutable snapshots in memory only. Failed refreshes return the error and leave the last-known catalog
+unchanged. Nothing is stored across process restarts, and no Model is automatically substituted. See
+[Startup and prerequisites](startup-and-prerequisites.md#prerequisites-and-readiness) for Model validation and diagnostics.
 
 A Core runner builds one <xref:WebDevLoop.Core.Agents.AgentRunRequest>:
 

@@ -118,14 +118,28 @@ What readiness controls:
 Readiness is re-evaluated:
 
 - at startup (`AppInitializer`),
-- on **Re-check** (Health page, `GET /api/prerequisites`),
-- on GitHub sign-in or sign-out (`GitHubSignInReadinessSync`, so the workflow starts or stops without a restart).
+- on **Re-check** (Health page),
+- after successful global or repository settings saves (`ValidatingSettingsManager`, for both the UI and REST API),
+- on GitHub sign-in or sign-out (`GitHubSignInReadinessSync`),
+- on manual Model Catalog refresh (`ModelCatalogReadiness.RefreshAsync`).
+
+Startup, sign-in changes, settings saves and manual Model Catalog refresh use `ModelCatalogReadiness` to re-fetch the
+catalog before re-validating. Failed fetches report their error and still validate against the last-known catalog.
+The Health page's prerequisite re-check validates the current catalog without fetching it.
+
+Every readiness evaluation updates the re-closable scheduler gate. One invalid role in any repository pauses the whole
+app, while settings and diagnostics remain reachable. Restoring valid settings opens the gate automatically after startup
+recovery has completed; startup recovery is not repeated. Already admitted steps finish, but every new agent start or
+resume (including a retry inside a running phase) waits for the gate.
 
 See [Web API](web-api.md) for how `OperationalOnlyFilter` returns the `503`.
 
 ## Hosted workers
 
-The periodic workers (all except `RecoveryWorker`, which opens the gate itself) derive from `GatedPeriodicWorker`: they wait until the <xref:WebDevLoop.Core.Orchestration.Recovery.Startup.SchedulerStartGate> opens (never while diagnostic-only), then run one pass per interval, each in a fresh DI scope. A failing pass is logged and retried on the next tick.
+The periodic workers (all except `RecoveryWorker`, which completes startup recovery itself) derive from
+`GatedPeriodicWorker`: they wait on the <xref:WebDevLoop.Core.Orchestration.Recovery.Startup.SchedulerStartGate> before
+every pass, including immediate follow-up passes. Each pass has a fresh DI scope. A failing pass is logged and retried on
+the next tick. `RecoveryWorker` also waits on the gate before every periodic reconciliation cycle.
 
 Registered only when `Workflow:Enabled` is `true`. Start order below; they stop in reverse.
 
@@ -133,6 +147,7 @@ Registered only when `Workflow:Enabled` is `true`. Start order below; they stop 
 | --- | --- | --- |
 | `AgentLogShutdownFlush` | Writes pending agent logs on shutdown (starts first, so it flushes last) | – |
 | `BackgroundWorkRunner` | Runs launched agent and integration work; cancels it on shutdown | – |
+| `SchedulerReadinessSync` | Closes or resumes the gate after every readiness evaluation | – |
 | `WorkflowEventSubscriptions` | Connects workflow handlers to the event bus | – |
 | `RecoveryWorker` | Waits for readiness, runs startup recovery once, then reconciles periodically | `StartupRetryInterval`, `RecoveryInterval` |
 | <xref:WebDevLoop.Web.Background.OutboxDispatchWorker> | Publishes outbox messages; loops at once while messages are pending | `OutboxPollInterval` |

@@ -64,9 +64,11 @@ internal sealed class ScriptedSignInState : IGitHubSignInState
 
     public GitHubSignInStatus Status => new(true, Login, null, null);
 
-    public event Action? Changed
+    public event Action? Changed;
+
+    public void ChangeLogin(string? login)
     {
-        add { }
-        remove { }
+        Login = login;
+        Changed?.Invoke();
     }
 }

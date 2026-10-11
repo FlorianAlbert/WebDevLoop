@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
 using WebDevLoop.Infrastructure.Copilot;
@@ -16,6 +17,7 @@ using WebDevLoop.Infrastructure.Queries;
 using WebDevLoop.Infrastructure.Runtime;
 using WebDevLoop.Infrastructure.Skills;
 using WebDevLoop.Infrastructure.TestHost;
+using WebDevLoop.Web.Background;
 using WebDevLoop.Web.GitHubAuth;
 using WebDevLoop.Web.Resources.Prompts;
 
@@ -118,7 +120,9 @@ public static class InfrastructureServiceCollectionExtensions
                 IdleTimeout = copilot.IdleTimeout,
             },
             skills));
-        services.TryAddSingleton<IAgentRunner>(provider => provider.GetRequiredService<CopilotAgentServices>().Runner);
+        services.TryAddSingleton<IAgentRunner>(provider => new GatedAgentRunner(
+            provider.GetRequiredService<CopilotAgentServices>().Runner,
+            provider.GetRequiredService<SchedulerStartGate>()));
         services.TryAddSingleton<ICopilotRuntimePool>(provider => provider.GetRequiredService<CopilotAgentServices>().RuntimePool);
         services.TryAddSingleton<IModelCatalog>(provider => provider.GetRequiredService<CopilotAgentServices>().ModelCatalog);
     }

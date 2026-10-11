@@ -39,7 +39,7 @@ public sealed class RecoveryCoordinator(
 
         RecoveryCycleReport report = await RunStagesAsync(RecoveryCycleKind.Startup, cancellationToken);
         schedulers.Open();
-        return report with { SchedulersStarted = true };
+        return report with { SchedulersStarted = schedulers.IsOpen };
     }
 
     public async Task<RecoveryCycleReport> RunPeriodicAsync(PrerequisiteReport? prerequisites, CancellationToken cancellationToken)

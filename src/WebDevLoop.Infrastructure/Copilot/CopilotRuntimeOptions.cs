@@ -11,7 +11,9 @@ public sealed class CopilotRuntimeOptions
     /// <summary>Runtimes no session has leased for this long are stopped by <c>EvictIdleAsync</c>.</summary>
     public TimeSpan IdleTimeout { get; init; } = TimeSpan.FromMinutes(10);
 
-    /// <summary>Environment the agent shell environment is derived from (scrubbed by the role policy); defaults to this process.</summary>
+    /// <summary>
+    /// Inherited environment for Model Catalog runtimes and agent shells (scrubbed by the role policy); defaults to this process.
+    /// </summary>
     public Func<IReadOnlyDictionary<string, string>> InheritedEnvironment { get; init; } = ReadProcessEnvironment;
 
     private static IReadOnlyDictionary<string, string> ReadProcessEnvironment() =>

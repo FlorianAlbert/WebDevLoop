@@ -18,6 +18,9 @@ internal sealed class FakeCopilotRuntimeFactory : ICopilotRuntimeFactory
     /// <summary>Optional failure when a session is created or resumed on a runtime (by runtime index).</summary>
     public Func<int, Exception?> OnOpenSession { get; set; } = _ => null;
 
+    /// <summary>Models available to a runtime and the explicitly authenticated user.</summary>
+    public Func<CopilotRuntimeLaunch, string, IReadOnlyList<ModelCatalogEntry>> OnListModels { get; set; } = (_, _) => [];
+
     public Task<ICopilotRuntime> StartAsync(CopilotRuntimeLaunch launch, CancellationToken cancellationToken)
     {
         var runtime = new FakeCopilotRuntime(this, Runtimes.Count, launch);
@@ -29,7 +32,7 @@ internal sealed class FakeCopilotRuntimeFactory : ICopilotRuntimeFactory
 internal sealed class FakeCopilotRuntime(FakeCopilotRuntimeFactory factory, int index, CopilotRuntimeLaunch launch) : ICopilotRuntime
 {
     public Task<IReadOnlyList<ModelCatalogEntry>> ListModelsAsync(string gitHubToken, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<ModelCatalogEntry>>([]);
+        Task.FromResult(factory.OnListModels(Launch, gitHubToken));
 
     public int Index { get; } = index;
 

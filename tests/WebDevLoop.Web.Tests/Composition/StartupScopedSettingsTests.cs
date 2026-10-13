@@ -94,8 +94,11 @@ public sealed class StartupScopedSettingsTests
     public async Task no_warning_is_logged_while_every_clone_lies_under_the_workspace_root()
     {
         using var scenario = new WorkflowScenario();
-        await using var host = new WorkflowHost(scenario);
-        await new WorkflowApi(host.CreateClient(), scenario.Logs).RegisterRepositoryAsync(scenario);
+        await using (var host = new WorkflowHost(scenario))
+        {
+            await new WorkflowApi(host.CreateClient(), scenario.Logs).RegisterRepositoryAsync(scenario);
+        }
+
         await using var restarted = new WorkflowHost(scenario);
         _ = restarted.CreateClient();
 

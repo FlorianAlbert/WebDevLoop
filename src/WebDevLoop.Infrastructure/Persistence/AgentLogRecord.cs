@@ -8,7 +8,7 @@ public sealed class AgentLogRecord
 {
     public required StepRunId StepRunId { get; init; }
 
-    public required int Sequence { get; init; }
+    public required int Sequence { get; set; }
 
     public required DateTimeOffset At { get; init; }
 

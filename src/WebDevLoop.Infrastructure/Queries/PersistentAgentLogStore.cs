@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using WebDevLoop.Core.Agents;
@@ -16,6 +17,8 @@ namespace WebDevLoop.Infrastructure.Queries;
 /// </summary>
 public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServiceScopeFactory scopes) : IAgentLogSink, IAgentLogReader, IAgentLogNotifications, IAsyncDisposable
 {
+    private const int SqliteConstraintErrorCode = 19;
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly AgentLogSubscriptions _subscriptions = new();
     private readonly List<AgentLogRecord> _pending = [];
@@ -120,15 +123,14 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
             return [];
         }
 
-        using IServiceScope scope = scopes.CreateScope();
-        WebDevLoopDbContext context = scope.ServiceProvider.GetRequiredService<WebDevLoopDbContext>();
-        context.AgentLogEntries.AddRange(_pending);
-        await context.SaveChangesAsync(cancellationToken);
+        await SavePendingAsync(cancellationToken);
 
         // Cleared before the retention delete so a failing delete can never make a retry re-insert the same rows.
         StepRunId[] touchedSteps = _pending.Select(entry => entry.StepRunId).Distinct().ToArray();
         _pending.Clear();
 
+        using IServiceScope scope = scopes.CreateScope();
+        WebDevLoopDbContext context = scope.ServiceProvider.GetRequiredService<WebDevLoopDbContext>();
         foreach (StepRunId stepRunId in touchedSteps)
         {
             int oldestRetained = _lastSequences[stepRunId] - options.MaxEntriesPerStep;
@@ -138,6 +140,37 @@ public sealed class PersistentAgentLogStore(AgentLogStoreOptions options, IServi
         }
 
         return touchedSteps;
+    }
+
+    private async Task SavePendingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await InsertPendingAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqliteException { SqliteErrorCode: SqliteConstraintErrorCode })
+        {
+            // Another process wrote to the same steps; continue after its rows instead of failing every later flush.
+            await RenumberPendingAsync(cancellationToken);
+            await InsertPendingAsync(cancellationToken);
+        }
+    }
+
+    private async Task InsertPendingAsync(CancellationToken cancellationToken)
+    {
+        using IServiceScope scope = scopes.CreateScope();
+        WebDevLoopDbContext context = scope.ServiceProvider.GetRequiredService<WebDevLoopDbContext>();
+        context.AgentLogEntries.AddRange(_pending);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task RenumberPendingAsync(CancellationToken cancellationToken)
+    {
+        _lastSequences.Clear();
+        foreach (AgentLogRecord record in _pending)
+        {
+            record.Sequence = await NextSequenceAsync(record.StepRunId, cancellationToken);
+        }
     }
 
     private async Task FlushAfterIntervalAsync()

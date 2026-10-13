@@ -245,6 +245,22 @@ public sealed class PersistentAgentLogStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task a_conflicting_write_by_another_process_renumbers_the_pending_entries_instead_of_blocking_all_later_writes()
+    {
+        await using PersistentAgentLogStore host = _database.CreateStore(new AgentLogStoreOptions { BatchSize = 100, FlushInterval = TimeSpan.FromHours(1) });
+        await using PersistentAgentLogStore other = _database.CreateStore(new AgentLogStoreOptions { BatchSize = 1 });
+        await host.AppendAsync(Entry(StepA, "host-1"), CancellationToken.None);
+        await other.AppendAsync(Entry(StepA, "other-1"), CancellationToken.None);
+
+        Exception? failure = await Record.ExceptionAsync(() => host.FlushAsync(CancellationToken.None));
+        await host.AppendAsync(Entry(StepA, "host-2"), CancellationToken.None);
+        IReadOnlyList<AgentLogView> all = await host.ReadAsync(StepA, 0, CancellationToken.None);
+
+        Assert.Null(failure);
+        Assert.Equal([(1, "other-1"), (2, "host-1"), (3, "host-2")], all.Select(view => (view.Sequence, view.Text)));
+    }
+
+    [Fact]
     public async Task reading_without_buffered_entries_notifies_nobody()
     {
         await using PersistentAgentLogStore store = _database.CreateStore();

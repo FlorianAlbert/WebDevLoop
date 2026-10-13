@@ -16,7 +16,7 @@ public interface IAppInitializer
 }
 
 /// <summary>
-/// Startup sequence: pin the process boot time, create the data directory, apply migrations, seed the global settings on
+/// Startup sequence: take the exclusive hold on the database (<see cref="DatabaseInstanceLock"/>), pin the process boot time, create the data directory, apply migrations, seed the global settings on
 /// first start, resolve the global settings the process-wide adapters are built from (<see cref="StartupSettings"/>), and
 /// evaluate the prerequisites.
 /// Nothing here throws for an unhealthy environment: a database that cannot be migrated or a failing prerequisite leaves the
@@ -34,6 +34,8 @@ public sealed partial class AppInitializer(
 {
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
+        // A second process on the same database would run migrations, recovery and the workflow against live data; fails startup.
+        services.GetRequiredService<DatabaseInstanceLock>();
         // Pinned now: recovery treats steps started before the boot time as left over by a previous process.
         services.GetRequiredService<ProcessBoot>();
         EffectiveSettings? persisted = await PrepareDatabaseAsync(cancellationToken);

@@ -10,6 +10,7 @@ using WebDevLoop.Core.Orchestration.Recovery.AgentSteps;
 using WebDevLoop.Core.Orchestration.Recovery.ExternalState;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Infrastructure.GitHub.Auth;
+using WebDevLoop.Infrastructure.Persistence;
 using WebDevLoop.Web.Background;
 using WebDevLoop.Web.Tests.Workflow;
 
@@ -105,6 +106,27 @@ public sealed class CompositionRootTests
 
         Assert.DoesNotContain(host.Services.GetServices<IHostedService>(), service => service.GetType().Namespace == typeof(BackgroundWorkRunner).Namespace);
         Assert.Equal(System.Net.HttpStatusCode.OK, (await host.CreateClient().GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task a_second_instance_on_the_same_database_refuses_to_start()
+    {
+        using var sandbox = new WorkflowSandbox();
+        await using var first = new CompositionHost(sandbox);
+        _ = first.Services;
+        await using var second = new CompositionHost(sandbox);
+
+        Exception? failure = Record.Exception(() => _ = second.Services);
+
+        Assert.Contains(ExceptionChain(failure), exception => exception is DatabaseInUseException);
+    }
+
+    private static IEnumerable<Exception> ExceptionChain(Exception? exception)
+    {
+        for (; exception is not null; exception = exception.InnerException)
+        {
+            yield return exception;
+        }
     }
 
     private static string? ProblemOf(Type port, IReadOnlyList<ServiceDescriptor> registrations, IServiceProvider services)

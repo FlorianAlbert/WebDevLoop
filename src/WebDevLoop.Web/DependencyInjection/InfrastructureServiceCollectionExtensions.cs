@@ -42,6 +42,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<ICurrentRepositorySelection>(_ => new FileCurrentRepositorySelection(options.UiStatePath));
 
         services.AddPersistence(options.ConnectionString);
+        services.TryAddSingleton(_ => DatabaseInstanceLock.Acquire(options.ResolvedDatabasePath));
         services.AddEventing();
         services.TryAddSingleton(options.AgentLogs);
         services.AddQueries();

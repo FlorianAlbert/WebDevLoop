@@ -22,6 +22,29 @@ public sealed class WorkerResilienceTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task closing_the_gate_finishes_the_current_pass_but_waits_before_the_next(bool moreWork)
+    {
+        var schedulers = new SchedulerStartGate();
+        schedulers.Open();
+        await using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+        using var worker = new PausableWorker(services.GetRequiredService<IServiceScopeFactory>(), schedulers, moreWork);
+        await worker.StartAsync(Ct);
+        await worker.FirstPass.Task.WaitAsync(Timeout, Ct);
+
+        schedulers.SetPrerequisitesReady(false);
+        worker.FinishFirstPass.TrySetResult();
+        await worker.FirstPassFinished.Task.WaitAsync(Timeout, Ct);
+        await Task.Delay(TimeSpan.FromMilliseconds(150), Ct);
+        Assert.False(worker.SecondPass.Task.IsCompleted);
+
+        schedulers.SetPrerequisitesReady(true);
+        await worker.SecondPass.Task.WaitAsync(Timeout, Ct);
+        await worker.StopAsync(Ct);
+    }
+
     [Fact]
     public async Task a_periodic_pass_timing_out_is_retried_on_the_next_tick()
     {
@@ -55,6 +78,33 @@ public sealed class WorkerResilienceTests
         await worker.StartAsync(Ct);
         await schedulers.WaitUntilOpenAsync(Ct).WaitAsync(Timeout, Ct);
         await worker.StopAsync(Ct);
+    }
+
+    private sealed class PausableWorker(IServiceScopeFactory scopes, SchedulerStartGate schedulers, bool moreWork)
+        : GatedPeriodicWorker(scopes, schedulers, NullLogger.Instance)
+    {
+        private int _passes;
+
+        public TaskCompletionSource FirstPass { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FinishFirstPass { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FirstPassFinished { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource SecondPass { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override TimeSpan Interval => TimeSpan.FromMilliseconds(20);
+
+        protected override async Task<bool> RunPassAsync(IServiceProvider services, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _passes) == 1)
+            {
+                FirstPass.TrySetResult();
+                await FinishFirstPass.Task.WaitAsync(cancellationToken);
+                FirstPassFinished.TrySetResult();
+                return moreWork;
+            }
+
+            SecondPass.TrySetResult();
+            return false;
+        }
     }
 
     private sealed class TimingOutOnceWorker(IServiceScopeFactory scopes, SchedulerStartGate schedulers)

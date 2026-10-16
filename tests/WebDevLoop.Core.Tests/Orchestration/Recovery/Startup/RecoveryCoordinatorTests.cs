@@ -9,6 +9,24 @@ public sealed class RecoveryCoordinatorTests
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
+    public async Task startup_with_an_older_healthy_report_cannot_reopen_the_gate_after_validation_failed()
+    {
+        _stages.Gate.SetPrerequisitesReady(false);
+
+        RecoveryCycleReport report = await _stages.Coordinator().RunStartupAsync(RecoveryStageFakes.Healthy, Token);
+
+        Assert.False(_stages.Gate.IsOpen);
+        Assert.True(_stages.Gate.StartupCompleted);
+        Assert.False(report.SchedulersStarted);
+
+        _stages.Gate.SetPrerequisitesReady(true);
+        _stages.Journal.Clear();
+        await _stages.Coordinator().RunPeriodicAsync(RecoveryStageFakes.Healthy, Token);
+        Assert.True(_stages.Gate.IsOpen);
+        Assert.DoesNotContain("OutboxReplay", _stages.Journal);
+    }
+
+    [Fact]
     public async Task startup_recovers_external_state_then_agent_steps_replays_the_outbox_recomputes_queues_and_frontiers_then_starts_schedulers()
     {
         RecoveryCycleReport report = await _stages.Coordinator().RunStartupAsync(RecoveryStageFakes.Healthy, Token);

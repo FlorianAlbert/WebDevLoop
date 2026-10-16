@@ -28,6 +28,8 @@ internal sealed class AgentScript
     public HashSet<int> HangingImplementers { get; } = [];
 
     public TaskCompletionSource HangingImplementerStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource ReleaseHangingImplementer { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public HashSet<int> FailFirstImplementation { get; } = [];
 
     /// <summary>
     /// Tickets whose first implementer turns wait for each other before committing, which only completes when they are
@@ -129,14 +131,19 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
         if (script.HangingImplementers.Contains(ticketIssue))
         {
             script.HangingImplementerStarted.TrySetResult();
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            await script.ReleaseHangingImplementer.Task.WaitAsync(cancellationToken);
+        }
+
+        int turn = journal.Calls.Count(call => call.TicketIssue == ticketIssue && call.Role == AgentRole.Implementer);
+        if (turn == 1 && script.FailFirstImplementation.Contains(ticketIssue))
+        {
+            return AgentRunResult.NotReported(AgentRunOutcome.Failed, "Transient first-turn failure.");
         }
 
         await script.ConcurrentImplementers.ArriveAsync(ticketIssue, cancellationToken);
         string worktree = request.Policy.Paths.WorkingDirectory;
         using var repository = new Repository(worktree);
         MergeIntegrationBranch(repository);
-        int turn = journal.Calls.Count(call => call.TicketIssue == ticketIssue && call.Role == AgentRole.Implementer);
         File.WriteAllText(Path.Combine(worktree, $"ticket-{ticketIssue}.txt"), $"ticket {ticketIssue}, turn {turn}\n");
         Commands.Stage(repository, "*");
         Commit commit = repository.Commit($"Implement #{ticketIssue} (turn {turn})", Agent, Agent);

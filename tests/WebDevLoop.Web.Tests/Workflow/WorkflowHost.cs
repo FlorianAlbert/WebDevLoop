@@ -5,8 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Infrastructure.GitHub.Auth;
 using WebDevLoop.Infrastructure.Prerequisites;
+using WebDevLoop.Web.Background;
 
 namespace WebDevLoop.Web.Tests.Workflow;
 
@@ -65,8 +67,9 @@ internal sealed class WorkflowHost(WorkflowScenario scenario, AgentScript? scrip
             ])));
             services.Replace(ServiceDescriptor.Singleton<ICopilotRuntimePool>(Runtimes));
             services.Replace(ServiceDescriptor.Singleton<ITestTargetRunner>(new InstantTestTargets()));
-            services.Replace(ServiceDescriptor.Singleton<IAgentRunner>(provider => new ScriptedAgentRunner(
-                provider.GetRequiredService<IServiceScopeFactory>(), scenario.Issues, Script, scenario.Journal)));
+            services.Replace(ServiceDescriptor.Singleton<IAgentRunner>(provider => new GatedAgentRunner(
+                new ScriptedAgentRunner(provider.GetRequiredService<IServiceScopeFactory>(), scenario.Issues, Script, scenario.Journal),
+                provider.GetRequiredService<SchedulerStartGate>())));
         });
     }
 }

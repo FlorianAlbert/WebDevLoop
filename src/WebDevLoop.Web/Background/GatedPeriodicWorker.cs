@@ -3,9 +3,8 @@ using WebDevLoop.Core.Orchestration.Recovery.Startup;
 namespace WebDevLoop.Web.Background;
 
 /// <summary>
-/// A hosted worker that waits until startup recovery opened the <see cref="SchedulerStartGate"/> (never while the app is
-/// diagnostic-only) and then runs one pass per <see cref="Interval"/>, each in a DI scope of its own. A failing pass is
-/// logged and retried on the next tick.
+/// A hosted worker that waits on the <see cref="SchedulerStartGate"/> before every pass, including immediate follow-up
+/// passes. Each pass runs in a DI scope of its own; a failing pass is logged and retried on the next tick.
 /// </summary>
 public abstract partial class GatedPeriodicWorker(IServiceScopeFactory scopes, SchedulerStartGate schedulers, ILogger logger) : BackgroundService
 {
@@ -16,9 +15,9 @@ public abstract partial class GatedPeriodicWorker(IServiceScopeFactory scopes, S
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await schedulers.WaitUntilOpenAsync(stoppingToken);
         while (!stoppingToken.IsCancellationRequested)
         {
+            await schedulers.WaitUntilOpenAsync(stoppingToken);
             if (!await TryRunPassAsync(stoppingToken))
             {
                 await Task.Delay(Interval, stoppingToken);

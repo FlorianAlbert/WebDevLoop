@@ -7,9 +7,8 @@ namespace WebDevLoop.Web.Background;
 /// <summary>
 /// Drives <see cref="RecoveryCoordinator"/>: while the app is diagnostic-only it waits (re-checking every
 /// <see cref="WorkflowWorkerOptions.StartupRetryInterval"/>, e.g. after the Health page's "Re-check" turned the readiness
-/// operational); then it runs startup recovery once, which opens the <see cref="SchedulerStartGate"/> for the other
-/// workers, and afterwards a periodic reconciliation cycle every <see cref="WorkflowWorkerOptions.RecoveryInterval"/>.
-/// Every cycle runs in a DI scope of its own.
+/// operational); then it runs startup recovery once and afterwards periodic reconciliation. Every periodic cycle waits
+/// on the gate again, so a pause never repeats startup recovery. Every cycle runs in a DI scope of its own.
 /// </summary>
 public sealed partial class RecoveryWorker(
     IServiceScopeFactory scopes,
@@ -23,8 +22,9 @@ public sealed partial class RecoveryWorker(
         bool reportedDiagnosticMode = false;
         while (!stoppingToken.IsCancellationRequested)
         {
-            if (schedulers.IsOpen)
+            if (schedulers.StartupCompleted)
             {
+                await schedulers.WaitUntilOpenAsync(stoppingToken);
                 await RunCycleAsync((coordinator, token) => coordinator.RunPeriodicAsync(readiness.Current.Report, token), stoppingToken);
             }
             else if (readiness.Current.Mode == ReadinessMode.Operational)

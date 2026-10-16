@@ -4,6 +4,7 @@ using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
 using WebDevLoop.Core.Orchestration.Integration;
 using WebDevLoop.Core.Orchestration.Preparation;
+using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Core.Orchestration.ReviewLoop;
 using WebDevLoop.Core.Orchestration.TicketExecution;
 
@@ -14,7 +15,7 @@ namespace WebDevLoop.Web.Background;
 /// unit of work) on the <see cref="BackgroundWorkRunner"/>, keyed by phase and ticket or spec so a phase never runs twice
 /// concurrently for the same work.
 /// </summary>
-public sealed class BackgroundWorkflowLaunchers(BackgroundWorkRunner runner) :
+public sealed class BackgroundWorkflowLaunchers(BackgroundWorkRunner runner, SchedulerStartGate schedulers) :
     IPreparationLauncher,
     IImplementationLauncher,
     IReviewLoopLauncher,
@@ -51,5 +52,9 @@ public sealed class BackgroundWorkflowLaunchers(BackgroundWorkRunner runner) :
 
     private void Run<TRunner>(string key, Func<TRunner, CancellationToken, Task> work)
         where TRunner : notnull =>
-        runner.Run(key, (services, token) => work(services.GetRequiredService<TRunner>(), token));
+        runner.Run(key, async (services, token) =>
+        {
+            await schedulers.WaitUntilOpenAsync(token);
+            await work(services.GetRequiredService<TRunner>(), token);
+        });
 }

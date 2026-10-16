@@ -40,6 +40,55 @@ internal sealed class WorkflowApi(HttpClient client, CapturedLogs? logs = null)
 
     public async Task<JsonElement[]> TicketsAsync(string runId) => [.. (await GetAsync($"/api/spec-runs/{runId}/tickets")).EnumerateArray()];
 
+    public async Task WaitForHealthStatusAsync(HttpStatusCode status)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            using HttpResponseMessage health = await client.GetAsync("/api/health", deadline.Token);
+            if (health.StatusCode == status)
+            {
+                return;
+            }
+
+            await Task.Delay(PollInterval, deadline.Token);
+        }
+    }
+
+    public async Task WaitForTicketStatusAsync(string runId, int issue, string status, bool untilDifferent = false)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        while (true)
+        {
+            JsonElement ticket = (await TicketsAsync(runId)).Single(ticket => ticket.GetProperty("issueNumber").GetInt32() == issue);
+            if ((ticket.GetProperty("status").GetString() == status) != untilDifferent)
+            {
+                return;
+            }
+
+            await Task.Delay(PollInterval, deadline.Token);
+        }
+    }
+
+    public async Task WaitForTicketStepStatusAsync(string runId, string status)
+    {
+        string ticketId = Assert.Single(await TicketsAsync(runId)).GetProperty("id").GetString()!;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        while (true)
+        {
+            JsonElement steps = await GetAsync($"/api/ticket-runs/{ticketId}/steps");
+            if (steps.EnumerateArray().Any(step => step.GetProperty("status").GetString() == status))
+            {
+                return;
+            }
+
+            await Task.Delay(PollInterval, deadline.Token);
+        }
+    }
+
     /// <summary>Polls the run until it reaches <paramref name="status"/>; fails fast with the run's state when it needs attention.</summary>
     public async Task<JsonElement> WaitForStatusAsync(string runId, string status, TimeSpan? timeout = null)
     {

@@ -64,6 +64,7 @@ These are the most common ones. The card always shows the exact steps for your c
 | The implementer agent could not complete this ticket. | WebDevLoop | Read the failed step's [agent log](tickets-and-steps.md#agent-log). Make the ticket text clearer on GitHub if needed, or change the model or timeout of the Implementer in [Settings](settings.md#agent-roles). **Retry**. |
 | The implementer agent says it cannot continue without something it does not have. | You | Add the missing detail to the ticket on GitHub, then **Retry**. |
 | The prompt template of the ... role cannot be filled in. | You | Fix the template in [Settings](settings.md#agent-roles) or reset it to the default, then **Retry**. |
+| The Model configured for this step is no longer available to your Copilot account. | You | Use **Open Settings** to choose an available Model and supported Reasoning Effort for the affected role. Save, wait for validation to pass, then return to the ticket or run page and press **Retry**. This failure consumes no retry budget. |
 | A reviewer agent could not finish its review. | WebDevLoop | Check the review step. Raise the reviewer timeout if it ran out of time. **Retry**. |
 | The explorer agent could not finish its look at the repository. | WebDevLoop | WebDevLoop already runs it once more. If it still fails, raise the Explorer timeout, then **Retry**. |
 | WebDevLoop was interrupted again and again... | WebDevLoop | Keep the app running, check memory and disk, then **Retry**. |

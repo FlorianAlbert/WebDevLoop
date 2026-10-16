@@ -189,9 +189,10 @@ public static class AttentionReasons
         "The Model configured for this step is no longer available to your Copilot account.",
         "New agent launches are paused until all configured Models and Reasoning Efforts are valid.",
         details,
-        Buttons(forTicket, "WebDevLoop retries the interrupted phase with your current agent settings."),
+        Buttons(forTicket, "WebDevLoop retries the interrupted phase with your current agent settings. No retry budget was consumed by the unavailable Model."),
         [
-            Step("Choose an available Model for the affected role in Settings, then retry."),
+            SettingsStep("Choose an available Model and supported Reasoning Effort for the affected role in Settings.", "#section-roles"),
+            Step("After saving Settings and validation passes, return to this page and press Retry."),
         ]);
 
     public static AttentionReason WorktreeNotClean(string worktreePath, string branch, string details) => Build(

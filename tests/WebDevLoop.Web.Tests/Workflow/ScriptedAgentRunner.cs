@@ -10,6 +10,7 @@ namespace WebDevLoop.Web.Tests.Workflow;
 
 /// <summary>One agent turn as seen by the fake Copilot runner.</summary>
 internal sealed record AgentCall(
+    StepRunId StepRunId,
     AgentRole Role,
     StepKind Kind,
     int? TicketIssue,
@@ -92,7 +93,7 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
         try
         {
             journal.Record(new AgentCall(
-                request.Role, kind, ticketIssue, resumed, request.Policy.RequiresGitHubWriteToken, ClosedTickets(), concurrent));
+                request.StepRunId, request.Role, kind, ticketIssue, resumed, request.Policy.RequiresGitHubWriteToken, ClosedTickets(), concurrent));
             if (script.FailingKind == kind && script.FailingRole == request.Role)
             {
                 script.FailingTurnStarted.TrySetResult(request.StepRunId);
@@ -108,6 +109,7 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
                 AgentRole.ReviewerSpecification => AgentRunResult.Reported(ReviewReport.Clean(FindingAxis.Specification, "Matches the specification.")),
                 AgentRole.Tester => AgentRunResult.Reported(new TestReport(
                     TestVerdict.Pass, "Every scenario passed.", [new TestScenario("Open the app", TestScenarioOutcome.Passed)], [])),
+                AgentRole.ConflictResolver => AgentRunResult.Reported(ResolveConflict(request.Policy.Paths.WorkingDirectory)),
                 _ => AgentRunResult.NotReported(AgentRunOutcome.Failed, $"The fake has no script for {request.Role}."),
             };
         }
@@ -184,6 +186,17 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
         {
             repository.Merge(integration, Agent, new MergeOptions { FastForwardStrategy = FastForwardStrategy.NoFastForward });
         }
+    }
+
+    private static ConflictResolutionReport ResolveConflict(string worktree)
+    {
+        using var repository = new Repository(worktree);
+        MergeIntegrationBranch(repository);
+        File.WriteAllText(Path.Combine(worktree, "shared.txt"), "Resolved both tickets.\n");
+        Commands.Stage(repository, "shared.txt");
+        Commit commit = repository.Commit("Resolve conflict", Agent, Agent);
+        return new ConflictResolutionReport(
+            ConflictResolutionStatus.Resolved, new CommitSha(commit.Sha), ["shared.txt"], "Resolved the conflict.", []);
     }
 
     private ReviewReport ReviewCodingStandards(int? ticketIssue)

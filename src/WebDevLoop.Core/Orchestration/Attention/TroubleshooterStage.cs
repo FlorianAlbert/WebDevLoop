@@ -137,7 +137,7 @@ public sealed class TroubleshooterStage(
             { Outcome: AgentRunOutcome.Cancelled } => await FinishAsync(step, attentionCase, state, StepStatus.Cancelled, null, "The troubleshooter session was cancelled.", null, false, "Cancelled", cancellationToken),
             { Outcome: AgentRunOutcome.TimedOut } => await FinishAsync(step, attentionCase, state, StepStatus.TimedOut, null, $"The troubleshooter timed out: {run.FailureReason}", null, false, "TimedOut", cancellationToken),
             { Outcome: AgentRunOutcome.ModelUnavailable } => await FinishAsync(
-                step, attentionCase, state, StepStatus.NeedsAttention, null, run.FailureReason, null, false, "ModelUnavailable", cancellationToken,
+                step, attentionCase, state, StepStatus.NeedsAttention, null, run.FailureReason, null, false, TroubleshooterRunEvents.ModelUnavailableOutcome, cancellationToken,
                 attention: AttentionReasons.ModelUnavailable(run.FailureReason!)),
             _ => await FinishAsync(step, attentionCase, state, StepStatus.Failed, null, $"The troubleshooter failed: {run.FailureReason}", null, false, "Failed", cancellationToken),
         };

@@ -63,6 +63,10 @@ Disposing `CopilotAgentServices` (container shutdown) stops every runtime.
 
 Startup fetches the Model Catalog before prerequisite validation. Refreshes lease a runtime from the same pool as agent
 sessions and pass the signed-in user's current token explicitly, without using stored CLI credentials.
+Catalog runtimes inherit the host process environment through `CopilotRuntimeOptions.InheritedEnvironment`, preserving
+variables such as `PATH` and Windows `SystemRoot` that the CLI needs to start. The pool removes `COPILOT_GITHUB_TOKEN`
+case-insensitively, so a host token cannot replace the signed-in identity. Agent sessions still use their role-policy-scrubbed
+environment.
 
 In GitHub.Copilot.SDK 1.0.18, `client.Rpc.Models.ListAsync(gitHubToken: ..., cancellationToken: ...)` returns a `ModelList`.
 Each `Rpc.Model` provides `Id`, `Name` (display name), and optional `SupportedReasoningEfforts`; an absent efforts list maps
@@ -101,7 +105,7 @@ The result is an <xref:WebDevLoop.Core.Agents.AgentRunResult>: either a parsed `
 | --- | --- |
 | Connection | stdio to a child process; CLI = `WebDevLoop:Copilot:CliPath` if set, else the CLI bundled with the SDK package |
 | `BaseDirectory` (Copilot home) | Global setting `CopilotBaseDirectory`, default `<DataDirectory>/copilot`. **Shared by all runtimes**, so persisted sessions resume on a replacement runtime |
-| `Environment` | The agent shell environment (see below) without `COPILOT_GITHUB_TOKEN` |
+| `Environment` | The role-policy-scrubbed agent shell environment (see below), or the inherited host environment for Model Catalog requests; both without `COPILOT_GITHUB_TOKEN` |
 | `UseLoggedInUser` | `false`: stored or logged-in CLI credentials are never used |
 
 ### Pool keys, leases and eviction

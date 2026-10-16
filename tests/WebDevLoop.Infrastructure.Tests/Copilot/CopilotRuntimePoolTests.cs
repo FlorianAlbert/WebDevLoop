@@ -17,6 +17,13 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
         ["PATH"] = "/usr/bin",
         ["GIT_TERMINAL_PROMPT"] = "0",
     };
+    private static readonly IReadOnlyDictionary<string, string> HostEnvironment = new Dictionary<string, string>
+    {
+        ["PATH"] = @"C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0",
+        ["SystemRoot"] = @"C:\Windows",
+        ["USERPROFILE"] = @"C:\Users\app",
+        ["copilot_github_token"] = "ghp_from_the_host",
+    };
 
     private readonly TestClock _clock = new(new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero));
     private readonly FakeCopilotRuntimeFactory _factory = new();
@@ -32,6 +39,32 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
     public ValueTask DisposeAsync() => _pool.DisposeAsync();
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public async Task model_catalog_fetch_succeeds_with_the_inherited_environment_and_signed_in_identity()
+    {
+        var model = new ModelCatalogEntry("gpt-test", "Test Model", ["high"]);
+        _factory.OnListModels = (launch, token) =>
+        {
+            Assert.Equal(@"C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0", launch.Environment["PATH"]);
+            Assert.Equal(@"C:\Windows", launch.Environment["SystemRoot"]);
+            Assert.Equal(@"C:\Users\app", launch.Environment["USERPROFILE"]);
+            Assert.DoesNotContain(launch.Environment.Keys,
+                name => string.Equals(name, "COPILOT_GITHUB_TOKEN", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("ghu_gen1", token);
+            return [model];
+        };
+        IModelCatalog catalog = new InMemoryModelCatalog(_pool.ListModelsAsync);
+
+        ModelCatalogRefreshResult result = await catalog.RefreshAsync(Ct);
+
+        Assert.True(result.Succeeded, result.Error);
+        Assert.True(catalog.HasFetched);
+        ModelCatalogEntry listed = Assert.Single(catalog.Models);
+        Assert.Equal("gpt-test", listed.Id);
+        Assert.Equal("Test Model", listed.DisplayName);
+        Assert.Equal(["high"], listed.SupportedReasoningEfforts);
+    }
 
     [Fact]
     public async Task runtime_starts_without_any_github_token_in_its_environment()
@@ -159,5 +192,6 @@ public sealed class CopilotRuntimePoolTests : IAsyncDisposable
             BaseDirectory = "/data/copilot",
             CliPath = "/opt/copilot/copilot",
             IdleTimeout = IdleTimeout,
+            InheritedEnvironment = () => HostEnvironment,
         });
 }

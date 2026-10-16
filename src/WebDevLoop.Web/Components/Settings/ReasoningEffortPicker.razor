@@ -10,14 +10,14 @@ else
     <OverrideFieldFrame Field="@Field" Label="Reasoning Effort" IsOverridden="@(!string.IsNullOrEmpty(Value))" Inherited="@Inherited"
                         ShowReset="@InheritedEffortSupported" Errors="@Errors" OnReset="Reset">
         <select id="@OverrideFieldFrame.InputIdFor(Field)" class="form-select w-auto @OverrideFieldFrame.InvalidClass(Errors)"
-                disabled="@(SupportedEfforts.Count == 0)"
+                disabled="@(!SupportsReasoning)"
                 aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@OverrideFieldFrame.DescribedBy(Field, Errors)"
                 @onchange="Changed">
-            @if (!string.IsNullOrEmpty(Value) && SupportedEfforts.Count > 0 && !CurrentEffortSupported)
+            @if (!string.IsNullOrEmpty(Value) && Model is not null && !CurrentEffortValid)
             {
                 <option selected disabled>@Value (unsupported)</option>
             }
-            <option value="" selected="@(string.IsNullOrEmpty(Value) || SupportedEfforts.Count == 0)" disabled="@(!InheritedEffortSupported)">
+            <option value="" selected="@(string.IsNullOrEmpty(Value) || !SupportsReasoning)" disabled="@(!InheritedEffortSupported)">
                 @EmptyLabel()
             </option>
             @foreach (string effort in SupportedEfforts)
@@ -25,7 +25,7 @@ else
                 <option value="@effort" selected="@(effort == Value)">@effort</option>
             }
         </select>
-        @if (SupportedEfforts.Count > 0 && !CurrentEffortSupported)
+        @if (Model is not null && !CurrentEffortValid)
         {
             <div class="form-text text-warning" role="alert">Current Reasoning Effort '@EffectiveValue' is not supported by this Model. Choose a supported effort.</div>
         }
@@ -53,9 +53,11 @@ else
 
     private IReadOnlyList<string> SupportedEfforts => Model?.SupportedReasoningEfforts ?? [];
 
+    private bool SupportsReasoning => Model?.SupportsReasoning ?? false;
+
     private bool InheritedEffortSupported => Model?.SupportsReasoningEffort(Inherited) ?? false;
 
-    private bool CurrentEffortSupported => Model?.SupportsReasoningEffort(EffectiveValue) ?? false;
+    private bool CurrentEffortValid => Model?.IsReasoningEffortValid(EffectiveValue) ?? false;
 
     private string EmptyLabel()
     {
@@ -64,7 +66,7 @@ else
             return "Select an available Model";
         }
 
-        if (SupportedEfforts.Count == 0)
+        if (!SupportsReasoning)
         {
             return "Reasoning Effort is not supported";
         }

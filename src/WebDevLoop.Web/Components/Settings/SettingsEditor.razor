@@ -505,7 +505,7 @@ else
             EffectiveRoleSettingsView inherited = _inherited.Roles[role];
             ModelCatalogEntry? model = SelectedModel(edit, inherited);
             string effort = edit.ReasoningEffort ?? inherited.ReasoningEffort;
-            if (model is { SupportedReasoningEfforts.Count: > 0 } && !model.SupportsReasoningEffort(effort))
+            if (model is not null && !model.IsReasoningEffortValid(effort))
             {
                 yield return new SettingsValidationError($"Roles.{role}.{nameof(RoleSettingsOverride.ReasoningEffort)}",
                     $"Reasoning Effort '{effort}' is not supported by Model '{edit.Model ?? inherited.Model}'. Choose a supported effort.");

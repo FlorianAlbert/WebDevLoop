@@ -13,8 +13,8 @@ internal sealed class ScriptedModelCatalog
 
     public IReadOnlyList<ModelCatalogEntry> Models { get; set; } =
     [
-        new("claude-sonnet-5", "Claude Sonnet 5", ["medium", "high"]),
-        new("claude-opus-5", "Claude Opus 5", ["medium", "high"]),
+        new("claude-sonnet-5.5", "Claude Sonnet 5.5", ["medium", "high"]),
+        new("claude-opus-5.5", "Claude Opus 5.5", ["medium", "high"]),
     ];
 
     public string? Failure { get; set; }

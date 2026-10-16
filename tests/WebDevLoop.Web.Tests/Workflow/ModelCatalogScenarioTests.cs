@@ -56,8 +56,91 @@ public sealed class ModelCatalogScenarioTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/health", Ct)).StatusCode);
         Assert.True(host.Models.Catalog.HasFetched);
         Assert.Contains(host.Models.Catalog.Models, model =>
-            model.Id == "claude-sonnet-5" && model.DisplayName == "Claude Sonnet 5"
+            model.Id == "claude-sonnet-5.5" && model.DisplayName == "Claude Sonnet 5.5"
             && model.SupportedReasoningEfforts.Contains("high"));
+    }
+
+    [Theory]
+    [InlineData("claude-sonnet-5.5", AgentRole.Implementer, AgentRole.ReviewerSpecification)]
+    [InlineData("claude-opus-5.5", AgentRole.ReviewerSpecification, AgentRole.Implementer)]
+    public async Task a_missing_default_model_is_kept_and_the_diagnostic_tells_the_user_to_choose_a_model(
+        string missingModel, AgentRole affectedRole, AgentRole availableRole)
+    {
+        using var scenario = new WorkflowScenario();
+        await using var host = new WorkflowHost(scenario);
+        host.Models.Models =
+        [
+            .. host.Models.Models.Where(model => model.Id != missingModel),
+            new("alternative-model", "Available alternative", ["medium", "high"]),
+        ];
+        HttpClient client = host.CreateClient();
+
+        using HttpResponseMessage health = await client.GetAsync("/api/health", Ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, health.StatusCode);
+        JsonElement body = await health.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        JsonElement check = Assert.Single(body.GetProperty("failedChecks").EnumerateArray());
+        Assert.Equal("Agent models", check.GetProperty("name").GetString());
+        string message = check.GetProperty("message").GetString()!;
+        Assert.Contains($"Global settings: {affectedRole}, Model '{missingModel}' is not in the Model Catalog.", message);
+        Assert.DoesNotContain($"Global settings: {availableRole},", message);
+        Assert.Contains("Choose available Models", check.GetProperty("remediation").GetString());
+        Assert.Contains("/settings#section-roles", check.GetProperty("remediation").GetString());
+
+        JsonElement stored = await client.GetFromJsonAsync<JsonElement>("/api/settings/global", Ct);
+        Assert.Equal(missingModel, stored.GetProperty("roles").GetProperty(affectedRole.ToString()).GetProperty("model").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/settings", Ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable,
+            (await client.PostAsJsonAsync("/api/repos/1/spec-runs", new { specIssueNumber = 100 }, Ct)).StatusCode);
+        Assert.False(host.Services.GetRequiredService<SchedulerStartGate>().IsOpen);
+        Assert.Empty(scenario.Journal.Calls);
+    }
+
+    [Theory]
+    [InlineData("claude-sonnet-5", "claude-opus-5")]
+    [InlineData("claude-opus-5", "claude-sonnet-5")]
+    public async Task stored_global_and_repository_model_ids_survive_restart_without_migration(
+        string globalModel, string repositoryModel)
+    {
+        using var scenario = new WorkflowScenario();
+        int repositoryId;
+        await using (var setup = new WorkflowHost(scenario))
+        {
+            HttpClient client = setup.CreateClient();
+            repositoryId = await new WorkflowApi(client).RegisterRepositoryAsync(scenario);
+            using HttpResponseMessage global = await client.PutAsJsonAsync("/api/settings/global", new SettingsProfileData
+            {
+                Roles = Enum.GetValues<AgentRole>().ToDictionary(role => role,
+                    _ => new RoleSettingsOverride { Model = globalModel }),
+            }, Ct);
+            Assert.Equal(HttpStatusCode.OK, global.StatusCode);
+            using HttpResponseMessage repository = await client.PutAsJsonAsync($"/api/repos/{repositoryId}/settings", new SettingsProfileData
+            {
+                Roles = new Dictionary<AgentRole, RoleSettingsOverride>
+                {
+                    [AgentRole.Implementer] = new() { Model = repositoryModel },
+                },
+            }, Ct);
+            Assert.Equal(HttpStatusCode.OK, repository.StatusCode);
+        }
+
+        await using var host = new WorkflowHost(scenario);
+        host.Models.Models =
+        [
+            new("claude-sonnet-5", "Claude Sonnet 5", ["medium", "high"]),
+            new("claude-opus-5", "Claude Opus 5", ["medium", "high"]),
+        ];
+        HttpClient restartedClient = host.CreateClient();
+
+        Assert.Equal(HttpStatusCode.OK, (await restartedClient.GetAsync("/api/health", Ct)).StatusCode);
+        JsonElement storedGlobal = await restartedClient.GetFromJsonAsync<JsonElement>("/api/settings/global", Ct);
+        Assert.All(Enum.GetValues<AgentRole>(), role =>
+            Assert.Equal(globalModel, storedGlobal.GetProperty("roles").GetProperty(role.ToString()).GetProperty("model").GetString()));
+        JsonElement storedRepository = await restartedClient.GetFromJsonAsync<JsonElement>($"/api/repos/{repositoryId}/settings", Ct);
+        Assert.Equal(repositoryModel, storedRepository.GetProperty("roles").GetProperty("Implementer").GetProperty("model").GetString());
+        JsonElement effective = await restartedClient.GetFromJsonAsync<JsonElement>($"/api/settings/effective/{repositoryId}", Ct);
+        Assert.All(Enum.GetValues<AgentRole>(), role => Assert.Equal(
+            role == AgentRole.Implementer ? repositoryModel : globalModel,
+            effective.GetProperty("roles").GetProperty(role.ToString()).GetProperty("model").GetString()));
     }
 
     [Fact]
@@ -78,7 +161,7 @@ public sealed class ModelCatalogScenarioTests
             {
                 Roles = new Dictionary<AgentRole, RoleSettingsOverride>
                 {
-                    [AgentRole.Explorer] = new() { Model = "claude-sonnet-5" },
+                    [AgentRole.Explorer] = new() { Model = "claude-sonnet-5.5" },
                     [AgentRole.Implementer] = new() { Model = "missing-repository-model" },
                 },
             }, Ct);
@@ -152,10 +235,10 @@ public sealed class ModelCatalogScenarioTests
         JsonElement body = await health.Content.ReadFromJsonAsync<JsonElement>(Ct);
         JsonElement check = Assert.Single(body.GetProperty("failedChecks").EnumerateArray());
         string message = check.GetProperty("message").GetString()!;
-        Assert.Contains("Global settings: Explorer, Model 'claude-sonnet-5', Reasoning Effort 'low'", message);
-        Assert.Contains("acme/widgets: Explorer, Model 'claude-sonnet-5', Reasoning Effort 'low'", message);
+        Assert.Contains("Global settings: Explorer, Model 'claude-sonnet-5.5', Reasoning Effort 'low'", message);
+        Assert.Contains("acme/widgets: Explorer, Model 'claude-sonnet-5.5', Reasoning Effort 'low'", message);
         Assert.DoesNotContain("acme/other: Tester", message);
-        Assert.Contains("acme/other: ReviewerSpecification, Model 'claude-opus-5', Reasoning Effort 'max'", message);
+        Assert.Contains("acme/other: ReviewerSpecification, Model 'claude-opus-5.5', Reasoning Effort 'max'", message);
         Assert.DoesNotContain("acme/other: Explorer", message);
         Assert.Equal(HttpStatusCode.OK, (await diagnosticClient.GetAsync("/settings", Ct)).StatusCode);
         Assert.Equal(HttpStatusCode.ServiceUnavailable,
@@ -185,7 +268,7 @@ public sealed class ModelCatalogScenarioTests
 
     [Theory]
     [InlineData("missing-model", "high")]
-    [InlineData("claude-sonnet-5", "low")]
+    [InlineData("claude-sonnet-5.5", "low")]
     public async Task one_invalid_repository_role_blocks_the_whole_app_when_global_settings_are_valid(string model, string reasoningEffort)
     {
         using var scenario = new WorkflowScenario();
@@ -238,7 +321,7 @@ public sealed class ModelCatalogScenarioTests
 
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/health", Ct)).StatusCode);
         Assert.True(host.Models.Catalog.HasFetched);
-        Assert.Contains(host.Models.Catalog.Models, model => model.Id == "claude-sonnet-5"
+        Assert.Contains(host.Models.Catalog.Models, model => model.Id == "claude-sonnet-5.5"
             && model.SupportedReasoningEfforts.Contains("high"));
         string run = await api.EnqueueAsync(repositoryId, 100);
         await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
@@ -286,7 +369,7 @@ public sealed class ModelCatalogScenarioTests
         Assert.Equal(HttpStatusCode.ServiceUnavailable, health.StatusCode);
         JsonElement body = await health.Content.ReadFromJsonAsync<JsonElement>(Ct);
         string message = Assert.Single(body.GetProperty("failedChecks").EnumerateArray()).GetProperty("message").GetString()!;
-        Assert.Contains("Global settings: Explorer, Model 'claude-sonnet-5'", message);
+        Assert.Contains("Global settings: Explorer, Model 'claude-sonnet-5.5'", message);
         Assert.DoesNotContain("never", message);
         Assert.True(host.Models.Catalog.HasFetched);
         Assert.Empty(host.Models.Catalog.Models);

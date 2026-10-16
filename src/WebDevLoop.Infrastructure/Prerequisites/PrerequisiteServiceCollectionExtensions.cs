@@ -10,7 +10,8 @@ public static class PrerequisiteServiceCollectionExtensions
 {
     /// <summary>
     /// Registers the startup checks, the <see cref="IPrerequisiteValidator"/> and the shared <see cref="DiagnosticReadiness"/>.
-    /// Requires an <see cref="IClock"/>. Resolving and running them never throws for a failed prerequisite, so the web host can
+    /// Requires an <see cref="IClock"/>, <see cref="IModelCatalog"/> and scoped settings repositories and resolver.
+    /// Running them never throws for a failed prerequisite, so the web host can
     /// start in diagnostic-only mode; call <see cref="DiagnosticReadiness.RefreshAsync"/> after migrations have been applied.
     /// </summary>
     public static IServiceCollection AddPrerequisites(
@@ -34,26 +35,35 @@ public static class PrerequisiteServiceCollectionExtensions
         var database = new EfDatabaseProbe(() => new WebDevLoopDbContext(
             new DbContextOptionsBuilder<WebDevLoopDbContext>().UseSqlite(databaseConnectionString).Options));
         services.AddSingleton(new PrerequisiteOptionsSource(options));
+        services.AddScoped<AgentModelSettingsReader>();
+        services.AddSingleton(provider => new AgentModelsCheck(
+            provider.GetRequiredService<IModelCatalog>(),
+            async cancellationToken =>
+            {
+                await using AsyncServiceScope scope = provider.CreateAsyncScope();
+                return await scope.ServiceProvider.GetRequiredService<AgentModelSettingsReader>().ReadAsync(cancellationToken);
+            }));
 
-        Func<PrerequisiteOptions, IProcessProbe, IPrerequisiteCheck>[] checks =
+        Func<PrerequisiteOptions, IProcessProbe, IServiceProvider, IPrerequisiteCheck>[] checks =
         [
-            (resolved, _) => new WorkspaceRootCheck(resolved, fileSystem),
-            (_, _) => new DatabaseCheck(database),
-            (_, _) => new BundledSkillsCheck(skills),
-            (resolved, _) => new GitHubAuthCheck(resolved),
-            (_, _) => new LibGit2SharpCheck(new LibGit2NativeProbe()),
-            (resolved, processes) => new GitCliCheck(resolved, processes),
-            (resolved, processes) => new GhStackCheck(resolved, processes),
-            (resolved, processes) => new CopilotRuntimeCheck(resolved, fileSystem, processes),
-            (resolved, processes) => new PlaywrightCliCheck(resolved, processes),
-            (resolved, _) => new TestPortRangeCheck(resolved),
+            (resolved, _, _) => new WorkspaceRootCheck(resolved, fileSystem),
+            (_, _, _) => new DatabaseCheck(database),
+            (_, _, _) => new BundledSkillsCheck(skills),
+            (resolved, _, _) => new GitHubAuthCheck(resolved),
+            (_, _, provider) => provider.GetRequiredService<AgentModelsCheck>(),
+            (_, _, _) => new LibGit2SharpCheck(new LibGit2NativeProbe()),
+            (resolved, processes, _) => new GitCliCheck(resolved, processes),
+            (resolved, processes, _) => new GhStackCheck(resolved, processes),
+            (resolved, processes, _) => new CopilotRuntimeCheck(resolved, fileSystem, processes),
+            (resolved, processes, _) => new PlaywrightCliCheck(resolved, processes),
+            (resolved, _, _) => new TestPortRangeCheck(resolved),
         ];
-        foreach (Func<PrerequisiteOptions, IProcessProbe, IPrerequisiteCheck> check in checks)
+        foreach (Func<PrerequisiteOptions, IProcessProbe, IServiceProvider, IPrerequisiteCheck> check in checks)
         {
             services.AddSingleton(provider =>
             {
                 PrerequisiteOptions resolved = provider.GetRequiredService<PrerequisiteOptionsSource>().Get(provider);
-                return check(resolved, new ProcessProbe(resolved.ProbeTimeout));
+                return check(resolved, new ProcessProbe(resolved.ProbeTimeout), provider);
             });
         }
 

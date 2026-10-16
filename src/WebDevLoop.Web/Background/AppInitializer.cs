@@ -17,8 +17,8 @@ public interface IAppInitializer
 
 /// <summary>
 /// Startup sequence: take the exclusive hold on the database (<see cref="DatabaseInstanceLock"/>), pin the process boot time, create the data directory, apply migrations, seed the global settings on
-/// first start, resolve the global settings the process-wide adapters are built from (<see cref="StartupSettings"/>), and
-/// evaluate the prerequisites.
+/// first start, resolve the global settings the process-wide adapters are built from (<see cref="StartupSettings"/>),
+/// fetch the in-memory Model Catalog, and evaluate the prerequisites.
 /// Nothing here throws for an unhealthy environment: a database that cannot be migrated or a failing prerequisite leaves the
 /// app in diagnostic-only mode (UI, health and API up; no workflow) and is logged with its remediation.
 /// </summary>
@@ -43,6 +43,12 @@ public sealed partial class AppInitializer(
         if (persisted is not null)
         {
             await WarnAboutClonesOutsideWorkspaceRootAsync(persisted.WorkspaceRootDirectory, cancellationToken);
+        }
+
+        ModelCatalogRefreshResult models = await services.GetRequiredService<IModelCatalog>().RefreshAsync(cancellationToken);
+        if (models.Error is { } modelError)
+        {
+            LogModelCatalogUnavailable(logger, modelError);
         }
 
         ReadinessSnapshot snapshot = await services.GetRequiredService<DiagnosticReadiness>().RefreshAsync(cancellationToken);
@@ -107,6 +113,9 @@ public sealed partial class AppInitializer(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Prerequisites are met (data directory {DataDirectory}); the workflow starts after startup recovery.")]
     private static partial void LogOperational(ILogger logger, string dataDirectory);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "The Model Catalog could not be fetched: {Error}. The last-known catalog, if any, is retained.")]
+    private static partial void LogModelCatalogUnavailable(ILogger logger, string error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Prerequisite '{Check}' failed: {Message} Remediation: {Remediation}")]
     private static partial void LogFailedPrerequisite(ILogger logger, string check, string message, string remediation);

@@ -7,7 +7,7 @@ namespace WebDevLoop.Web.DependencyInjection;
 
 public static class WebDevLoopApplicationExtensions
 {
-    /// <summary>Migrates and seeds the database, resolves the startup settings and evaluates the prerequisites.</summary>
+    /// <summary>Migrates and seeds the database, resolves startup settings, fetches the Model Catalog and evaluates prerequisites.</summary>
     public static Task InitializeWebDevLoopAsync(this WebApplication app, CancellationToken cancellationToken = default) =>
         app.Services.GetRequiredService<IAppInitializer>().InitializeAsync(cancellationToken);
 

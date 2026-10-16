@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Infrastructure.Copilot;
 using WebDevLoop.Infrastructure.Prerequisites;
 using WebDevLoop.Infrastructure.Skills;
 
@@ -20,6 +22,7 @@ public sealed class PrerequisiteRegistrationTests
             DatabaseCheck.CheckName,
             BundledSkillsCheck.CheckName,
             GitHubAuthCheck.CheckName,
+            AgentModelsCheck.CheckName,
             LibGit2SharpCheck.CheckName,
             GitCliCheck.CheckName,
             GhStackCheck.CheckName,
@@ -39,7 +42,7 @@ public sealed class PrerequisiteRegistrationTests
 
         PrerequisiteReport report = await provider.GetRequiredService<IPrerequisiteValidator>().ValidateAsync(CancellationToken.None);
 
-        Assert.Equal(10, report.Checks.Count);
+        Assert.Equal(11, report.Checks.Count);
         Assert.False(report.IsReady);
         Assert.Equal(ReadinessMode.DiagnosticOnly, provider.GetRequiredService<DiagnosticReadiness>().Current.Mode);
     }
@@ -49,6 +52,7 @@ public sealed class PrerequisiteRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<IClock>(new FixedClock(DateTimeOffset.UnixEpoch));
+        services.AddSingleton<IModelCatalog>(new InMemoryModelCatalog(_ => Task.FromResult<IReadOnlyList<ModelCatalogEntry>>([])));
         int resolved = 0;
         services.AddPrerequisites(
             _ =>
@@ -61,7 +65,7 @@ public sealed class PrerequisiteRegistrationTests
         using ServiceProvider provider = services.BuildServiceProvider();
 
         Assert.Equal(0, resolved);
-        Assert.Equal(10, provider.GetServices<IPrerequisiteCheck>().Count());
+        Assert.Equal(11, provider.GetServices<IPrerequisiteCheck>().Count());
         Assert.Equal(1, resolved);
     }
 
@@ -69,6 +73,7 @@ public sealed class PrerequisiteRegistrationTests
     {
         var services = new ServiceCollection();
         services.AddSingleton<IClock>(new FixedClock(DateTimeOffset.UnixEpoch));
+        services.AddSingleton<IModelCatalog>(new InMemoryModelCatalog(_ => Task.FromResult<IReadOnlyList<ModelCatalogEntry>>([])));
         var options = new PrerequisiteOptions
         {
             WorkspaceRoot = Path.Combine(AppContext.BaseDirectory, "test-scratch", "unused-workspace"),

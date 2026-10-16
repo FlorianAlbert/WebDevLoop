@@ -17,7 +17,7 @@ await app.RunAsync();                                    // 4. host starts, work
 | Step | Code | What happens |
 | --- | --- | --- |
 | 1 | `WebDevLoopServiceCollectionExtensions.AddWebDevLoop` | Loads and validates `WebDevLoopOptions`, registers Infrastructure, Core orchestration, API, UI, Blazor and (if `Workflow:Enabled`) the hosted workers. |
-| 2 | <xref:WebDevLoop.Web.Background.AppInitializer> | Migrates the database, seeds settings, resolves startup settings, evaluates prerequisites. |
+| 2 | <xref:WebDevLoop.Web.Background.AppInitializer> | Migrates the database, seeds settings, resolves startup settings, fetches the Model Catalog, evaluates prerequisites. |
 | 3 | `WebDevLoopApplicationExtensions.UseWebDevLoop` | Error pages, HTTPS, antiforgery, static assets, REST API + OpenAPI, GitHub sign-in endpoints, Blazor UI. |
 | 4 | Hosted services | Workers wait for startup recovery, then run on timers. |
 
@@ -29,7 +29,8 @@ flowchart TD
     C --> D[Create data directory]
     D --> E[Migrate database and seed global settings]
     E --> F[Resolve StartupSettings]
-    F --> G[Evaluate prerequisites]
+    F --> MC[Fetch in-memory Model Catalog]
+    MC --> G[Evaluate prerequisites]
     G --> H{All checks pass?}
     H -- yes --> I[Operational]
     H -- no --> J[Diagnostic-only]
@@ -69,6 +70,11 @@ Default: `<LocalApplicationData>/WebDevLoop` (override with `WebDevLoop:DataDire
 
 Each check implements <xref:WebDevLoop.Infrastructure.Prerequisites.IPrerequisiteCheck>. <xref:WebDevLoop.Infrastructure.Prerequisites.PrerequisiteValidator> runs them all. <xref:WebDevLoop.Infrastructure.Prerequisites.DiagnosticReadiness> keeps the latest <xref:WebDevLoop.Infrastructure.Prerequisites.ReadinessSnapshot> and its mode (`Operational` or diagnostic-only).
 
+Checks declare an optional `RunsAfter` dependency. The validator runs independent checks concurrently, waits for a
+dependency to complete before running its dependent, and reports a generic deferred warning only when the dependency
+fails. A dependency warning does not skip the dependent check or hide its failures. Registration order
+does not determine execution order; missing or cyclic dependencies produce explicit failed diagnostics.
+
 | Check | What it verifies |
 | --- | --- |
 | SQLite database | The database opens and is fully migrated |
@@ -76,6 +82,7 @@ Each check implements <xref:WebDevLoop.Infrastructure.Prerequisites.IPrerequisit
 | git CLI | `git` runs |
 | LibGit2Sharp | The native library loads |
 | GitHub authentication | Someone is signed in |
+| Agent models | Every role's effective Model and Reasoning Effort is available, globally and in every repository |
 | Copilot runtime | The Copilot CLI can be started |
 | Bundled skills | All skills of the manifest are present |
 | playwright-cli | `playwright-cli` runs (used by the tester agent) |
@@ -83,6 +90,21 @@ Each check implements <xref:WebDevLoop.Infrastructure.Prerequisites.IPrerequisit
 | gh stack | Only needed when `GitHub:GhStackMode` is `FallbackRequired` |
 
 Files: `src/WebDevLoop.Infrastructure/Prerequisites/*Check.cs`. External access goes through probes (`IProcessProbe`, `IFileSystemProbe`, `IDatabaseProbe`, `ILibGit2Probe`) so tests can fake it.
+
+**Agent models** runs after **GitHub authentication**. If authentication fails, Model validation is deferred so the sign-in
+diagnostic is reported first. A never-fetched Model Catalog, an unknown Model ID, or an unsupported Reasoning Effort keeps
+the app diagnostic-only. The diagnostic lists every offending role, Model and settings scope, and the Health page links to
+settings. Global settings are validated even when repository overrides replace them.
+
+For Models with reasoning support, every configured Reasoning Effort must match the supported set exactly. An empty
+supported set means Reasoning Effort is not applicable, so validation skips that comparison, including inherited defaults.
+Model validation does not change settings resolution, stored
+strings, or launch/resume configuration, and never silently substitutes or drops a configured value.
+
+The Model Catalog is exposed through <xref:WebDevLoop.Core.Ports.IModelCatalog> and is held only in process memory.
+Startup fetches it using the same signed-in GitHub identity and runtime pool as agent sessions. Failed refreshes return an
+error and retain the last-known catalog, including whether a fetch ever succeeded; an empty successful listing is distinct
+from a never-fetched catalog. Model IDs and Reasoning Effort strings remain in the existing settings storage without a migration.
 
 All executable checks share the same process probe. On Linux, commands are launched directly using the executable name or path. On Windows, extensionless names are resolved using `PATH` and `PATHEXT`, so npm launchers such as `playwright-cli.cmd` work alongside native `.exe` tools. Explicit paths, including paths with spaces, are supported on both platforms.
 

@@ -74,8 +74,17 @@ public sealed class TwoAxisReviewRunner(
 
             AgentRunResult[] results = await RunTurnsAsync(context, turns.Started, cancellationToken);
             bool cancelled = false;
+            AttentionReason? unavailable = null;
             foreach ((ReviewerTurn turn, AgentRunResult result) in turns.Started.Zip(results))
             {
+                if (result.Outcome == AgentRunOutcome.ModelUnavailable)
+                {
+                    AttentionReason attention = AttentionReasons.ModelUnavailable(result.FailureReason!, request.Scope == ReviewScope.Ticket);
+                    _journal.Finish(turn.Step, StepStatus.NeedsAttention, null, result.FailureReason, attention);
+                    unavailable ??= attention;
+                    continue;
+                }
+
                 AxisVerdict verdict = Judge(turn.Axis, result);
                 string? resultJson = verdict.Report is { } report ? ReviewStepRecord.From(request.Round, request.Target.DiffHead, report).ToJson() : null;
                 _journal.Finish(turn.Step, verdict.StepStatus, resultJson, verdict.Failure);
@@ -93,6 +102,11 @@ public sealed class TwoAxisReviewRunner(
             if (!await SaveAsync(cancellationToken))
             {
                 return ReviewRoundResult.ConcurrencyConflict;
+            }
+
+            if (unavailable is not null)
+            {
+                return ReviewRoundResult.Failed(unavailable);
             }
 
             if (cancelled)

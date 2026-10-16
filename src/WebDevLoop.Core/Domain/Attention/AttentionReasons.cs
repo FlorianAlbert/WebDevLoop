@@ -182,6 +182,18 @@ public static class AttentionReasons
             Step("Press Retry."),
         ]);
 
+    /// <summary>Guidance after a fresh Model Catalog confirms the step's Model is no longer available.</summary>
+    public static AttentionReason ModelUnavailable(string details, bool forTicket = true) => Build(
+        AttentionCode.ModelUnavailable,
+        AttentionCause.You,
+        "The Model configured for this step is no longer available to your Copilot account.",
+        "New agent launches are paused until all configured Models and Reasoning Efforts are valid.",
+        details,
+        Buttons(forTicket, "WebDevLoop retries the interrupted phase with your current agent settings."),
+        [
+            Step("Choose an available Model for the affected role in Settings, then retry."),
+        ]);
+
     public static AttentionReason WorktreeNotClean(string worktreePath, string branch, string details) => Build(
         AttentionCode.WorktreeNotClean,
         AttentionCause.WebDevLoop,

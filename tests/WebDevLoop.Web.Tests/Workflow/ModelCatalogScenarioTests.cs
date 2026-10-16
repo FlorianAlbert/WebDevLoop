@@ -15,6 +15,127 @@ public sealed class ModelCatalogScenarioTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    [Theory]
+    [InlineData(StepKind.Explore, AgentRole.Explorer, AttentionCode.ModelUnavailable)]
+    [InlineData(StepKind.Review, AgentRole.ReviewerSpecification, AttentionCode.ModelUnavailable)]
+    [InlineData(StepKind.ParentReview, AgentRole.ReviewerCodingStandards, AttentionCode.ModelUnavailable)]
+    [InlineData(StepKind.Fix, AgentRole.Implementer, AttentionCode.ModelUnavailable)]
+    [InlineData(StepKind.Test, AgentRole.Tester, AttentionCode.ModelUnavailable)]
+    [InlineData(StepKind.ResolveConflict, AgentRole.ConflictResolver, AttentionCode.ModelUnavailable)]
+    [InlineData(StepKind.Troubleshoot, AgentRole.Troubleshooter, AttentionCode.ImplementationFailed)]
+    public async Task model_loss_parks_each_workflow_phase_with_the_dedicated_reason(
+        StepKind kind, AgentRole role, AttentionCode expectedOwnerCode)
+    {
+        using WorkflowScenario scenario = CreateModelLossScenario(kind, role, out AgentScript script);
+        await using var host = new WorkflowHost(scenario, script);
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        await ConfigureModelLossSettingsAsync(client, kind);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario, Path.Combine(scenario.Sandbox.DataDirectory, "workspaces", "repo"));
+        await api.EnqueueAsync(repositoryId, 100);
+        StepRunId stepId = await script.FailingTurnStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        host.Models.Models = [];
+        script.ReleaseFailingTurn.TrySetResult();
+        JsonElement step = await api.WaitForStepStatusAsync(stepId.Value, nameof(StepStatus.NeedsAttention));
+        JsonElement owner = await api.WaitForStepOwnerStatusAsync(step, nameof(SpecRunStatus.NeedsAttention));
+
+        Assert.Equal(nameof(StepStatus.NeedsAttention), step.GetProperty("status").GetString());
+        Assert.Equal("ModelUnavailable", step.GetProperty("attention").GetProperty("code").GetString());
+        Assert.Equal(expectedOwnerCode.ToString(), owner.GetProperty("attention").GetProperty("code").GetString());
+        Assert.False(host.Services.GetRequiredService<SchedulerStartGate>().IsOpen);
+    }
+
+    private static WorkflowScenario CreateModelLossScenario(StepKind kind, AgentRole role, out AgentScript script)
+    {
+        var scenario = new WorkflowScenario(kind == StepKind.ResolveConflict ? [101, 102] : [101]);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        script = new AgentScript { FailingKind = kind, FailingRole = role };
+        switch (kind)
+        {
+            case StepKind.ResolveConflict:
+                scenario.Issues.Seed(102, "Conflicting ticket", parent: 100);
+                script.ConflictingImplementers.UnionWith([101, 102]);
+                script.ConcurrentImplementers = new Rendezvous(101, 102);
+                break;
+            case StepKind.Fix:
+                script.CodingStandardsFindingsOnFirstReview.Add(101);
+                break;
+            case StepKind.Troubleshoot:
+                script.FailFirstImplementation.Add(101);
+                break;
+        }
+
+        return scenario;
+    }
+
+    private static async Task ConfigureModelLossSettingsAsync(HttpClient client, StepKind kind)
+    {
+        if (kind == StepKind.Troubleshoot)
+        {
+            using HttpResponseMessage saved = await client.PutAsJsonAsync("/api/settings/global",
+                new SettingsProfileData { MaxRetries = 0 }, Ct);
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task an_ordinary_conflict_resolver_failure_keeps_the_step_failed_and_parks_only_its_ticket()
+    {
+        using WorkflowScenario scenario = CreateModelLossScenario(StepKind.ResolveConflict, AgentRole.ConflictResolver, out AgentScript script);
+        await using var host = new WorkflowHost(scenario, script);
+        var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario, Path.Combine(scenario.Sandbox.DataDirectory, "workspaces", "repo"));
+        await api.EnqueueAsync(repositoryId, 100);
+        StepRunId stepId = await script.FailingTurnStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        script.ReleaseFailingTurn.TrySetResult();
+        JsonElement step = await api.WaitForStepStatusAsync(stepId.Value, nameof(StepStatus.Failed));
+        JsonElement ticket = await api.WaitForStepOwnerStatusAsync(step, nameof(TicketRunStatus.NeedsAttention));
+
+        Assert.Equal(nameof(StepStatus.Failed), step.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, step.GetProperty("attention").ValueKind);
+        Assert.Equal("MergeConflictUnresolved", ticket.GetProperty("attention").GetProperty("code").GetString());
+        Assert.True(host.Services.GetRequiredService<SchedulerStartGate>().IsOpen);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task a_model_lost_during_the_first_turn_parks_the_step_and_stops_other_launches(bool launchThrows)
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        var script = new AgentScript { ThrowFirstImplementation = launchThrows };
+        script.HangingImplementers.Add(101);
+        script.FailFirstImplementation.Add(101);
+        await using var host = new WorkflowHost(scenario, script);
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario, Path.Combine(scenario.Sandbox.DataDirectory, "workspaces", "repo"));
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await script.HangingImplementerStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        Assert.Contains(host.Models.Catalog.Models, model => model.Id == "claude-sonnet-5.5");
+        host.Models.Models = [];
+        int launches = scenario.Journal.Calls.Count;
+
+        script.ReleaseHangingImplementer.TrySetResult();
+        await api.WaitForTicketStepStatusAsync(run, nameof(StepStatus.NeedsAttention));
+        await api.WaitForTicketStatusAsync(run, 101, nameof(TicketRunStatus.NeedsAttention));
+
+        JsonElement ticket = Assert.Single(await api.TicketsAsync(run));
+        JsonElement step = Assert.Single((await api.GetAsync($"/api/ticket-runs/{ticket.GetProperty("id").GetString()}/steps")).EnumerateArray());
+        Assert.Equal("ModelUnavailable", step.GetProperty("attention").GetProperty("code").GetString());
+        Assert.Contains("claude-sonnet-5.5", step.GetProperty("attention").GetProperty("details").GetString());
+        Assert.Empty(host.Models.Catalog.Models);
+        Assert.False(host.Services.GetRequiredService<SchedulerStartGate>().IsOpen);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/health", Ct)).StatusCode);
+        await Task.Delay(TimeSpan.FromMilliseconds(750), Ct);
+        Assert.Equal(launches, scenario.Journal.Calls.Count);
+    }
+
     [Fact]
     public async Task manual_refresh_pauses_on_model_loss_and_resumes_when_the_catalog_is_valid_again()
     {
@@ -42,6 +163,45 @@ public sealed class ModelCatalogScenarioTests
         string run = await api.EnqueueAsync(repositoryId, 100);
         await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
         Assert.Contains(scenario.Journal.Calls, call => call.Role == AgentRole.Implementer);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task an_ordinary_first_turn_failure_retries_when_model_loss_is_not_confirmed(bool refreshFails, bool launchThrows)
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        var script = new AgentScript { ThrowFirstImplementation = launchThrows };
+        script.HangingImplementers.Add(101);
+        script.FailFirstImplementation.Add(101);
+        await using var host = new WorkflowHost(scenario, script);
+        HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario, Path.Combine(scenario.Sandbox.DataDirectory, "workspaces", "repo"));
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await script.HangingImplementerStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        if (refreshFails)
+        {
+            host.Models.Models = [];
+            host.Models.Failure = "Transient Model Catalog outage.";
+        }
+
+        script.ReleaseHangingImplementer.TrySetResult();
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+
+        JsonElement ticket = Assert.Single(await api.TicketsAsync(run));
+        JsonElement[] implementations = (await api.GetAsync($"/api/ticket-runs/{ticket.GetProperty("id").GetString()}/steps"))
+            .EnumerateArray().Where(step => step.GetProperty("kind").GetString() == nameof(StepKind.Implement)).ToArray();
+        Assert.Equal(2, implementations.Length);
+        JsonElement failed = Assert.Single(implementations, step => step.GetProperty("status").GetString() == nameof(StepStatus.Failed));
+        Assert.Equal(JsonValueKind.Null, failed.GetProperty("attention").ValueKind);
+        Assert.Equal(launchThrows ? "Copilot launch failed." : "Transient first-turn failure.", failed.GetProperty("failureReason").GetString());
+        Assert.True(host.Services.GetRequiredService<SchedulerStartGate>().IsOpen);
+        Assert.Equal(2, scenario.Journal.Calls.Count(call => call.Role == AgentRole.Implementer));
     }
 
     [Fact]

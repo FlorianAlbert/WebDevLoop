@@ -30,6 +30,13 @@ internal sealed class AgentScript
     public TaskCompletionSource HangingImplementerStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public TaskCompletionSource ReleaseHangingImplementer { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public HashSet<int> FailFirstImplementation { get; } = [];
+    public bool ThrowFirstImplementation { get; set; }
+
+    public StepKind? FailingKind { get; set; }
+    public AgentRole FailingRole { get; set; }
+    public TaskCompletionSource<StepRunId> FailingTurnStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource ReleaseFailingTurn { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public HashSet<int> ConflictingImplementers { get; } = [];
 
     /// <summary>
     /// Tickets whose first implementer turns wait for each other before committing, which only completes when they are
@@ -86,6 +93,13 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
         {
             journal.Record(new AgentCall(
                 request.Role, kind, ticketIssue, resumed, request.Policy.RequiresGitHubWriteToken, ClosedTickets(), concurrent));
+            if (script.FailingKind == kind && script.FailingRole == request.Role)
+            {
+                script.FailingTurnStarted.TrySetResult(request.StepRunId);
+                await script.ReleaseFailingTurn.Task.WaitAsync(cancellationToken);
+                return AgentRunResult.NotReported(AgentRunOutcome.Failed, "Model rejected by Copilot.");
+            }
+
             return request.Role switch
             {
                 AgentRole.Explorer => AgentRunResult.Reported(Explore(request.Policy.Paths)),
@@ -137,6 +151,11 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
         int turn = journal.Calls.Count(call => call.TicketIssue == ticketIssue && call.Role == AgentRole.Implementer);
         if (turn == 1 && script.FailFirstImplementation.Contains(ticketIssue))
         {
+            if (script.ThrowFirstImplementation)
+            {
+                throw new InvalidOperationException("Copilot launch failed.");
+            }
+
             return AgentRunResult.NotReported(AgentRunOutcome.Failed, "Transient first-turn failure.");
         }
 
@@ -145,6 +164,11 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
         using var repository = new Repository(worktree);
         MergeIntegrationBranch(repository);
         File.WriteAllText(Path.Combine(worktree, $"ticket-{ticketIssue}.txt"), $"ticket {ticketIssue}, turn {turn}\n");
+        if (script.ConflictingImplementers.Contains(ticketIssue))
+        {
+            File.WriteAllText(Path.Combine(worktree, "shared.txt"), $"ticket {ticketIssue}\n");
+        }
+
         Commands.Stage(repository, "*");
         Commit commit = repository.Commit($"Implement #{ticketIssue} (turn {turn})", Agent, Agent);
         return AgentRunResult.Reported(ImplementationReport.Completed(new CommitSha(commit.Sha), $"Implemented #{ticketIssue}."));

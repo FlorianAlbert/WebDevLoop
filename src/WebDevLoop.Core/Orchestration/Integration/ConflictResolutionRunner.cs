@@ -103,7 +103,7 @@ public sealed class ConflictResolutionRunner(
     private void FinishStep(StepRun step, Verdict verdict)
     {
         DateTimeOffset now = clock.UtcNow;
-        step.Finish(verdict.StepStatus, now, verdict.ResultJson, verdict.Resolution.Reason);
+        StepRunConclusion.Finish(step, verdict.StepStatus, verdict.Attention, verdict.ResultJson, verdict.Resolution.Reason, now);
         outbox.Append(new StepRunStatusChanged(step.SpecRunId, step.TicketRunId, step.Id, step.Status, now));
     }
 
@@ -194,6 +194,9 @@ public sealed class ConflictResolutionRunner(
                 return new Verdict(StepStatus.Cancelled, new ConflictResolution(ConflictResolutionOutcome.Cancelled, run.FailureReason), null);
             case { Outcome: AgentRunOutcome.TimedOut }:
                 return new Verdict(StepStatus.TimedOut, ConflictResolution.Failed($"Conflict resolver timed out: {run.FailureReason}"), null);
+            case { Outcome: AgentRunOutcome.ModelUnavailable }:
+                AttentionReason attention = AttentionReasons.ModelUnavailable(run.FailureReason!);
+                return new Verdict(StepStatus.NeedsAttention, ConflictResolution.Failed(attention), null, Attention: attention);
             default:
                 return new Verdict(StepStatus.Failed, ConflictResolution.Failed($"Conflict resolver failed: {run.FailureReason}"), null);
         }
@@ -207,5 +210,7 @@ public sealed class ConflictResolutionRunner(
     private static string Hash(string prompt) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prompt)));
 
     /// <param name="ResolvedHead">The verified ticket branch head after a successful resolution.</param>
-    private sealed record Verdict(StepStatus StepStatus, ConflictResolution Resolution, string? ResultJson, CommitSha? ResolvedHead = null);
+    /// <param name="Attention">Guidance for the step itself; ordinary failures may still carry ticket-level guidance in the resolution.</param>
+    private sealed record Verdict(
+        StepStatus StepStatus, ConflictResolution Resolution, string? ResultJson, CommitSha? ResolvedHead = null, AttentionReason? Attention = null);
 }

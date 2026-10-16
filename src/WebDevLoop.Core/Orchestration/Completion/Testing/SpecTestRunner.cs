@@ -76,6 +76,7 @@ public sealed class SpecTestRunner(
             TesterAttemptOutcome.Reported => await ConcludeAsync(context, tested.StepRunId!.Value, tested.Report!, cancellationToken),
             TesterAttemptOutcome.Cancelled => new TestingResult(TestingOutcome.Cancelled, [], tested.Failure),
             TesterAttemptOutcome.ConcurrencyConflict => TestingResult.ConcurrencyConflict,
+            TesterAttemptOutcome.ModelUnavailable => await NeedsAttentionAsync(spec, TestingOutcome.Failed, tested.Attention!, [], cancellationToken),
             _ => await NeedsAttentionAsync(spec, TestingOutcome.Failed, AttentionReasons.TestingFailed(tested.Failure!), [], cancellationToken),
         };
     }

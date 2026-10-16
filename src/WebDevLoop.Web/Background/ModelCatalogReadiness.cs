@@ -17,19 +17,39 @@ public sealed partial class ModelCatalogReadiness(
         await _refresh.WaitAsync(cancellationToken);
         try
         {
-            ModelCatalogRefreshResult result = await catalog.RefreshAsync(cancellationToken);
-            if (result.Error is { } error)
-            {
-                LogCatalogUnavailable(logger, error);
-            }
-
-            await readiness.RefreshAsync(cancellationToken);
-            return result;
+            return await RefreshCoreAsync(cancellationToken);
         }
         finally
         {
             _refresh.Release();
         }
+    }
+
+    /// <summary>Confirms loss only after a successful fresh fetch, never against retained data from a failed refresh.</summary>
+    public async Task<bool> ConfirmModelUnavailableAsync(string model, CancellationToken cancellationToken)
+    {
+        await _refresh.WaitAsync(cancellationToken);
+        try
+        {
+            ModelCatalogRefreshResult result = await RefreshCoreAsync(cancellationToken);
+            return result.Succeeded && !catalog.Models.Any(entry => entry.Id == model);
+        }
+        finally
+        {
+            _refresh.Release();
+        }
+    }
+
+    private async Task<ModelCatalogRefreshResult> RefreshCoreAsync(CancellationToken cancellationToken)
+    {
+        ModelCatalogRefreshResult result = await catalog.RefreshAsync(cancellationToken);
+        if (result.Error is { } error)
+        {
+            LogCatalogUnavailable(logger, error);
+        }
+
+        await readiness.RefreshAsync(cancellationToken);
+        return result;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The Model Catalog could not be fetched: {Error}. The last-known catalog, if any, is retained.")]

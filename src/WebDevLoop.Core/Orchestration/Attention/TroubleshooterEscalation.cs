@@ -85,6 +85,7 @@ public static class TroubleshooterEscalation
 
         [AttentionCode.InternalInconsistency] = EscalationRule.Not("An internal error of WebDevLoop; there is nothing for an agent to repair."),
         [AttentionCode.Unclassified] = EscalationRule.Not("A row from an older version without a reason code."),
+        [AttentionCode.ModelUnavailable] = EscalationRule.Not(UserFixes),
     };
 
     /// <summary>Every code has a rule, so adding a code without deciding whether it escalates fails the tests.</summary>

@@ -80,6 +80,11 @@ public sealed class SpecExplorer(
                 return ExplorationResult.Explored;
             }
 
+            if (finished.Attention is { } attention)
+            {
+                return ExplorationResult.Failed(attention);
+            }
+
             lastFailure = finished.Failure;
         }
 
@@ -122,6 +127,15 @@ public sealed class SpecExplorer(
         AgentRunResult result = await agents.StartAsync(request, cancellationToken);
         await git.CleanupWorktreeAsync(location, layout.ExplorerCheckoutDirectory, cancellationToken);
 
+        if (result.Outcome == AgentRunOutcome.ModelUnavailable)
+        {
+            AttentionReason attention = AttentionReasons.ModelUnavailable(result.FailureReason!, forTicket: false);
+            step.MarkNeedsAttention(attention, clock.UtcNow);
+            return await SaveStepAsync(step, cancellationToken)
+                ? new AttemptResult(StepStatus.NeedsAttention, result.FailureReason, attention)
+                : null;
+        }
+
         (StepStatus status, string? failure, string? resultJson) = Evaluate(result);
         step.Finish(status, clock.UtcNow, resultJson, failure);
         return await SaveStepAsync(step, cancellationToken) ? new AttemptResult(status, failure) : null;
@@ -156,7 +170,7 @@ public sealed class SpecExplorer(
 
     private static string Hash(string prompt) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(prompt)));
 
-    private sealed record AttemptResult(StepStatus Status, string? Failure);
+    private sealed record AttemptResult(StepStatus Status, string? Failure, AttentionReason? Attention = null);
 
     private sealed record AttemptContext(
         SpecRun Run,

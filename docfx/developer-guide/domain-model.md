@@ -151,7 +151,7 @@ loss rather than spending a new cycle; successful parent-review axis results rem
 | `MaxReviewIterations`, `MaxRetries`, `ParentReviewCycleLimit`, `TesterCycleLimit` | Loop bounds. |
 | `TroubleshooterEnabled`, `TroubleshooterMaxAttempts` | Troubleshooter switch and bound. |
 | `TesterRunInstructions`, `TestPortRange` | How the tester starts the app and which ports it may use. |
-| `Roles` | Per `AgentRole`: <xref:WebDevLoop.Core.Domain.RoleSettingsOverride> (model, reasoning effort, prompt template, timeout). |
+| `Roles` | Per `AgentRole`: <xref:WebDevLoop.Core.Domain.RoleSettingsOverride> (Model, Reasoning Effort, prompt template, timeout). |
 
 Defaults are in <xref:WebDevLoop.Core.Settings.DefaultSettings>. Prompt templates are validated by `PromptTemplateValidator`. See [agents](agents.md#prompts-and-templates).
 

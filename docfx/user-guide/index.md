@@ -50,7 +50,8 @@ WebDevLoop does not split a spec into tickets. The spec must already have open s
 | Read what an agent did | Step page, Agent log | [Tickets and steps](tickets-and-steps.md#agent-log) |
 | Fix a run that needs attention | Action needed card | [Needs attention](needs-attention.md) |
 | Turn the Troubleshooter agent on or off | Settings, Troubleshooter | [Needs attention](needs-attention.md#the-troubleshooter), [Settings](settings.md#troubleshooter) |
-| Change models, prompts or timeouts | Settings, Agent roles | [Settings](settings.md#agent-roles) |
+| Change Models, prompts or timeouts | Settings, Agent roles | [Settings](settings.md#agent-roles) |
+| Refresh the Model Catalog | Settings, Agent roles, "Refresh models" | [Settings](settings.md#refresh-models) |
 | Change limits or concurrency | Settings, Concurrency, review and retries | [Settings](settings.md#concurrency-review-and-retries) |
 | Tell the tester how to start my app | Settings, Tester | [Settings](settings.md#tester) |
 | Override a setting for one repository | Settings, "Edit settings for" | [Settings](settings.md#global-settings-and-repository-overrides) |

@@ -61,13 +61,30 @@ These are the most common ones. The card always shows the exact steps for your c
 
 | Summary on the card | Cause | What to do |
 | --- | --- | --- |
-| The implementer agent could not complete this ticket. | WebDevLoop | Read the failed step's [agent log](tickets-and-steps.md#agent-log). Make the ticket text clearer on GitHub if needed, or change the model or timeout of the Implementer in [Settings](settings.md#agent-roles). **Retry**. |
+| The implementer agent could not complete this ticket. | WebDevLoop | Read the failed step's [agent log](tickets-and-steps.md#agent-log). Make the ticket text clearer on GitHub if needed, or change the Model or timeout of the Implementer in [Settings](settings.md#agent-roles). **Retry**. |
 | The implementer agent says it cannot continue without something it does not have. | You | Add the missing detail to the ticket on GitHub, then **Retry**. |
 | The prompt template of the ... role cannot be filled in. | You | Fix the template in [Settings](settings.md#agent-roles) or reset it to the default, then **Retry**. |
-| The Model configured for this step is no longer available to your Copilot account. | You | Use **Open Settings** to choose an available Model and supported Reasoning Effort for the affected role. Save, wait for validation to pass, then return to the ticket or run page and press **Retry**. This failure consumes no retry budget. |
+| The Model configured for this step is no longer available to your Copilot account. | You | Follow the [ModelUnavailable](#modelunavailable) flow: **Open Settings**, fix the role, save, then **Retry**. This failure consumes no retry budget. |
 | A reviewer agent could not finish its review. | WebDevLoop | Check the review step. Raise the reviewer timeout if it ran out of time. **Retry**. |
 | The explorer agent could not finish its look at the repository. | WebDevLoop | WebDevLoop already runs it once more. If it still fails, raise the Explorer timeout, then **Retry**. |
 | WebDevLoop was interrupted again and again... | WebDevLoop | Keep the app running, check memory and disk, then **Retry**. |
+
+#### ModelUnavailable
+
+`ModelUnavailable` means the Model configured for a step is confirmed missing from a freshly fetched Model Catalog
+after an agent launch or turn failed. The affected step needs attention, and new launches pause across the whole app
+while agent settings are invalid. Other in-flight steps can finish. A failed launch whose Model is still available,
+or a failed Model Catalog refresh, follows ordinary failure and retry behavior instead.
+
+Confirmed Model loss consumes **no retry budget**. It is a settings problem: WebDevLoop does not substitute a Model
+or send the Troubleshooter to fix it.
+
+1. Use **Open Settings** on the Action needed card to open [Agent roles](settings.md#agent-roles). Select the affected global or repository scope in **Edit settings for**.
+2. Choose an available Model and, if supported, a valid Reasoning Effort for the affected role. Fix every problem listed by [Agent models](health.md#agent-models), then click **Save settings**.
+3. Once validation passes, return to the ticket or run page and press **Retry** to resume the interrupted phase with the current settings. A step page is read-only; follow its link to the ticket or run.
+
+Saving valid settings resumes other eligible work automatically, but does not automatically retry the parked phase.
+**Open Settings** remains reachable in diagnostic-only mode; **Retry** stays disabled until all prerequisite checks pass.
 
 ### Reviews and limits (your decision)
 
@@ -117,7 +134,7 @@ The Troubleshooter is an agent that looks into a stuck ticket before you are ask
 
 If it cannot fix the problem, its diagnosis, its actions and its suggested buttons appear on the card.
 
-Every attempt costs model usage. In [Settings](settings.md#troubleshooter) you can switch it off (**Try to resolve problems automatically with an agent**) and set **Troubleshooter attempts per problem** (default 2). Its model, timeout and prompt are under **Agent roles**.
+Every attempt costs Model usage. In [Settings](settings.md#troubleshooter) you can switch it off (**Try to resolve problems automatically with an agent**) and set **Troubleshooter attempts per problem** (default 2). Its Model, timeout and prompt are under **Agent roles**.
 
 ## Retry or Abort
 

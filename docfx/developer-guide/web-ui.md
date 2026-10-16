@@ -84,7 +84,7 @@ Other pages (not drawn): `/repositories` (`RepositoriesPage` with registration, 
 | Runs | `Runs/` | `/runs/{Id}` | `SpecRunDetail`, `SpecRunControls`, `RunControlPanel`, `RunControlsArea`, `StackLayersPanel`, `MergeTrackingPanel`, `SpecBlockersPanel`, `RunEventsTimeline`, `StatusBadge`, `ShortHash`, `LiveDetailPageBase`, `RunEventSubscription`. |
 | Tickets | `Tickets/` | `/tickets/{Id}` | `TicketRunDetail`, `TicketDagView` (+ `TicketDagLayout`), `TicketRunControls`, `TicketFindingsPanel`, `SagaCheckpointTimeline`. |
 | Steps | `Steps/` | `/steps/{Id}` | `StepRunDetail`, `StepsTable`, `AgentLogTail`, `StructuredReportPanel` (+ `StepReportParser`), `RolePolicyPanel`. |
-| Settings | `Settings/` | `/settings` | `SettingsPage` (scope picker, unsaved-changes guard), `SettingsEditor`, field components `TextOverride`, `NumberOverride`, `ChoiceOverride`, `PromptTemplateField`, `OverrideFieldFrame`, `SettingsEditModel`. |
+| Settings | `Settings/` | `/settings` | `SettingsPage` (scope picker, unsaved-changes guard), `SettingsEditor`, catalog-backed fields `ModelPicker` and `ReasoningEffortPicker` with `ReadOnlySettingField` fallback, field components `TextOverride`, `NumberOverride`, `ChoiceOverride`, `PromptTemplateField`, `OverrideFieldFrame`, `SettingsEditModel`. |
 | GitHub | `GitHub/` | `/github` | `GitHubPage` (who is signed in, installations, unreachable repositories), `GitHubSignInBanner`, `SignInNavigation` (full-page redirect to the sign-in endpoint). |
 | Health | `Health/` | `/health` | `HealthPage` (prerequisite checks, **Re-check** button calls `DiagnosticReadiness.RefreshAsync`). |
 | Shared | `Shared/` | none | See [Shared components](#shared-components). |

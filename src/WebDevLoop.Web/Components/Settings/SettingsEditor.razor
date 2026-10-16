@@ -1,11 +1,16 @@
 @using System.Text.Json
 @using System.Text.RegularExpressions
+@using WebDevLoop.Core.Agents
 @using WebDevLoop.Core.Domain
 @using WebDevLoop.Core.Management
+@using WebDevLoop.Core.Ports
 @using WebDevLoop.Core.Settings
+@using WebDevLoop.Web.Background
 @using WebDevLoop.Web.Components.Shared
 @inject ISettingsManager Manager
 @inject EffectiveSettings EmbeddedDefaults
+@inject IModelCatalog ModelCatalog
+@inject ModelCatalogReadiness ModelReadiness
 
 @if (_loadError is not null)
 {
@@ -107,6 +112,27 @@ else if (_model is not null)
                 </SectionCard>
 
                 <SectionCard Id="section-roles" Title="Agent roles" Description="Model, reasoning effort, timeout and prompt for each agent.">
+                    @if (IsGlobal)
+                    {
+                        <button type="button" class="btn btn-outline-secondary mb-3" data-testid="refresh-models" disabled="@(_refreshingModels || _isSaving)"
+                                aria-busy="@(_refreshingModels ? "true" : null)" @onclick="RefreshModelsAsync">
+                            @(_refreshingModels ? "Refreshing models..." : "Refresh models")
+                        </button>
+                        @if (_modelRefreshError is not null)
+                        {
+                            <div class="alert alert-warning" role="alert" data-testid="model-refresh-error">@_modelRefreshError</div>
+                        }
+                        else if (_modelsRefreshed)
+                        {
+                            <div class="text-success mb-3" role="status" data-testid="model-refresh-status">Models refreshed.</div>
+                        }
+                    }
+                    @if (IsGlobal && !ModelsAvailable)
+                    {
+                        <div class="alert alert-warning" role="alert" data-testid="models-unavailable">
+                            Models unavailable, retry. Current Model and Reasoning Effort values are read-only.
+                        </div>
+                    }
                     @foreach (AgentRole role in Enum.GetValues<AgentRole>())
                     {
                         RoleEditModel roleModel = _model.Roles[role];
@@ -124,11 +150,23 @@ else if (_model is not null)
                                 }
                             </button>
                             <div class="settings-role__body" id="@panelId" hidden="@(!expanded)">
-                                <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.Model))" Label="Model" @bind-Value="roleModel.Model"
-                                              Inherited="@inheritedRole.Model" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
-                                <ChoiceOverride Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Label="Reasoning effort" Options="ReasoningEfforts"
-                                                Value="@roleModel.ReasoningEffort" ValueChanged="value => roleModel.ReasoningEffort = value"
-                                                Inherited="@inheritedRole.ReasoningEffort" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
+                                @if (IsGlobal)
+                                {
+                                    <ModelPicker Field="@(prefix + nameof(RoleSettingsOverride.Model))" Models="@ModelCatalog.Models"
+                                                 @bind-Value="roleModel.Model" Inherited="@inheritedRole.Model" ReadOnly="@(!ModelsAvailable)"
+                                                 Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
+                                    <ReasoningEffortPicker Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Model="@SelectedModel(roleModel, inheritedRole)"
+                                                           @bind-Value="roleModel.ReasoningEffort" Inherited="@inheritedRole.ReasoningEffort" ReadOnly="@(!ModelsAvailable)"
+                                                           Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
+                                }
+                                else
+                                {
+                                    <TextOverride Field="@(prefix + nameof(RoleSettingsOverride.Model))" Label="Model" @bind-Value="roleModel.Model"
+                                                  Inherited="@inheritedRole.Model" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.Model))" />
+                                    <ChoiceOverride Field="@(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" Label="Reasoning effort" Options="ReasoningEfforts"
+                                                    Value="@roleModel.ReasoningEffort" ValueChanged="value => roleModel.ReasoningEffort = value"
+                                                    Inherited="@inheritedRole.ReasoningEffort" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.ReasoningEffort))" />
+                                }
                                 <NumberOverride Field="@(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" Label="Session timeout" Unit="seconds" Min="1" @bind-Value="roleModel.TimeoutSeconds"
                                                 Inherited="@inheritedRole.TimeoutSeconds.ToString()" Errors="@ErrorsFor(prefix + nameof(RoleSettingsOverride.TimeoutSeconds))" />
                                 <PromptTemplateField Role="role" Value="@(roleModel.PromptTemplate ?? string.Empty)" ValueChanged="text => roleModel.PromptTemplate = text"
@@ -161,7 +199,7 @@ else if (_model is not null)
                 }
             </div>
             <button type="button" class="btn btn-outline-secondary" data-testid="discard" disabled="@(!IsDirty || _isSaving)" @onclick="Discard">Discard changes</button>
-            <button type="submit" class="btn btn-primary" data-testid="save" disabled="@(!IsDirty || _isSaving)" aria-busy="@(_isSaving ? "true" : null)">
+            <button type="submit" class="btn btn-primary" data-testid="save" disabled="@(!IsDirty || _isSaving || _refreshingModels)" aria-busy="@(_isSaving ? "true" : null)">
                 @if (_isSaving)
                 {
                     <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
@@ -236,6 +274,9 @@ else
     private string? _status;
     private bool _statusIsError;
     private bool _isSaving;
+    private bool _refreshingModels;
+    private bool _modelsRefreshed;
+    private string? _modelRefreshError;
     private bool _focusSummary;
     private bool _initialized;
     private bool _reportedDirty;
@@ -247,6 +288,36 @@ else
     [Parameter] public int? RepositoryId { get; set; }
 
     private bool IsGlobal => RepositoryId is null;
+
+    private bool ModelsAvailable => ModelCatalog.HasFetched && ModelCatalog.Models.Count > 0;
+
+    private ModelCatalogEntry? SelectedModel(RoleEditModel role, EffectiveRoleSettingsView inherited) =>
+        ModelCatalog.Models.FirstOrDefault(model => model.Id == (role.Model ?? inherited.Model));
+
+    private IReadOnlyList<string> SupportedEfforts(RoleEditModel role, EffectiveRoleSettingsView inherited) =>
+        SelectedModel(role, inherited)?.SupportedReasoningEfforts ?? [];
+
+    private async Task RefreshModelsAsync()
+    {
+        if (_refreshingModels || _isSaving)
+        {
+            return;
+        }
+
+        _refreshingModels = true;
+        _modelsRefreshed = false;
+        _modelRefreshError = null;
+        try
+        {
+            ModelCatalogRefreshResult result = await ModelReadiness.RefreshAsync(CancellationToken.None);
+            _modelRefreshError = result.Error is { } error ? $"Models could not be refreshed: {error}. Retry with Refresh models." : null;
+            _modelsRefreshed = result.Succeeded;
+        }
+        finally
+        {
+            _refreshingModels = false;
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -389,13 +460,13 @@ else
 
     private async Task SaveAsync()
     {
-        if (_model is null || _isSaving)
+        if (_model is null || _isSaving || _refreshingModels)
         {
             return;
         }
 
         _status = null;
-        ShowErrors([.. _model.LocalErrors(), .. PromptErrors()]);
+        ShowErrors([.. _model.LocalErrors(), .. PromptErrors(), .. ReasoningEffortErrors()]);
         if (_errors.Count > 0)
         {
             _status = "Fix the highlighted settings to continue.";
@@ -441,6 +512,26 @@ else
         _model!.Roles
             .Where(entry => !string.IsNullOrWhiteSpace(entry.Value.PromptTemplate))
             .SelectMany(entry => PromptTemplateValidator.Validate(entry.Key, entry.Value.PromptTemplate!));
+
+    private IEnumerable<SettingsValidationError> ReasoningEffortErrors()
+    {
+        if (!IsGlobal || !ModelsAvailable)
+        {
+            yield break;
+        }
+
+        foreach ((AgentRole role, RoleEditModel edit) in _model!.Roles)
+        {
+            EffectiveRoleSettingsView inherited = _inherited.Roles[role];
+            IReadOnlyList<string> efforts = SupportedEfforts(edit, inherited);
+            string effort = edit.ReasoningEffort ?? inherited.ReasoningEffort;
+            if (efforts.Count > 0 && !efforts.Contains(effort))
+            {
+                yield return new SettingsValidationError($"Roles.{role}.{nameof(RoleSettingsOverride.ReasoningEffort)}",
+                    $"Reasoning Effort '{effort}' is not supported by Model '{edit.Model ?? inherited.Model}'. Choose a supported effort.");
+            }
+        }
+    }
 
     private IReadOnlyList<string> ErrorsFor(string field) =>
         _errors.Where(error => error.Field == field).Select(Describe).Distinct().ToArray();

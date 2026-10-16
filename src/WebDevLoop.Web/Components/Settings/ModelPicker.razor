@@ -1,0 +1,59 @@
+@using WebDevLoop.Core.Agents
+
+@if (ReadOnly)
+{
+    <ReadOnlySettingField Field="@Field" Label="Model" Value="@EffectiveValue" Errors="@Errors" />
+}
+else
+{
+    <OverrideFieldFrame Field="@Field" Label="Model" Errors="@Errors">
+        <select id="@InputId" class="form-select @OverrideFieldFrame.InvalidClass(Errors)"
+                aria-invalid="@OverrideFieldFrame.InvalidFlag(Errors)" aria-describedby="@($"{IdHint} {OverrideFieldFrame.DescribedBy(Field, Errors)}")"
+                @onchange="Changed">
+            <option value="" selected="@string.IsNullOrEmpty(Value)" disabled="@(!IsAvailable(Inherited))">Default (@ModelLabel(Inherited))</option>
+            @if (!string.IsNullOrEmpty(Value) && !IsAvailable(EffectiveValue))
+            {
+                <option value="@Value" selected disabled>@Value (unavailable)</option>
+            }
+            @foreach (ModelCatalogEntry model in Models)
+            {
+                <option value="@model.Id" selected="@(model.Id == Value)">@DisplayLabel(model)</option>
+            }
+        </select>
+        <div id="@IdHint" class="form-text">Model ID: @EffectiveValue</div>
+    </OverrideFieldFrame>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Field { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ModelCatalogEntry> Models { get; set; } = [];
+
+    [Parameter] public string? Value { get; set; }
+
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Inherited { get; set; } = string.Empty;
+
+    [Parameter] public IReadOnlyList<string> Errors { get; set; } = [];
+
+    [Parameter] public bool ReadOnly { get; set; }
+
+    private string InputId => OverrideFieldFrame.InputIdFor(Field);
+
+    private string IdHint => $"{InputId}-id";
+
+    private string EffectiveValue => Value ?? Inherited;
+
+    private bool IsAvailable(string id) => Models.Any(model => model.Id == id);
+
+    private string ModelLabel(string id) =>
+        Models.FirstOrDefault(model => model.Id == id) is { } model
+            ? DisplayLabel(model)
+            : $"{id} (unavailable)";
+
+    private static string DisplayLabel(ModelCatalogEntry model) => $"{model.DisplayName} ({model.Id})";
+
+    private Task Changed(ChangeEventArgs args) =>
+        ValueChanged.InvokeAsync(SettingsEditModel.NullIfBlank(args.Value?.ToString()));
+}

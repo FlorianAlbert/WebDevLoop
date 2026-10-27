@@ -1,6 +1,6 @@
 # WebDevLoop
 
-WebDevLoop runs AI agents in roles against a repository's specs and tickets. This glossary covers the vocabulary of choosing which AI models those agents use.
+WebDevLoop runs AI agents in roles against a repository's specs and tickets. This glossary covers the vocabulary of choosing which AI models those agents use and which issues they may work on.
 
 ## Language
 
@@ -15,3 +15,6 @@ _Avoid_: Model list, model registry
 **Reasoning Effort**:
 How much thinking a model is asked to spend on a step; each model supports its own subset of efforts.
 _Avoid_: Thinking level
+
+**WebDevLoop Opt-in**:
+Explicit permission for WebDevLoop to work on a particular issue, independent of its readiness or dependencies.

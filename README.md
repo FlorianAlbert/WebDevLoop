@@ -435,5 +435,6 @@ dotnet test --solution WebDevLoop.slnx
 The test projects use xUnit v3 with Microsoft.Testing.Platform configured in `global.json`. Tests use fakes only (no real
 GitHub, Copilot, or network). `tests/WebDevLoop.Web.Tests/Workflow` runs the whole app host end to end with faked GitHub
 and Copilot against a local bare git remote: queue → concurrent implementation with a continuous frontier → review/fix →
-PR stack → parent review → tester → ready → merge → completed, including a stacked dependent spec, a lost GitHub
+PR stack → parent review → tester → ready → merge → completed, including a dependent spec that starts from current trunk
+once its native blockers close, a lost GitHub
 response, and an app restart in the middle of a run.

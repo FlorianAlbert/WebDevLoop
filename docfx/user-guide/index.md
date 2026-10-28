@@ -45,7 +45,7 @@ WebDevLoop does not split a spec into tickets. The spec must already have open s
 | Check if my stack was merged | Spec run, Merge tracking | [Spec runs](runs.md#merge-tracking) |
 | See what happened and when | Spec run, Events | [Spec runs](runs.md#events) |
 | Retry or abort a run | Spec run, Action needed or Controls | [Spec runs](runs.md#run-controls) |
-| Skip or retry one ticket | Ticket page, Controls | [Tickets and steps](tickets-and-steps.md#ticket-controls) |
+| Retry or abort one ticket | Ticket page, Controls | [Tickets and steps](tickets-and-steps.md#ticket-controls) |
 | Read review findings | Ticket page, Review findings | [Tickets and steps](tickets-and-steps.md#review-findings) |
 | Read what an agent did | Step page, Agent log | [Tickets and steps](tickets-and-steps.md#agent-log) |
 | Fix a run that needs attention | Action needed card | [Needs attention](needs-attention.md) |

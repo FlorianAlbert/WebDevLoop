@@ -76,10 +76,11 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> Blocked
-    Blocked --> Ready: all blockers integrated or skipped
-    Blocked --> Skipped: user skip
+    Blocked --> Ready: all current native GitHub blockers closed
+    Blocked --> Skipped: issue closed or detached externally
     Ready --> Implementing: claimed, implementer slot free
-    Ready --> Skipped: user skip
+    Ready --> Blocked: fresh blocker check no longer permits work
+    Ready --> Skipped: issue closed or detached externally
     Implementing --> Reviewing: report verified
     Reviewing --> FixingReviewFindings: findings, fix slot claimed
     FixingReviewFindings --> Reviewing: fix verified
@@ -88,7 +89,6 @@ stateDiagram-v2
     NeedsAttention --> Ready: retry (implement again)
     NeedsAttention --> Reviewing: retry (review again)
     NeedsAttention --> Integrating: retry (resume saga)
-    NeedsAttention --> Skipped: user skip
     Integrated --> [*]
     Skipped --> [*]
     Aborted --> [*]
@@ -100,14 +100,14 @@ stateDiagram-v2
 
 | Status | Notes |
 | --- | --- |
-| `Blocked` | Initial status. Waiting for blockers in the DAG. |
-| `Ready` | Dependencies satisfied; waiting for an implementer slot. |
+| `Blocked` | Initial status. Waiting for current native GitHub blockers to close. |
+| `Ready` | Last frontier check passed; rechecked before claiming an implementer slot. |
 | `Implementing`, `FixingReviewFindings` | Occupy an **implementer slot** (`OccupiesImplementerSlot`). |
 | `Reviewing` | Two reviewer steps (coding standards, specification) per round, run concurrently. |
 | `Integrating` | The integration saga squashes the ticket into the integration branch and publishes its PR layer. |
-| `Integrated` | Terminal. Counts as done for dependents. |
-| `Skipped` | Terminal. Counts as done for dependents (`SatisfiesDependents`). |
-| `Aborted` | Terminal. Never satisfies dependents, so they stay blocked. |
+| `Integrated` | Terminal local completion; cannot override a reopened GitHub blocker. |
+| `Skipped` | Terminal external closure or detachment; cannot override an open native GitHub blocker. |
+| `Aborted` | Terminal local cancellation; does not close its GitHub issue. |
 | `NeedsAttention` | Parked with a reason. `NeedsAttentionFrom` remembers the failed phase. |
 
 Counters on `TicketRun`: `Attempt` goes up on each `Implementing` (and when a retry starts a fresh review round); `ReviewIteration` goes up on each `FixingReviewFindings` and resets on a new attempt. Together they identify a review round, so old results are not read as current.
@@ -151,7 +151,7 @@ All end states are final. In practice a runner creates a step and starts it in t
 
 - **Snapshot.** At preparation, `SpecSnapshotter` reads the spec's sub-issues and their native "blocked by" edges from GitHub. Only **open** sub-issues become `TicketRun`s. Edges to issues outside the spec are dropped. A spec without open sub-issues needs attention (`SpecHasNoTickets`): WebDevLoop does not split a spec itself. A cycle needs attention (`TicketDependencyCycle`). The snapshot is kept on replay.
 - **Edges.** `TicketDependency(Blocked, Blocking)`; `DependencyGraph.EnsureAcyclic` rejects cycles.
-- **Frontier.** <xref:WebDevLoop.Core.Orchestration.Frontier.TicketFrontier> is a pure function. A ticket is *free* when it is `Blocked` or `Ready` and every blocker is `Integrated` or `Skipped`. Blocked ones become `Ready`. Candidates are ordered by issue number.
+- **Frontier.** <xref:WebDevLoop.Core.Orchestration.Frontier.FrontierService> re-reads each unstarted ticket and its current native blockers through `IGitHubIssues`, stopping at the first open blocker. All blockers must be closed, including non-opted-in, external, and cross-repository issues. Closure is sufficient without PR merge; local completion is insufficient while an issue stays open. The saved DAG is not authoritative. Missing or unavailable information defers only the affected ticket; unrelated tickets and other running specs continue. Results identify GitHub lookup errors; the event handler reports them to the logging boundary after reconciliation, and periodic recovery retries. <xref:WebDevLoop.Core.Orchestration.Frontier.TicketFrontier> orders verified candidates by issue number.
 - **Dispatch.** <xref:WebDevLoop.Core.Orchestration.Frontier.FrontierService> saves the unblocking, then <xref:WebDevLoop.Core.Orchestration.TicketExecution.TicketDispatcher> claims `Ready` tickets (`Ready` to `Implementing`) up to the free capacity: `min(global limit − used, per-repository limit − used)`.
 - **Continuous.** The frontier is recomputed on events, not in waves. When a ticket integrates, its dependents start while other tickets are still in review.
 - **Live changes.** While a spec runs, `TicketGraphReconciler` skips unstarted tickets whose issue was closed or detached, and adds tickets for new open sub-issues.
@@ -193,11 +193,10 @@ Here `#3` depends on `#1` (done), so it is `Ready`; `#4` waits for `#2` and `#3`
 | --- | --- | --- |
 | Retry spec | Spec is `NeedsAttention` | Resume the failed phase (`SpecRetryPlanner`). Active phases need a free slot. If open tickets exist (finding tickets), go to `Running` first. A spec that failed before it started must be aborted and queued again. |
 | Retry ticket | Ticket is `NeedsAttention` | `TicketRun.Retry`: implement again (`Ready`), review again (`Reviewing`, new attempt, full iteration budget), or resume the saga (`Integrating`). A saga past the squash always resumes. |
-| Skip ticket | `Blocked`, `Ready`, `NeedsAttention` | Ticket becomes `Skipped`. `SkipDependents.Unblock`: dependents start without its change. `SkipDependents.Skip`: not-yet-started dependents are skipped too. Refused when its squash commit is already on the integration branch. |
 | Abort spec | Spec not terminal | Spec, open tickets become `Aborted`; active steps are cancelled; sessions and tester app stopped; lease and slot released; worktrees cleaned by completion. |
-| Abort ticket | Ticket not terminal | Ticket `Aborted`, steps cancelled. Dependents stay blocked. |
+| Abort ticket | Ticket not terminal | Ticket `Aborted`, steps cancelled. Does not close GitHub blockers. |
 
-Outcomes (<xref:WebDevLoop.Core.Orchestration.Control.ControlOutcome>): `Applied`, `NotFound`, `NotAllowed`, `NoActiveSlot`, `ConcurrencyConflict` (also when a merge of the repository is in progress). Audit types: `ControlRetry`, `ControlSkip`, `ControlAbort`, and `ControlAutoRetry`/`ControlAutoSkip` when the app resumed work itself.
+Outcomes (<xref:WebDevLoop.Core.Orchestration.Control.ControlOutcome>): `Applied`, `NotFound`, `NotAllowed`, `NoActiveSlot`, `ConcurrencyConflict` (also when a merge of the repository is in progress). Audit types: `ControlRetry`, `ControlAbort`, and `ControlAutoRetry` when the app resumed work itself. Manual skip and skip-with-dependents operations and automatic attention skips are removed.
 
 ```mermaid
 flowchart TB
@@ -219,7 +218,7 @@ Work enters `NeedsAttention` only through `MarkNeedsAttention(reason)`. Then the
 ```mermaid
 flowchart LR
     E["Item enters NeedsAttention"] --> K["Known remediation (per code, bounded)"]
-    K -->|resolved| RES["Resume like Retry or Skip (ControlAuto*)"]
+    K -->|resolved| RES["Resume like Retry (ControlAutoRetry)"]
     K -->|not resolved| TS["Troubleshooter session (some codes, bounded)"]
     TS -->|resolved and verified| RES
     TS -->|not resolved| U["Ask the user: Action needed card with what was tried"]

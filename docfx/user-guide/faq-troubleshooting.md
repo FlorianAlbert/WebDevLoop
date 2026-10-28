@@ -55,7 +55,7 @@ It waits for a free slot. By default one spec per repository runs at a time. Che
 The spec issue is blocked by another issue on GitHub. In **Wait for merge** mode it starts after the blocker's pull requests were merged. The row names the blockers. See [Spec runs](runs.md#blocked-by-specs).
 
 **A ticket stays "Blocked".**
-It waits for the tickets it depends on. Only integrated or skipped tickets unblock it. Look at **Blocked by** on the [ticket page](tickets-and-steps.md#header-and-details). If the blocker is stuck, fix it or skip it.
+It waits for every current native GitHub blocker to close, including unlabeled issues, issues outside the spec, and issues in other repositories. Local integration or skipped status cannot override an open issue. Check GitHub for the current relationships; unavailable information defers only the affected ticket and is logged for normal recovery. Unrelated tickets and running specs continue.
 
 **Can I add or change tickets while a run is going?**
 The tickets are read when the run starts. Changes to the spec's sub-issues later do not change a running run. To start over with new tickets, abort the run and queue the spec again.
@@ -78,10 +78,10 @@ No. WebDevLoop tries its own fix. The page updates by itself. If you do not want
 The cause is not fixed yet. Read **What you can do** on the card and the **Technical details**.
 
 **A ticket needs attention and I do not need it.**
-Press **Skip**. The ticket counts as done without its change and tickets that depend on it continue. Use **Skip with dependents** to drop them too.
+Abort the ticket or run. To change the intended work, update the issues on GitHub and queue a new run. Manual skipping is unavailable and aborting does not close blockers.
 
 **The reviewers keep finding issues.**
-After the review limit, the ticket asks for your decision. Read the findings. Skip the ticket if they are fine, or raise **Max review iterations per ticket** and **Retry**.
+After the review limit, the ticket asks for your decision. Read the findings, then raise **Max review iterations per ticket** and **Retry**, or abort the run to handle them manually.
 
 **The pull requests were closed without merging.**
 The run needs attention. Reopen them and **Retry**, or abort the run and queue the spec again.

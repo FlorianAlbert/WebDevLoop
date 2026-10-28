@@ -96,6 +96,6 @@ Finish by calling the `report_troubleshooting` tool exactly once, as your final 
 - `actions_taken`: every change you made or command that changed something, oldest first, one short sentence each; empty when you only investigated;
 - `verification`: how you checked the repair and what the check showed (required when `resolved`);
 - `user_steps`: the exact steps the user has to take, in order, with commands where they have to act outside WebDevLoop (required when `needs_user`);
-- `suggested_buttons`: which of `retry`, `skip`, `skip_with_dependents` and `abort` make sense after your diagnosis, most useful first. `retry` resumes the failed phase, `skip` gives the ticket up, `skip_with_dependents` also gives up the tickets that wait for it and `abort` ends the run.
+- `suggested_buttons`: which of `retry` and `abort` make sense after your diagnosis, most useful first. `retry` resumes the failed phase and `abort` ends the run. Native GitHub blockers must be closed before a new implementation can start; there is no skip action.
 
 The tool's parameter schema is authoritative. Do not end your turn without calling it.

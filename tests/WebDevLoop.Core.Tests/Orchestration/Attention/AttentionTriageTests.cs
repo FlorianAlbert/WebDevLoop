@@ -206,7 +206,7 @@ public sealed class AttentionTriageTests : IDisposable
     // ----- Auto: ticket without changes ---------------------------------------------------------------------------
 
     [Fact]
-    public async Task a_reviewed_ticket_that_adds_nothing_is_skipped_as_no_changes_needed_and_its_dependents_are_released()
+    public async Task a_reviewed_ticket_that_adds_nothing_requires_a_decision_without_automatically_releasing_dependents()
     {
         TicketRun ticket = ParkedAt(AttentionReasons.TicketHasNoChanges("b", "abc", "def"), _f.Base, AttentionFixture.ToIntegrating);
         TicketRun dependent = _f.Run.SeedTicket(_spec);
@@ -214,11 +214,10 @@ public sealed class AttentionTriageTests : IDisposable
 
         AttentionTriageOutcome outcome = await _f.Triage().TriageAsync(Assignment(ticket), AttentionFixture.Token);
 
-        Assert.Equal(AttentionTriageOutcome.Resolved, outcome);
-        Assert.Equal(TicketRunStatus.Skipped, ticket.Status);
-        RunEvent resolved = Assert.Single(_f.EventsOf(_spec), runEvent => runEvent.Type == AttentionRunEvents.AutoResolved);
-        Assert.Contains("needs no changes", resolved.PayloadJson, StringComparison.Ordinal);
-        Assert.Contains("ControlAutoSkip", _f.EventsOf(_spec).Select(runEvent => runEvent.Type));
+        Assert.Equal(AttentionTriageOutcome.NeedsUser, outcome);
+        Assert.Equal(TicketRunStatus.NeedsAttention, ticket.Status);
+        Assert.Equal(TicketRunStatus.Blocked, dependent.Status);
+        Assert.DoesNotContain(_f.EventsOf(_spec), runEvent => runEvent.Type is AttentionRunEvents.AutoResolved or "ControlAutoSkip");
     }
 
     [Fact]

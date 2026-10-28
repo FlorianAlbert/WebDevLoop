@@ -16,7 +16,8 @@ public sealed class AgentReportToolTests
     [MemberData(nameof(AllRoles))]
     public void each_role_reports_through_the_tool_named_by_its_policy(AgentRole role)
     {
-        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(role, new AgentWorkspace("/work/repo", "/work/notes"));
+        RoleCapabilityPolicy policy = RoleCapabilityPolicies.For(role, new AgentWorkspace(
+            Path.Combine(AppContext.BaseDirectory, "repo"), Path.Combine(AppContext.BaseDirectory, "notes")));
 
         AgentReportTool tool = AgentReportToolFactory.For(role);
 
@@ -90,7 +91,7 @@ public sealed class AgentReportToolTests
         Assert.Equal(fields, RequiredNames(schema));
         Assert.False(schema.GetProperty("additionalProperties").GetBoolean());
         Assert.Equal(["resolved", "needs_user", "cannot_resolve"], EnumValues(Property(schema, "outcome")));
-        Assert.Equal(["retry", "skip", "skip_with_dependents", "abort"], EnumValues(Items(Property(schema, "suggested_buttons"))));
+        Assert.Equal(["retry", "abort"], EnumValues(Items(Property(schema, "suggested_buttons"))));
     }
 
     [Fact]
@@ -118,13 +119,13 @@ public sealed class AgentReportToolTests
             {
               "outcome": "needs_user", "summary": "The remote rejects the token.",
               "actions_taken": [], "verification": "",
-              "user_steps": ["Sign in again"], "suggested_buttons": ["retry", "skip_with_dependents", "abort"]
+              "user_steps": ["Sign in again"], "suggested_buttons": ["retry", "abort"]
             }
             """);
 
         var report = Assert.IsType<TroubleshooterReport>(result.Report);
         Assert.Equal(["Sign in again"], report.UserSteps);
-        Assert.Equal([AttentionActionKind.Retry, AttentionActionKind.SkipWithDependents, AttentionActionKind.Abort], report.SuggestedButtons);
+        Assert.Equal([AttentionActionKind.Retry, AttentionActionKind.Abort], report.SuggestedButtons);
     }
 
     [Theory]
@@ -133,6 +134,8 @@ public sealed class AgentReportToolTests
     [InlineData("""{ "outcome": "fixed", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": [] }""")]
     [InlineData("""{ "outcome": "cannot_resolve", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": ["retry", "retry"] }""")]
     [InlineData("""{ "outcome": "cannot_resolve", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": ["rewrite"] }""")]
+    [InlineData("""{ "outcome": "cannot_resolve", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": ["skip"] }""")]
+    [InlineData("""{ "outcome": "cannot_resolve", "summary": "s", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": ["skip_with_dependents"] }""")]
     [InlineData("""{ "outcome": "cannot_resolve", "summary": "  ", "actions_taken": [], "verification": "", "user_steps": [], "suggested_buttons": [] }""")]
     public void invalid_troubleshooting_payloads_are_rejected_with_a_reason(string payload)
     {

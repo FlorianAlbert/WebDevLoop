@@ -7,7 +7,7 @@ internal static class AttentionData
 {
     public const string Command = "git -C /work/t1 status --short";
 
-    /// <summary>Every section of the card is present: tried list, auto-fix outcome, numbered steps with a command and both link kinds, all four buttons.</summary>
+    /// <summary>Every section of the card is present: tried list, auto-fix outcome, numbered steps with a command and both link kinds, retry and abort buttons.</summary>
     public static AttentionReason Full(AttentionCause cause = AttentionCause.You, AttentionAutoFix? autoFix = null, string[]? tried = null) => new(
         AttentionCode.WorktreeNotClean,
         "The ticket's working folder has files that were not committed.",
@@ -24,8 +24,6 @@ internal static class AttentionData
         ],
         [
             new AttentionAction(AttentionActionKind.Retry, "Retry", "Starts the failed phase again."),
-            new AttentionAction(AttentionActionKind.Skip, "Skip", "Gives up on this ticket without its change."),
-            new AttentionAction(AttentionActionKind.SkipWithDependents, "Skip with dependents", "Gives up on this ticket and its dependents."),
             new AttentionAction(AttentionActionKind.Abort, "Abort ticket", "Stops this ticket for good."),
         ]);
 

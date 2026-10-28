@@ -15,7 +15,6 @@ public sealed class RunControlEndpointTests
         "/api/spec-runs/run-1/retry",
         "/api/spec-runs/run-1/abort",
         "/api/ticket-runs/t-1/retry",
-        "/api/ticket-runs/t-1/skip",
         "/api/ticket-runs/t-1/abort",
     };
 
@@ -41,7 +40,7 @@ public sealed class RunControlEndpointTests
         Assert.Equal("Retry", body.GetProperty("action").GetString());
         Assert.Equal(("run-1", "Running"), (body.GetProperty("run").GetProperty("id").GetString(), body.GetProperty("run").GetProperty("status").GetString()));
         Assert.Empty(body.GetProperty("warnings").EnumerateArray());
-        Assert.Equal([("retry-spec", "run-1", (SkipDependents?)null)], factory.Control.Calls);
+        Assert.Equal([("retry-spec", "run-1")], factory.Control.Calls);
     }
 
     [Fact]
@@ -76,39 +75,23 @@ public sealed class RunControlEndpointTests
         Assert.Equal(command, Assert.Single(factory.Control.Calls).Command);
     }
 
-    [Fact]
-    public async Task skipping_a_ticket_without_a_body_unblocks_its_dependents()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("Unblock")]
+    [InlineData("Skip")]
+    public async Task manual_skip_operations_are_not_available(string? dependents)
     {
         await using ApiFactory factory = await OperationalAsync();
         using HttpClient client = factory.CreateClient();
 
-        using HttpResponseMessage response = await client.PostAsync("/api/ticket-runs/t-1/skip", null, TestContext.Current.CancellationToken);
+        using HttpResponseMessage response = dependents is null
+            ? await client.PostAsync("/api/ticket-runs/t-1/skip", null, TestContext.Current.CancellationToken)
+            : await client.PostJsonAsync("/api/ticket-runs/t-1/skip", new { dependents });
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(("skip-ticket", "t-1", (SkipDependents?)SkipDependents.Unblock), Assert.Single(factory.Control.Calls));
-    }
-
-    [Fact]
-    public async Task skipping_a_ticket_can_skip_its_dependents_too()
-    {
-        await using ApiFactory factory = await OperationalAsync();
-        using HttpClient client = factory.CreateClient();
-
-        using HttpResponseMessage response = await client.PostJsonAsync("/api/ticket-runs/t-1/skip", new { dependents = "Skip" });
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(SkipDependents.Skip, Assert.Single(factory.Control.Calls).Dependents);
-    }
-
-    [Fact]
-    public async Task an_unknown_skip_policy_is_a_bad_request()
-    {
-        await using ApiFactory factory = await OperationalAsync();
-        using HttpClient client = factory.CreateClient();
-
-        using HttpResponseMessage response = await client.PostJsonAsync("/api/ticket-runs/t-1/skip", new { dependents = "Everything" });
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.False(response.IsSuccessStatusCode);
+        using HttpResponseMessage document = await client.GetResponseAsync("/openapi/v1.json");
+        JsonElement api = await document.ReadJsonAsync();
+        Assert.False(api.GetProperty("paths").TryGetProperty("/api/ticket-runs/{id}/skip", out _));
         Assert.Empty(factory.Control.Calls);
     }
 

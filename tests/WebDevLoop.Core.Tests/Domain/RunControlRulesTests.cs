@@ -2,7 +2,7 @@ using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Core.Tests.Domain;
 
-/// <summary>Domain rules behind the user's Retry/Skip/Abort control actions.</summary>
+/// <summary>Domain rules behind the user's Retry/Abort control actions and local completion.</summary>
 public sealed class RunControlRulesTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 10, 0, 0, TimeSpan.Zero);
@@ -184,8 +184,8 @@ public sealed class RunControlRulesTests
     [InlineData(TicketRunStatus.Aborted, false)]
     [InlineData(TicketRunStatus.NeedsAttention, false)]
     [InlineData(TicketRunStatus.Integrating, false)]
-    public void integrated_and_skipped_blockers_satisfy_their_dependents(TicketRunStatus blocker, bool satisfies)
+    public void only_integrated_and_skipped_tickets_are_locally_complete(TicketRunStatus status, bool locallyComplete)
     {
-        Assert.Equal(satisfies, blocker.SatisfiesDependents());
+        Assert.Equal(locallyComplete, status.IsLocallyComplete());
     }
 }

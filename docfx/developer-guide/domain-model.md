@@ -70,7 +70,7 @@ The state machines are in [run lifecycle](run-lifecycle.md). The enums:
 | <xref:WebDevLoop.Core.Domain.SpecDependencyMode> | `WaitForMerge`, `StackOnTop` |
 | <xref:WebDevLoop.Core.Domain.FindingAxis> | `CodingStandards`, `Specification`, `Testing` |
 
-Rules live next to the enums: <xref:WebDevLoop.Core.Domain.SpecRunStatusRules>, <xref:WebDevLoop.Core.Domain.TicketRunStatusRules>, <xref:WebDevLoop.Core.Domain.StepStatusRules>, <xref:WebDevLoop.Core.Domain.StepKindRules>. Each has `CanTransitionTo`, `IsTerminal`, and helpers such as `IsActive`, `SatisfiesDependents`, `OccupiesImplementerSlot`.
+Rules live next to the enums: <xref:WebDevLoop.Core.Domain.SpecRunStatusRules>, <xref:WebDevLoop.Core.Domain.TicketRunStatusRules>, <xref:WebDevLoop.Core.Domain.StepStatusRules>, <xref:WebDevLoop.Core.Domain.StepKindRules>. Each has `CanTransitionTo`, `IsTerminal`, and helpers such as `IsActive`, `IsLocallyComplete`, `OccupiesImplementerSlot`.
 
 ## Identifiers and value objects
 
@@ -109,7 +109,7 @@ All are `readonly record struct`s that validate in the constructor, so an invali
 | `Summary`, `WhyItMatters`, `Details` | Plain-language text and the technical wording (also stored as `FailureReason`). |
 | `Cause` (`WebDevLoop`, `You`, `Decision`) | Who has to act. |
 | `AutoFix`, `TriedSoFar`, `Diagnosis` | What the app tried (known remediation, troubleshooter). |
-| `UserSteps`, `Actions` | Numbered steps and the buttons (`Retry`, `Skip`, `SkipWithDependents`, `Abort`) with their consequence. |
+| `UserSteps`, `Actions` | Numbered steps and the buttons (`Retry`, `Abort`) with their consequence. |
 
 Wording for every code lives in one factory class, <xref:WebDevLoop.Core.Domain.AttentionReasons>. A guard test fails when work is parked with a free-form string or a code has no factory. The reason is stored as JSON next to the run, ticket or step.
 

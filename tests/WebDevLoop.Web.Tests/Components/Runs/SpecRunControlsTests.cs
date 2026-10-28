@@ -23,7 +23,7 @@ public sealed class SpecRunControlsTests
 
         cut.Find("[data-testid=control-retry]").Click();
 
-        Assert.Equal([("retry-spec", "run-1", (SkipDependents?)null)], harness.Control.Calls);
+        Assert.Equal([("retry-spec", "run-1")], harness.Control.Calls);
         Assert.Contains("Retry", cut.Find("[data-testid=control-result]").TextContent, StringComparison.Ordinal);
         Assert.Contains("alert-success", cut.Find("[data-testid=control-result]").ClassName, StringComparison.Ordinal);
         Assert.Equal(1, changed);

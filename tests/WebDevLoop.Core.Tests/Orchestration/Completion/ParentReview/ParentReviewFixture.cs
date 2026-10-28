@@ -22,6 +22,8 @@ internal sealed class ParentReviewFixture
 {
     private int _eventMark;
 
+    public ParentReviewFixture() => Execution.Issues = Issues.Snapshots;
+
     public ReviewLoopFixture Review { get; } = new();
 
     public FindingIssuanceStore Issuances { get; } = new();

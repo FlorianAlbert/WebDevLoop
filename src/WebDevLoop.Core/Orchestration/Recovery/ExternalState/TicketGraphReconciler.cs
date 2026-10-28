@@ -15,9 +15,9 @@ namespace WebDevLoop.Core.Orchestration.Recovery.ExternalState;
 /// it was skipped that way. Tickets that are being implemented or are done are never replaced.</item>
 /// <item>The issue of an integrated ticket that was reopened after the integration closed it is recorded once; the ticket
 /// stays integrated because its commit is already on the integration branch.</item>
-/// <item>Blocking edges of unstarted tickets mirror GitHub's native relations between sub-issues. A blocker that was
-/// closed on GitHub and therefore skipped no longer blocks (GitHub's semantics); a ticket the user skipped while its issue
-/// stays open keeps blocking. Edges that would close a cycle are not added.</item>
+/// <item>Display edges of unstarted tickets mirror GitHub's native relations between sub-issues. The frontier independently
+/// checks every current native blocker, including issues outside this graph; no local status releases an open blocker.
+/// Edges that would close a cycle are not added.</item>
 /// </list>
 /// Any change requests a frontier reconciliation through the outbox, saved together with the change.
 /// </summary>

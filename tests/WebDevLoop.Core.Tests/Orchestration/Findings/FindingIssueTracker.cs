@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Ports;
+using WebDevLoop.Core.Tests.Ports.Fakes;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Findings;
 
@@ -15,10 +16,12 @@ internal sealed class FindingIssueTracker : IGitHubIssues
 {
     private const long DatabaseIdOffset = 9000;
 
-    private readonly Dictionary<int, IssueSnapshot> _issues = [];
+    private readonly Dictionary<int, IssueRef> _references = [];
     private readonly Dictionary<int, FindingFingerprint> _fingerprints = [];
     private readonly Dictionary<int, List<int>> _subIssues = [];
     private int _nextNumber = 100;
+
+    public InMemoryGitHubIssues Snapshots { get; } = new();
 
     public List<FindingIssueDraft> CreatedDrafts { get; } = [];
 
@@ -33,11 +36,11 @@ internal sealed class FindingIssueTracker : IGitHubIssues
     /// <summary>Runs inside <see cref="CreateFindingIssueAsync"/> before the issue exists (e.g. to inspect persisted state).</summary>
     public Action<FindingIssueDraft>? BeforeCreate { get; set; }
 
-    public IssueSnapshot Issue(int number) => _issues[number];
+    public IssueSnapshot Issue(int number) => Snapshots.GetIssueAsync(_references[number], CancellationToken.None).GetAwaiter().GetResult();
 
     public IReadOnlyList<int> SubIssueNumbers(IssueRef parent) => _subIssues.GetValueOrDefault(parent.Number, []);
 
-    public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken) => Task.FromResult(_issues[issue.Number]);
+    public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken) => Snapshots.GetIssueAsync(issue, cancellationToken);
 
     public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken) => throw new NotSupportedException();
 
@@ -48,7 +51,7 @@ internal sealed class FindingIssueTracker : IGitHubIssues
         FindCalls++;
         return Task.FromResult(SubIssueNumbers(specIssue)
             .Where(number => _fingerprints.GetValueOrDefault(number) == fingerprint)
-            .Select(number => _issues[number])
+            .Select(Issue)
             .FirstOrDefault());
     }
 
@@ -67,7 +70,8 @@ internal sealed class FindingIssueTracker : IGitHubIssues
         {
             Labels = [WebDevLoopOptIn.Label],
         };
-        _issues[number] = snapshot;
+        _references[number] = issue;
+        Snapshots.Seed(snapshot);
         _fingerprints[number] = draft.Fingerprint;
         Link(draft.Parent, number);
         CreatedDrafts.Add(draft);
@@ -89,20 +93,14 @@ internal sealed class FindingIssueTracker : IGitHubIssues
     public Task AddBlockedByAsync(IssueRef blocked, IssueRef blocking, CancellationToken cancellationToken)
     {
         BlockedByCalls.Add((blocked, blocking));
-        IssueSnapshot snapshot = _issues[blocked.Number];
-        if (!snapshot.BlockedBy.Any(existing => existing.Number == blocking.Number))
-        {
-            _issues[blocked.Number] = snapshot with { BlockedBy = [.. snapshot.BlockedBy, blocking] };
-        }
-
-        return Task.CompletedTask;
+        return Snapshots.AddBlockedByAsync(blocked, blocking, cancellationToken);
     }
 
     public Task CommentAsync(IssueRef issue, string body, CancellationToken cancellationToken) => throw new NotSupportedException();
 
     public Task<IReadOnlyList<string>> ListCommentsAsync(IssueRef issue, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken) => Snapshots.CloseAsync(issue, reason, cancellationToken);
 
     private void Link(IssueRef parent, int child)
     {

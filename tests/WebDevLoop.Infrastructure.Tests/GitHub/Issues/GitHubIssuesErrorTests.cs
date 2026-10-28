@@ -12,6 +12,38 @@ public sealed class GitHubIssuesErrorTests : GitHubIssuesTestBase
 {
     private Task<IssueSnapshot> GetIssue() => CreateSut().GetIssueAsync(Ref(7), CancellationToken.None);
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("not-a-repository")]
+    [InlineData("https://api.github.com/repos/another-owner")]
+    public async Task an_unusable_blocker_repository_is_not_assumed_to_be_the_tickets_repository(string? repositoryUrl)
+    {
+        Api.Get(IssuePath(7), Issue(7, 700));
+        Api.Get(BlockedByPath(7), new[] { new { number = 3, repository_url = repositoryUrl } });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(GetIssue);
+
+        Assert.Equal(GitHubApiErrorKind.Invalid, error.Kind);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task unavailable_native_blocker_pages_are_errors_not_partial_or_empty_relationships(HttpStatusCode status)
+    {
+        Api.Get(IssuePath(7), Issue(7, 700));
+        Api.Get(BlockedByPath(7) + "?per_page=100", new[] { Issue(3, 300, state: "closed") },
+            ("Link", $"<https://api.github.com{BlockedByPath(7)}?per_page=100&page=2>; rel=\"next\""));
+        Api.Respond(HttpMethod.Get, BlockedByPath(7) + "?per_page=100&page=2", status, new { message = "Blocker relationships unavailable" });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(GetIssue);
+
+        Assert.Equal(status, error.StatusCode);
+        Assert.Contains("Blocker relationships unavailable", error.Message);
+    }
+
     [Fact]
     public async Task invalid_json_is_a_useful_github_failure()
     {

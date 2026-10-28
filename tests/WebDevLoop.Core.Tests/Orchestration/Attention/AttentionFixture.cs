@@ -111,7 +111,7 @@ internal sealed class AttentionFixture : IDisposable
 
     public GitRepositoryLocation Location => GitRepositoryLocation.From(Run.Repository);
 
-    public static string WorktreeOf(SpecRun spec, TicketRun ticket) => TicketWorktreeLayout.PathFor("/work", spec.Id, ticket.Id);
+    public static string WorktreeOf(SpecRun spec, TicketRun ticket) => TicketWorktreeLayout.PathFor(RunControlFixture.WorkspaceRoot, spec.Id, ticket.Id);
 
     /// <summary>A ticket that failed in the last status of <paramref name="path"/> with <paramref name="reason"/>.</summary>
     public TicketRun SeedParkedTicket(SpecRun spec, AttentionReason reason, CommitSha? implemented, params TicketRunStatus[] path)
@@ -140,7 +140,6 @@ internal sealed class AttentionFixture : IDisposable
             new TransientFailureRemediation(options),
             new StaleIntegrationBranchRemediation(loader, Run.Store, Run.Store, Git),
             new ExplorationRetryRemediation(),
-            new NoChangesTicketRemediation(loader, Run.Store),
         ];
         (SpecRunControl specs, TicketRunControl tickets) = Run.Controls();
         IAttentionStage[] stages = [new KnownRemediationStage(known, Run.Store, Run.Clock), .. laterStages];

@@ -6,7 +6,7 @@ using WebDevLoop.Web.Api.Contracts;
 
 namespace WebDevLoop.Web.Api;
 
-/// <summary>Retry/Skip/Abort commands. Rejected with the prerequisite status in diagnostic-only mode; 200 returns the updated run.</summary>
+/// <summary>Retry/Abort commands. Rejected with the prerequisite status in diagnostic-only mode; 200 returns the updated run.</summary>
 internal static class RunControlEndpoints
 {
     public static void Map(IEndpointRouteBuilder api)
@@ -31,27 +31,10 @@ internal static class RunControlEndpoints
             .WithSummary("Resumes a ticket run that needs attention: implement again, review again, or resume its integration.")
             .WithControlResponses<TicketRunView>();
 
-        group.MapPost("ticket-runs/{id}/skip", (
-                string id,
-                [FromBody] SkipTicketRequest? request,
-                [FromServices] IRunControl control,
-                [FromServices] IRunQueries queries,
-                CancellationToken cancellationToken) =>
-            TicketRunCommandAsync(
-                id,
-                ControlAction.Skip,
-                queries,
-                ticketId => control.SkipTicketAsync(ticketId, request?.Dependents ?? SkipDependents.Unblock, cancellationToken),
-                cancellationToken))
-            .WithName("SkipTicketRun")
-            .WithSummary("Skips a ticket run that is not being worked on. Its dependents start without it (Unblock, default) or are skipped too (Skip).")
-            .WithControlResponses<TicketRunView>()
-            .ProducesProblem(StatusCodes.Status400BadRequest);
-
         group.MapPost("ticket-runs/{id}/abort", (string id, [FromServices] IRunControl control, [FromServices] IRunQueries queries, CancellationToken cancellationToken) =>
             TicketRunCommandAsync(id, ControlAction.Abort, queries, ticketId => control.AbortTicketAsync(ticketId, cancellationToken), cancellationToken))
             .WithName("AbortTicketRun")
-            .WithSummary("Aborts a ticket run: cancels its active steps and aborts their agent sessions. Its dependents stay blocked.")
+            .WithSummary("Aborts a ticket run: cancels its active steps and aborts their agent sessions. This does not close its GitHub issue or bypass native blockers.")
             .WithControlResponses<TicketRunView>();
     }
 

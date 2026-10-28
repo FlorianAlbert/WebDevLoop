@@ -20,9 +20,7 @@ public enum AttentionCause
 public enum AttentionActionKind
 {
     Retry,
-    Skip,
-    SkipWithDependents,
-    Abort,
+    Abort = 3,
 }
 
 /// <summary>One button of the "Action needed" card and what pressing it causes, in one plain sentence.</summary>

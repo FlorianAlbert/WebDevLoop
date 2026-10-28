@@ -282,7 +282,7 @@ public sealed class TroubleshooterStageTests : IDisposable
             summary: "The ticket needs a database that is not installed on this machine.",
             actions: ["Ran dotnet test: 12 failures", "Checked that postgres is missing"],
             userSteps: ["Install PostgreSQL 16.", "Retry the ticket."],
-            buttons: [AttentionActionKind.Skip, AttentionActionKind.Retry]));
+            buttons: [AttentionActionKind.Abort, AttentionActionKind.Retry]));
 
         await Triage(ticket);
 
@@ -290,7 +290,7 @@ public sealed class TroubleshooterStageTests : IDisposable
         Assert.Equal("The ticket needs a database that is not installed on this machine.", reason.Diagnosis!.Summary);
         Assert.Equal("Install PostgreSQL 16.", reason.UserSteps[0].Text);
         Assert.Contains(reason.TriedSoFar, tried => tried == "Troubleshooter: Checked that postgres is missing");
-        Assert.Equal(AttentionActionKind.Skip, reason.PrimaryAction.Kind);
+        Assert.Equal(AttentionActionKind.Abort, reason.PrimaryAction.Kind);
         Assert.Contains(AttentionRunEvents.NeedsYou, _f.EventsOf(_spec).Select(runEvent => runEvent.Type));
     }
 
@@ -445,7 +445,7 @@ public sealed class TroubleshooterStageTests : IDisposable
     }
 
     [Fact]
-    public async Task the_users_retry_or_skip_stops_a_troubleshooter_that_is_still_working_but_the_automatic_retry_does_not()
+    public async Task the_users_retry_stops_a_troubleshooter_that_is_still_working_but_the_automatic_retry_does_not()
     {
         (TicketRun ticket, _) = Park(AttentionReasons.ImplementerBlocked("no database"), WorktreeStatus.Clean);
         StepRun running = _f.Run.SeedRunningStep(_spec, ticket, StepKind.Troubleshoot, AgentRole.Troubleshooter);

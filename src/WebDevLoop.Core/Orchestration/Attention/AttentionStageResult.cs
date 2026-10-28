@@ -18,9 +18,6 @@ public enum AttentionResumeKind
 {
     /// <summary>Resume the phase that failed, as the user's Retry would.</summary>
     Retry,
-
-    /// <summary>Give the ticket up without its change, as the user's Skip would.</summary>
-    SkipTicket,
 }
 
 /// <param name="RetryAt">For <see cref="AttentionResumeKind.Retry"/> of a ticket: resume here instead of at the failed phase.</param>
@@ -29,8 +26,6 @@ public sealed record AttentionResume(AttentionResumeKind Kind, TicketRunStatus? 
     public static AttentionResume Retry { get; } = new(AttentionResumeKind.Retry);
 
     public static AttentionResume RetryAtReview { get; } = new(AttentionResumeKind.Retry, TicketRunStatus.Reviewing);
-
-    public static AttentionResume Skip { get; } = new(AttentionResumeKind.SkipTicket);
 }
 
 /// <summary>An agent's findings to show the user when nothing resolved the situation after all.</summary>

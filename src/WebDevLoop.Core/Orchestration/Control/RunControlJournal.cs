@@ -52,7 +52,7 @@ public sealed class RunControlJournal(IRunEventRepository runEvents, IOutbox out
 
     /// <param name="ticketRunId">The ticket the command targeted; null for spec commands.</param>
     /// <param name="status">The status the target moved to.</param>
-    /// <param name="alsoAffected">Further tickets the command changed (cascaded skips, tickets of an aborted spec).</param>
+    /// <param name="alsoAffected">Further tickets the command changed (tickets of an aborted spec).</param>
     public void Record(ControlAction action, RunId specRunId, TicketRunId? ticketRunId, string status, IEnumerable<TicketRunId>? alsoAffected = null)
     {
         DateTimeOffset now = clock.UtcNow;

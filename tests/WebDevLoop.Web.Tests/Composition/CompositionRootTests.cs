@@ -65,7 +65,6 @@ public sealed class CompositionRootTests
             AttentionCode.WorktreeNotClean,
             AttentionCode.TicketBranchNotBasedOnIntegration,
             AttentionCode.IntegrationTemporaryFailure,
-            AttentionCode.TicketHasNoChanges,
         ];
         Assert.Equal(expected.Order(), remediated);
         Assert.DoesNotContain(AttentionCode.ModelUnavailable, remediated);

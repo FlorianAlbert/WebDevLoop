@@ -4,7 +4,7 @@
 @inherits WebDevLoop.Web.Components.Dashboard.ScopedComponentBase
 @inject DiagnosticReadiness Readiness
 
-@* Buttons for Retry/Skip/Abort; destructive commands ask for confirmation first. All are disabled in diagnostic-only mode. *@
+@* Buttons for Retry/Abort; destructive commands ask for confirmation first. All are disabled in diagnostic-only mode. *@
 <div class="run-controls" data-testid="run-control-buttons">
     @foreach (RunControlCommand command in Commands)
     {

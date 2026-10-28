@@ -67,7 +67,7 @@ The **Tickets** table shows the tickets of the spec and how they depend on each 
 | --- | --- |
 | Layer | Depth in the dependency graph. `0` has no blockers. `1` waits for layer `0`, and so on. This is not the same as a stack layer. |
 | Ticket | The issue number and title. Click it to open the [ticket page](tickets-and-steps.md). |
-| Status | See below. A **Frontier** label means that all blockers are integrated, so the ticket may start now. |
+| Status | See below. A **Frontier** label means the last GitHub blocker check passed; dispatch checks again. |
 | Blocked by | The blocking tickets with their status. Green means satisfied. |
 | Review iteration | How many review and fix rounds the ticket has had. |
 | PR | The pull request of the ticket. |
@@ -77,18 +77,18 @@ The **Tickets** table shows the tickets of the spec and how they depend on each 
 
 | Status | Meaning |
 | --- | --- |
-| Blocked | Waiting for other tickets. |
-| Ready | May start, waiting for a free implementer. |
+| Blocked | Waiting for native GitHub blockers to close. |
+| Ready | Passed the last frontier check, waiting for a free implementer; blockers are rechecked before dispatch. |
 | Implementing | An agent writes the change. |
 | Reviewing | Two reviewer agents check the change. |
 | Fixing review findings | An agent fixes what the reviewers found. |
 | Integrating | The change is squash-merged into the integration branch and published as a pull request. |
 | Integrated | Done. |
 | Needs attention | The ticket stopped. See [Needs attention](needs-attention.md). |
-| Skipped | You skipped it. It counts as done, without its change. |
-| Aborted | Cancelled. Tickets that depend on it stay blocked. |
+| Skipped | Reconciliation found an unstarted ticket closed or detached on GitHub. Not a manual control. |
+| Aborted | Cancelled locally. Does not close its GitHub issue. |
 
-Only integrated or skipped tickets unblock the tickets that depend on them.
+Only closing every current native GitHub blocker unblocks new implementation. Local completion cannot override an open issue.
 
 ## Pull request stack
 

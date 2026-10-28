@@ -24,13 +24,13 @@
                             <StatusBadge Status="@ticket.Status.ToString()" data-testid="@($"ticket-status-{ticket.Id}")" />
                             @if (row.IsFrontier)
                             {
-                                <StatusPill Variant="StatusVariant.Warning" data-testid="@($"frontier-{ticket.Id}")" title="All blockers integrated: may be implemented now">Frontier</StatusPill>
+                                <StatusPill Variant="StatusVariant.Warning" data-testid="@($"frontier-{ticket.Id}")" title="Passed the last GitHub blocker check; checked again before dispatch">Frontier</StatusPill>
                             }
                         </td>
                         <td data-testid="ticket-blockers-@ticket.Id">
                             @foreach (TicketBlocker blocker in row.Blockers)
                             {
-                                <span class="me-2 @(blocker.IsSatisfied ? "text-success" : "text-body-secondary")">
+                                <span class="me-2 @(blocker.IsLocallyComplete ? "text-success" : "text-body-secondary")">
                                     @(blocker.Issue is { } issue ? $"#{issue}" : blocker.TicketRunId) (@(blocker.Status is { } blockerStatus ? DisplayNames.Humanize(blockerStatus.ToString()) : "unknown"))
                                 </span>
                             }

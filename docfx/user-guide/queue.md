@@ -6,7 +6,8 @@ The Queue page shows every spec run of the current repository and lets you queue
 
 ## What you can do here
 
-- Queue a parent spec issue.
+- Find eligible parent specs, select several, and queue them in your chosen order.
+- Queue a known parent spec issue by number or URL as a fallback.
 - See how many active slots are used.
 - See all spec runs, grouped into lanes.
 - Open a run with **Details**, or **Fix and continue** when it needs attention.
@@ -19,6 +20,47 @@ Before queueing, the parent must be **open** and labeled **`webdevloop`** (WebDe
 sub-issue must independently be **open** and labeled **`webdevloop`**. A parent's label does not opt in its children.
 Triage labels such as `ready-for-agent` do not authorize WebDevLoop. Eligible tickets may all be blocked.
 
+### Find and select parent specs
+
+1. Select the connected repository in the sidebar.
+2. In **Find parent specs**, search by issue number (with or without `#`) or title, then click **Search**.
+3. Optionally select **No open parent blockers**. This checks only the parent's current native blockers, including
+   blockers in other repositories. Closed blockers do not exclude a spec; ticket blockers never affect this filter.
+4. Use **Load more specs** to see later pages. **Refresh from GitHub** starts again with current GitHub state.
+5. Select the specs you want. In **Selected queue order**, use **Move up**, **Move down** and **Remove** to arrange
+   the selection. These native buttons work with Tab and Enter/Space as well as a pointer.
+6. Click **Queue selected**.
+
+The list excludes pull requests, sub-issues, and specs with unfinished runs. A parent needs at least one independently
+opted-in open child to appear. Selections survive search, filtering and refresh, but their eligibility is checked again
+when submitted. GitHub state is not continuously monitored. A failed lookup shows access/retry guidance rather than
+silently using stale results.
+
+Submission queues each spec in the selected order without reordering runs already in the queue. Every spec gets its
+own result, even if an earlier spec fails:
+
+| Result | What to do |
+| --- | --- |
+| Queued | Open the new run using its link. |
+| AlreadyQueued | Open the existing unfinished run using its link; no duplicate is created. |
+| Ineligible | Follow the message to reopen or opt in the parent or an open child on GitHub, then retry. |
+| GitHubUnavailable | Check GitHub access or retry a temporary failure. |
+| RepositoryNotFound | Select a connected repository. |
+| ConcurrencyConflict | Refresh the queue and retry. |
+| Unavailable | Workflow prerequisites changed during submission. Fix them on [Health](health.md), then retry. |
+| Failed | Check the queue before retrying; the message describes an unexpected failure. |
+
+Queued and already-queued specs leave the selection. Failed selections remain for retry or removal. Selection and
+queueing controls are disabled while submitting or in diagnostic-only mode. Search and refresh remain available in
+diagnostic-only mode, though missing GitHub access may prevent discovery. See [Health](health.md) to restore prerequisites.
+On narrow screens the candidate list and selected order stack vertically.
+
+The picker does not create or edit GitHub issues. Change labels, issue state and relationships on GitHub.
+
+### Type an issue number or URL
+
+The **Queue parent spec issue** form remains available when you already know the issue:
+
 1. Select the repository in the sidebar.
 2. Enter the issue in **Queue parent spec issue**. You can type `123`, `#123` or the full issue URL.
 3. Click **Queue**.
@@ -29,7 +71,7 @@ A message tells you what happened:
 | --- | --- |
 | Queued #123. | The spec is in the queue. A link opens the run. |
 | #123 is already queued. | There already is a run for this issue. A link opens it. |
-| The queue changed at the same time; please try again. | Another change was faster. Click **Queue** again. |
+| The queue changed concurrently. Refresh the queue and retry. | Another change was faster. Refresh the queue, then click **Queue** again. |
 | Enter a positive issue number... | The text was not an issue number or URL. |
 | Parent spec #123 must be open. | Reopen the parent on GitHub before queueing. |
 | Parent spec #123 requires the 'webdevloop' label... | Opt the parent in on GitHub; labeled children cannot authorize the parent. |
@@ -37,9 +79,9 @@ A message tells you what happened:
 | Could not verify current GitHub eligibility for #123... | Nothing was queued. Check GitHub access or retry a temporary failure. |
 | Could not queue #123: ... | The issue could not be read, for example because it does not exist or the App cannot reach the repository. See [GitHub](github.md). |
 
-The form is disabled while WebDevLoop is in diagnostic-only mode. See [Health](health.md).
+The typed form is also disabled while WebDevLoop is in diagnostic-only mode. See [Health](health.md).
 
-The form and direct API calls recheck current GitHub state and labels at submission, even if an issue was eligible
+The picker, typed form and direct API calls recheck current GitHub state and labels at submission, even if an issue was eligible
 when you first saw it. An ineligible spec or failed lookup creates no run. WebDevLoop reads the ticket graph again
 when the run starts; this enqueue check does not reserve a snapshot of the tickets.
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.SpecQueue;
+using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Queries;
 using WebDevLoop.Web.Api.Contracts;
 
@@ -12,6 +13,24 @@ internal static class SpecRunEndpoints
     public static void Map(IEndpointRouteBuilder api)
     {
         RouteGroupBuilder group = api.MapGroup(string.Empty).WithTags("Spec runs");
+
+        group.MapPost("repos/{repoId:int}/spec-runs/batch", QueueSelectionAsync)
+            .AddEndpointFilter<OperationalOnlyFilter>()
+            .WithName("QueueSpecSelection")
+            .WithSummary("Queues selected parent specs sequentially in the supplied order.")
+            .WithDescription("Returns one ordered result per issue: Queued, AlreadyQueued, RepositoryNotFound, Ineligible, GitHubUnavailable, ConcurrencyConflict, Unavailable or Failed. Each result includes an actionable message and a new or existing run id when available. The shared Core enqueue path rechecks eligibility and duplicates in an independent unit of work; a failed item does not hide or prevent later results. Does not reorder existing runs. Diagnostic-only mode returns 503 before submission; readiness changes during the batch produce per-item Unavailable results.")
+            .Produces<IReadOnlyList<QueueSpecItemResult>>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+
+        group.MapGet("repos/{repoId:int}/spec-candidates", ListCandidatesAsync)
+            .WithName("ListSpecCandidates")
+            .WithSummary("Finds open, opted-in parent specs with independently opted-in open sub-issues.")
+            .WithDescription("Reads current GitHub state. Excludes pull requests, sub-issues and specs with unfinished runs. Search matches issue number or title, case-insensitively. onlyUnblocked checks only open native parent blockers, including other repositories; ticket blockers never exclude a candidate. Start at page 1 and follow nextPage with the same filters until null. Empty source pages are skipped. Refresh by starting at page 1; submission must still use QueueSpecRun to recheck eligibility.")
+            .Produces<SpecCandidatePage>()
+            .ProducesValidationProblem()
+            .ProducesProblem(StatusCodes.Status404NotFound)
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
 
         group.MapPost("repos/{repoId:int}/spec-runs", QueueSpecAsync)
             .AddEndpointFilter<OperationalOnlyFilter>()
@@ -67,6 +86,40 @@ internal static class SpecRunEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound);
     }
 
+    private static async Task<IResult> QueueSelectionAsync(
+        int repoId, [FromBody] QueueSpecsRequest request, [FromServices] ISpecSelectionEnqueuer enqueuer,
+        CancellationToken cancellationToken)
+    {
+        if (request.SpecIssueNumbers is not { Count: > 0 } numbers || numbers.Any(number => number < 1))
+        {
+            return ApiProblems.Validation([new(nameof(request.SpecIssueNumbers), "Select at least one positive issue number.")]);
+        }
+
+        IReadOnlyList<SpecSelectionResult> results = await enqueuer.EnqueueAsync(repoId, numbers, cancellationToken);
+        return TypedResults.Ok(results.Select(result =>
+            new QueueSpecItemResult(result.SpecIssueNumber, result.Outcome, result.SpecRunId?.Value, result.Message)).ToArray());
+    }
+
+    private static async Task<IResult> ListCandidatesAsync(
+        int repoId, [FromServices] ISpecCandidateQueries queries, CancellationToken cancellationToken,
+        string? search = null, bool onlyUnblocked = false, int page = 1)
+    {
+        if (page < 1)
+        {
+            return ApiProblems.Validation([new(nameof(page), "Must be a positive page number.")]);
+        }
+
+        try
+        {
+            CommandResult<SpecCandidatePage> result = await queries.ListAsync(repoId, search, onlyUnblocked, page, cancellationToken);
+            return result.IsSuccess ? TypedResults.Ok(result.Value) : ApiProblems.NotFound(result.Message!);
+        }
+        catch (GitHubIssuesException exception)
+        {
+            return ApiProblems.GitHubEligibilityFailed($"Could not load current GitHub specs. Check GitHub access and refresh. {exception.Message}");
+        }
+    }
+
     private static async Task<IResult> QueueSpecAsync(
         int repoId,
         [FromBody] QueueSpecRequest request,
@@ -79,14 +132,15 @@ internal static class SpecRunEndpoints
         }
 
         EnqueueResult result = await enqueuer.EnqueueAsync(repoId, request.SpecIssueNumber, cancellationToken);
+        var feedback = new SpecSelectionResult(request.SpecIssueNumber, result);
         return result.Outcome switch
         {
             EnqueueOutcome.Queued => TypedResults.Accepted($"/api/spec-runs/{result.SpecRunId!.Value.Value}", new QueueSpecResponse(result.SpecRunId.Value.Value, nameof(EnqueueOutcome.Queued))),
             EnqueueOutcome.AlreadyQueued => TypedResults.Ok(new QueueSpecResponse(result.SpecRunId!.Value.Value, nameof(EnqueueOutcome.AlreadyQueued))),
-            EnqueueOutcome.RepositoryNotFound => ApiProblems.NotFound($"Repository {repoId} does not exist."),
-            EnqueueOutcome.Ineligible => ApiProblems.Conflict(result.Reason!),
-            EnqueueOutcome.GitHubUnavailable => ApiProblems.GitHubEligibilityFailed(result.Reason!),
-            _ => ApiProblems.Conflict("The queue was changed concurrently; retry."),
+            EnqueueOutcome.RepositoryNotFound => ApiProblems.NotFound(feedback.Message),
+            EnqueueOutcome.Ineligible => ApiProblems.Conflict(feedback.Message),
+            EnqueueOutcome.GitHubUnavailable => ApiProblems.GitHubEligibilityFailed(feedback.Message),
+            _ => ApiProblems.Conflict(feedback.Message),
         };
     }
 

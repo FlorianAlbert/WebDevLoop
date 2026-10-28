@@ -1,4 +1,5 @@
 @using WebDevLoop.Core.Orchestration.SpecQueue
+@using WebDevLoop.Core.Management
 @using WebDevLoop.Infrastructure.Prerequisites
 @inherits ScopedComponentBase
 @inject DiagnosticReadiness Readiness
@@ -126,13 +127,16 @@
         return int.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out issueNumber) && issueNumber > 0;
     }
 
-    private static Feedback Describe(int issueNumber, EnqueueResult result) => result.Outcome switch
+    private static Feedback Describe(int issueNumber, EnqueueResult result)
     {
-        EnqueueOutcome.Queued => new("success", $"Queued #{issueNumber}.", result.SpecRunId?.Value),
-        EnqueueOutcome.AlreadyQueued => new("info", $"#{issueNumber} is already queued.", result.SpecRunId?.Value),
-        EnqueueOutcome.RepositoryNotFound => new("danger", "This repository no longer exists."),
-        EnqueueOutcome.Ineligible => new("warning", result.Reason!),
-        EnqueueOutcome.GitHubUnavailable => new("danger", result.Reason!),
-        _ => new("warning", $"The queue changed at the same time; please try again."),
-    };
+        string severity = result.Outcome switch
+        {
+            EnqueueOutcome.Queued => "success",
+            EnqueueOutcome.AlreadyQueued => "info",
+            EnqueueOutcome.RepositoryNotFound or EnqueueOutcome.GitHubUnavailable or EnqueueOutcome.Unavailable or EnqueueOutcome.Failed => "danger",
+            _ => "warning",
+        };
+        var feedback = new SpecSelectionResult(issueNumber, result);
+        return new Feedback(severity, feedback.Message, feedback.SpecRunId?.Value);
+    }
 }

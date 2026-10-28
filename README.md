@@ -200,6 +200,8 @@ The API lives under `/api`; the OpenAPI document is served at `/openapi/v1.json`
 | `GET/POST /api/repos/{repoId}/opt-in` | Check the fixed `webdevloop` repository label; create it only with explicit `{"approveLabelCreation": true}` consent |
 | `GET/PUT /api/settings/global`, `GET/PUT /api/repos/{repoId}/settings`, `GET /api/settings/effective/{repoId}` | Global settings, per-repository overrides (empty = inherit), effective values |
 | `POST /api/repos/{repoId}/spec-runs` with `{"specIssueNumber": 42}`, `GET /api/repos/{repoId}/spec-runs` | Queue an eligible parent spec issue (WebDevLoop Opt-in required); list the repository queue |
+| `GET /api/repos/{repoId}/spec-candidates?search=title&onlyUnblocked=false&page=1` | Discover eligible parent specs; follow `nextPage` with the same search and filter until null |
+| `POST /api/repos/{repoId}/spec-runs/batch` with `{"specIssueNumbers": [42, 17]}` | Queue the selection in order; returns an ordered result for every spec, including failures and existing runs |
 | `GET /api/spec-runs/{id}` and `…/tickets`, `…/events`, `…/stack`, `…/merge-status` | Run state, ticket DAG, audit events, PR stack layers, merge status |
 | `GET /api/ticket-runs/{id}` and `…/steps`, `GET /api/steps/{id}` and `…/logs` | Ticket and agent step details, persisted agent logs |
 | `POST /api/spec-runs/{id}/retry`, `…/abort`; `POST /api/ticket-runs/{id}/retry`, `…/abort` | Run controls (see below) |
@@ -236,7 +238,7 @@ The parent spec must be **open** and labeled **`webdevloop`**, with at least one
 labeled `webdevloop`**. Opting in a parent does not opt in its children, and triage labels such as `ready-for-agent`
 are not runtime permission. Eligible tickets may all be blocked; that does not prevent queueing.
 
-The API and the typed issue-number or URL form share the same enqueue path, which fetches current GitHub state and
+The API, picker and typed issue-number or URL form share the same enqueue path, which fetches current GitHub state and
 labels at submission. An ineligible spec is rejected before creating a run (`409` with a reason). A failed GitHub
 lookup, including authorization or transient failures, fails closed (`503` with access/retry guidance); stale data
 never authorizes queueing. New runs return `202`; duplicate unfinished runs return `200 AlreadyQueued` and the existing
@@ -261,6 +263,10 @@ Finding creation, labeling, or linking failures are reported rather than treated
 creates an issue but drops its label, check the repository label and the app's issue-label permissions, then opt the
 issue in explicitly. Recovery uses its hidden finding fingerprint to reuse the existing issue without duplicating
 it or changing its labels.
+
+See the [Queue user guide](docfx/user-guide/queue.md#find-and-select-parent-specs) for the searchable picker,
+ordered multi-selection and typed fallback, and the [Web API guide](docfx/developer-guide/web-api.md)
+for discovery pagination, batch routes and per-spec outcomes.
 
 ## Copilot runtime and bundled skills
 

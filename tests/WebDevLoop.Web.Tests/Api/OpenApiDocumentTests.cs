@@ -20,6 +20,8 @@ public sealed class OpenApiDocumentTests
         Assert.Contains("/api/repos", paths);
         Assert.Contains("/api/repos/{repoId}/opt-in", paths);
         Assert.Contains("/api/repos/{repoId}/spec-runs", paths);
+        Assert.Contains("/api/repos/{repoId}/spec-candidates", paths);
+        Assert.Contains("/api/repos/{repoId}/spec-runs/batch", paths);
         Assert.Contains("/api/steps/{id}/logs", paths);
         Assert.Contains("/api/spec-runs/{id}/merge-status", paths);
         Assert.Contains("/api/spec-runs/{id}/retry", paths);

@@ -50,6 +50,10 @@ flowchart LR
     end
     subgraph Queue
         QP["/queue QueuePage"] --> ESF["EnqueueSpecForm"]
+        QP --> SP["SpecPicker<br/>search, ordered selection, results"]
+        SP --> SS["SpecSelection<br/>pure list helpers"]
+        SP --> SCQ["ISpecCandidateQueries"]
+        SP --> SSE["ISpecSelectionEnqueuer"]
         QP --> SRT["SpecRunTable"]
         RL --> SRT
         SRT --> SSB["SpecStatusBadge"]
@@ -79,7 +83,7 @@ Other pages (not drawn): `/repositories` (`RepositoriesPage` with registration, 
 | Area | Folder | Routes | Main components |
 | --- | --- | --- | --- |
 | Dashboard | `Dashboard/` | `/` (`Pages/Home.razor` hosts `DashboardOverview`) | `DashboardOverview` (alerts, lane counts, one `RepositoryLane` per repository), `DiagnosticBanner`, `RepositoryOverview` (record). |
-| Queue | `Queue/` | `/queue` | `QueuePage`, `EnqueueSpecForm`, `SpecRunTable`, `SpecStatusBadge`, `SpecRunLane`/`SpecRunLanes` (status to lane mapping), `SpecRunDisplay`. |
+| Queue | `Queue/` | `/queue` | `QueuePage`, `SpecPicker`, `SpecSelection` (pure selection/order helpers), `EnqueueSpecForm` (typed fallback), `SpecRunTable`, `SpecStatusBadge`, `SpecRunLane`/`SpecRunLanes` (status to lane mapping), `SpecRunDisplay`. |
 | Repositories | `Repositories/` | `/repositories` | `RepositoriesPage`, `RepositoryRegistrationForm`, `RepositoryEditForm`, `RepositoryRemoveConfirm`, `RepositorySwitcher`, `RepositoryContext`. |
 | Runs | `Runs/` | `/runs/{Id}` | `SpecRunDetail`, `SpecRunControls`, `RunControlPanel`, `RunControlsArea`, `StackLayersPanel`, `MergeTrackingPanel`, `SpecBlockersPanel`, `RunEventsTimeline`, `StatusBadge`, `ShortHash`, `LiveDetailPageBase`, `RunEventSubscription`. |
 | Tickets | `Tickets/` | `/tickets/{Id}` | `TicketRunDetail`, `TicketDagView` (+ `TicketDagLayout`), `TicketRunControls`, `TicketFindingsPanel`, `SagaCheckpointTimeline`. |
@@ -88,6 +92,14 @@ Other pages (not drawn): `/repositories` (`RepositoriesPage` with registration, 
 | GitHub | `GitHub/` | `/github` | `GitHubPage` (who is signed in, installations, unreachable repositories), `GitHubSignInBanner`, `SignInNavigation` (full-page redirect to the sign-in endpoint). |
 | Health | `Health/` | `/health` | `HealthPage` (prerequisite checks, **Re-check** button calls `DiagnosticReadiness.RefreshAsync`). |
 | Shared | `Shared/` | none | See [Shared components](#shared-components). |
+
+`SpecPicker` keeps loading and submission state in its `@code` block. `SpecSelection` contains the pure toggle,
+move, remove, handled-result pruning and candidate-page de-duplication rules, tested without bUnit. Discovery uses
+`ISpecCandidateQueries` in a fresh scope; search/refresh cancel obsolete loads, and stale responses cannot overwrite
+a newer search. Selection survives those reads. Submission uses Core `ISpecSelectionEnqueuer`, not HTTP contracts,
+and shows every result. The host checks readiness and isolates the unit of work for each enqueue attempt.
+`AddWebDevLoopSpecSelection` wires these services for both API and UI. See the [Queue guide](../user-guide/queue.md)
+for the controls and the [Web API guide](web-api.md) for batch result semantics.
 
 ### Routes
 

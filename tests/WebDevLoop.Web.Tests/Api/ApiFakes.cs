@@ -103,12 +103,14 @@ internal sealed class FakeSpecEnqueuer : ISpecEnqueuer
 {
     public EnqueueResult Result { get; set; } = new(EnqueueOutcome.Queued, new RunId("run-42"));
 
+    public Func<int, CancellationToken, Task<EnqueueResult>>? OnEnqueue { get; set; }
+
     public List<(int RepositoryId, int IssueNumber)> Calls { get; } = [];
 
     public Task<EnqueueResult> EnqueueAsync(int repositoryId, int specIssueNumber, CancellationToken cancellationToken)
     {
         Calls.Add((repositoryId, specIssueNumber));
-        return Task.FromResult(Result);
+        return OnEnqueue?.Invoke(specIssueNumber, cancellationToken) ?? Task.FromResult(Result);
     }
 }
 

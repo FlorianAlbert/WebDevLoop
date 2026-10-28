@@ -43,6 +43,15 @@ internal sealed partial class GitHubRestClient(HttpClient http, ITokenProvider t
         return items;
     }
 
+    public async Task<(IReadOnlyList<JsonElement> Items, bool HasMore)> GetPageAsync(
+        GitHubRepoRef repo, string path, CancellationToken cancellationToken)
+    {
+        (JsonElement? content, Uri? next) = await SendForPageAsync(HttpMethod.Get, repo, new Uri(_baseAddress, path), null, cancellationToken);
+        return content is { ValueKind: JsonValueKind.Array } array
+            ? (array.EnumerateArray().ToArray(), next is not null)
+            : throw new GitHubApiException(GitHubApiErrorKind.Invalid, $"GitHub returned no issue list for GET {path}.");
+    }
+
     public async Task<JsonElement?> SendAsync(HttpMethod method, GitHubRepoRef repo, string path, object? body, CancellationToken cancellationToken) =>
         await SendAsync(method, repo, new Uri(_baseAddress, path), body, cancellationToken);
 

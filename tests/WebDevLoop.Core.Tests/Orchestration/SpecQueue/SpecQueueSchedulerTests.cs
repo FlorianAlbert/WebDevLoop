@@ -27,6 +27,35 @@ public sealed class SpecQueueSchedulerTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task selected_outstanding_work_prevents_terminal_completion_when_resuming(bool parentOptedOut)
+    {
+        IssueSnapshot parent = _fixture.SeedSpec(1);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        await _fixture.PrepareAsync(run);
+        TicketRun selected = Assert.Single(await ((ITicketRunRepository)_fixture.Store).ListBySpecRunAsync(run.Id, TestContext.Current.CancellationToken));
+        selected.TransitionTo(TicketRunStatus.Ready, _fixture.Clock.UtcNow);
+        selected.TransitionTo(TicketRunStatus.Implementing, _fixture.Clock.UtcNow);
+        run.TransitionTo(SpecRunStatus.WaitingForTickets, _fixture.Clock.UtcNow);
+        IssueSnapshot child = await _fixture.Issues.GetIssueAsync(selected.Issue, TestContext.Current.CancellationToken);
+        _fixture.Issues.Seed(child with { Labels = [] });
+        if (parentOptedOut)
+        {
+            _fixture.Issues.Seed(parent with { Labels = [] });
+        }
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+
+        Assert.Equal([run.Id], result.Activated);
+        Assert.Equal(SpecRunStatus.Running, run.Status);
+        Assert.Null(run.CompletedAt);
+        Assert.Equal(TicketRunStatus.Implementing, selected.Status);
+        Assert.Equal(0, run.ReviewCycle);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]

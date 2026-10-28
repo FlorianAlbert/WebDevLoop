@@ -14,7 +14,6 @@ erDiagram
     SpecRun ||--o{ StepRun : "has"
     TicketRun ||--o{ StepRun : "has"
     TicketRun ||--o{ TicketDependency : "blocked by"
-    SpecRun ||--o{ SpecDependency : "blocked by"
     TicketRun ||--o{ IntegrationSaga : "integrated by"
     SpecRun ||--o{ PullStackLayer : "publishes"
     TicketRun ||--o| PullStackLayer : "is one layer"
@@ -33,13 +32,12 @@ Types marked **CAS** derive from <xref:WebDevLoop.Core.Domain.VersionedEntity>: 
 | Type | CAS | Purpose | Key members |
 | --- | --- | --- | --- |
 | <xref:WebDevLoop.Core.Domain.RepositoryRecord> | yes | A registered GitHub repository and its local clone | `Owner`, `Name`, `DefaultBaseBranch`, `CloneUrl`, `LocalPath`, `IsEnabled` |
-| <xref:WebDevLoop.Core.Domain.SpecRun> | yes | One run for one spec (parent) issue; also the queue entry | `Status`, `QueuePosition`, `IntegrationBranch`, `IntegrationBaseSha`, `IntegrationTipSha`, `MaxActiveSpecsSlot`, `DependencyModeUsed`, `ReviewCycle`, `TestCycle`, `Attention`, `NeedsAttentionFrom` |
+| <xref:WebDevLoop.Core.Domain.SpecRun> | yes | One run for one spec (parent) issue; also the queue entry | `Status`, `QueuePosition`, `IntegrationBranch`, `IntegrationBaseSha`, `IntegrationTipSha`, `MaxActiveSpecsSlot`, `ReviewCycle`, `TestCycle`, `Attention`, `NeedsAttentionFrom` |
 | <xref:WebDevLoop.Core.Domain.TicketRun> | yes | One run for one ticket (sub-issue) of a spec run | `Status`, `Attempt`, `ReviewIteration`, `BranchName`, `WorktreePath`, `LastImplementedSha`, `IntegratedCommitSha`, `PullRequestNumber`, `StackPosition`, `Attention` |
 | <xref:WebDevLoop.Core.Domain.StepRun> | yes | One agent session (or app step) of a spec or ticket | `Kind`, `AgentRole`, `Status`, `Attempt`, `CopilotSessionId`, `Model`, `TimeoutAt`, `StructuredResultJson`, `Attention` |
 | <xref:WebDevLoop.Core.Domain.IntegrationSaga> | yes | Checkpointed squash, push, PR and stack link of one ticket | `Checkpoint`, `ExpectedPriorIntegrationSha`, `SquashCommitSha`, `StackBranchName`, `ExternalIdempotencyKey`, `ConsecutiveFaults` |
 | <xref:WebDevLoop.Core.Domain.PullStackLayer> | no | One draft PR of the spec's stack | `Position` (from 1), `BranchName`, `CommitSha`, `PullRequestNumber`, `BaseBranch`, `IsDraft`, `VerifiedDiffSha` |
 | <xref:WebDevLoop.Core.Domain.TicketDependency> | no | Edge in the ticket DAG: *blocked* waits for *blocking* | `BlockedTicketRunId`, `BlockingTicketRunId`, `Source` |
-| <xref:WebDevLoop.Core.Domain.SpecDependency> | no | Spec blocked by another spec run or by an external issue | `BlockedSpecRunId`, `BlockingSpecRunId` or `ExternalBlockingIssue`, `ModeAtStart` |
 | <xref:WebDevLoop.Core.Domain.SettingsProfile> | yes | Global or per-repository settings; every value nullable | see [settings](#settings-profile) |
 | <xref:WebDevLoop.Core.Domain.TestLease> | yes | Reserved port and process of a tester run | `Port`, `WorkspacePath`, `ProcessId`, `ExpiresAt`, `ReleasedAt` |
 | <xref:WebDevLoop.Core.Domain.FindingIssuance> | no | Record that a finding became (or will become) a ticket issue | `Axis`, `Fingerprint`, `IssueNumber`, `Status` (`Planned`, `Created`) |
@@ -67,7 +65,6 @@ The state machines are in [run lifecycle](run-lifecycle.md). The enums:
 | <xref:WebDevLoop.Core.Domain.StepKind> | `Explore`, `Implement`, `Review`, `Fix`, `ResolveConflict`, `ParentReview`, `Test`, `Troubleshoot` |
 | <xref:WebDevLoop.Core.Domain.AgentRole> | `Explorer`, `Implementer`, `ReviewerCodingStandards`, `ReviewerSpecification`, `ConflictResolver`, `Tester`, `Troubleshooter` |
 | <xref:WebDevLoop.Core.Domain.IntegrationSagaCheckpoint> | `Started`, `SquashCommitCreated`, `IntegrationRefUpdated`, `IntegrationPushed`, `StackBranchPushed`, `PrCreated`, `StackLinked`, `DiffVerified`, `IssueTransitioned`, `Completed` |
-| <xref:WebDevLoop.Core.Domain.SpecDependencyMode> | `WaitForMerge`, `StackOnTop` |
 | <xref:WebDevLoop.Core.Domain.FindingAxis> | `CodingStandards`, `Specification`, `Testing` |
 
 Rules live next to the enums: <xref:WebDevLoop.Core.Domain.SpecRunStatusRules>, <xref:WebDevLoop.Core.Domain.TicketRunStatusRules>, <xref:WebDevLoop.Core.Domain.StepStatusRules>, <xref:WebDevLoop.Core.Domain.StepKindRules>. Each has `CanTransitionTo`, `IsTerminal`, and helpers such as `IsActive`, `IsLocallyComplete`, `OccupiesImplementerSlot`.
@@ -146,7 +143,6 @@ loss rather than spending a new cycle; successful parent-review axis results rem
 | `WorkspaceRootDirectory`, `CopilotBaseDirectory` | Global-only, read at startup (a change needs a restart). |
 | `BaseBranch` | Trunk the run starts from. |
 | `MaxActiveSpecsPerRepo` | Active-spec slots per repository. |
-| `SpecDependencyMode` | `WaitForMerge` or `StackOnTop`. |
 | `MaxConcurrentImplementersGlobal`, `MaxConcurrentImplementersPerRepo` | Implementer capacity. |
 | `MaxReviewIterations`, `MaxRetries`, `ParentReviewCycleLimit`, `TesterCycleLimit` | Loop bounds. |
 | `TroubleshooterEnabled`, `TroubleshooterMaxAttempts` | Troubleshooter switch and bound. |
@@ -167,7 +163,7 @@ Defaults are in <xref:WebDevLoop.Core.Settings.DefaultSettings>. Prompt template
 | An app-owned step (no agent role) is unique per spec and kind while active | Filtered unique index `UX_StepRuns_ActiveAppOwnedKindPerRun`. Today every step has an agent role, so this is a guard for future app-owned steps. Review and tester steps get deterministic ids instead, so a duplicate runner collides on the primary key. |
 | A saga never moves backwards | `AdvanceTo` throws on a lower checkpoint; the same checkpoint is a no-op. `RetargetTo` only works before `IntegrationRefUpdated`. |
 | At most one incomplete saga per ticket | Filtered unique index on `IntegrationSagas`. |
-| The ticket DAG has no cycle and no self edge | <xref:WebDevLoop.Core.Domain.DependencyGraph> (`EnsureCanAdd`, `EnsureAcyclic`), `TicketDependency.Create`, `SpecDependency` factories throw <xref:WebDevLoop.Core.Domain.DependencyCycleException>. |
+| The ticket DAG has no cycle and no self edge | <xref:WebDevLoop.Core.Domain.DependencyGraph> (`EnsureCanAdd`, `EnsureAcyclic`), `TicketDependency.Create` throw <xref:WebDevLoop.Core.Domain.DependencyCycleException>. |
 | Layer positions are unique per spec and start at 1 | `PullStackLayer.Create`; unique index (spec, position). New layers are draft. |
 | One finding becomes one ticket | Unique index on (spec, fingerprint) of `FindingIssuances`; `RecordCreated` is idempotent. |
 | One active test lease per spec and per port | Filtered unique indexes on `TestLeases`. |

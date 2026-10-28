@@ -2,29 +2,37 @@
 @using WebDevLoop.Web.Components.Layout
 @using WebDevLoop.Web.Components.Queue
 
-<SectionCard Title="Blocked by specs" data-testid="spec-blockers">
-    @if (Blockers.Count == 0)
+<SectionCard Title="Native parent blockers" data-testid="spec-blockers">
+    @if (Blockers.UnavailableReason is { } error)
     {
-        <p class="quiet-note">Not blocked by any spec.</p>
+        <p class="text-warning" role="status">@error</p>
+    }
+    else if (!Blockers.Evaluated)
+    {
+        <p class="quiet-note">Current blockers are not checked for finished runs.</p>
+    }
+    else if (Blockers.Blockers.Count == 0)
+    {
+        <p class="quiet-note">No native parent blockers.</p>
     }
     else
     {
         <ul class="list-unstyled mb-0">
-            @foreach (SpecDependencyView blocker in Blockers)
+            @foreach (ParentBlockerView blocker in Blockers.Blockers)
             {
                 string key = blocker.BlockingSpecRunId ?? $"issue-{blocker.IssueNumber}";
                 <li class="@(blocker.IsSatisfied ? "text-success" : "")" data-testid="spec-blocker-@key">
                     @if (blocker.BlockingSpecRunId is { } runId)
                     {
-                        <a href="@UiRoutes.Run(runId)" data-testid="spec-blocker-link-@key">#@blocker.IssueNumber @blocker.Title</a>
+                        <a href="@UiRoutes.Run(runId)" data-testid="spec-blocker-link-@key">@blocker.Issue @blocker.Title</a>
                         <span>(@SpecRunDisplay.Label(blocker.Status!.Value))</span>
                     }
                     else
                     {
-                        <span>#@blocker.IssueNumber</span>
+                        <span>@blocker.Issue @blocker.Title</span>
                         <span class="text-body-secondary">(not tracked by this app)</span>
                     }
-                    <span class="small">— @(blocker.IsSatisfied ? "merged" : "waiting")</span>
+                    <span class="small">— @(blocker.IsSatisfied ? "closed" : "open; waiting")</span>
                 </li>
             }
         </ul>
@@ -32,5 +40,5 @@
 </SectionCard>
 
 @code {
-    [Parameter, EditorRequired] public IReadOnlyList<SpecDependencyView> Blockers { get; set; } = [];
+    [Parameter, EditorRequired] public ParentBlockersView Blockers { get; set; } = ParentBlockersView.NotEvaluated;
 }

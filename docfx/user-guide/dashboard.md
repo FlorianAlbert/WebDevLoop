@@ -37,7 +37,6 @@ Below the counts there is one box per repository. It shows:
 
 - the repository name, with a **Current** label for the repository selected in the sidebar,
 - **Slots**: running specs out of the allowed number (default `1 / 1`),
-- **Mode**: the spec dependency mode, for example "Wait for merge" (hover for a description),
 - **Open queue**, which selects the repository and opens the [Queue](queue.md),
 - a table of open specs with status, a short note, and a link to the run. Click **Details** to open [the run](runs.md),
 - a footer with the number of completed specs.

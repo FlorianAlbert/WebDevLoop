@@ -14,7 +14,7 @@ internal static class ApiData
         new(id, "acme", name, "main", $"https://github.com/acme/{name}.git", $"/work/acme/{name}", enabled, Now, Now);
 
     public static SpecRunView SpecRun(string id = "run-1", int repositoryId = 1, SpecRunStatus status = SpecRunStatus.Queued, int position = 1) =>
-        new(id, repositoryId, 10, "Spec title", status, position, null, $"webdevloop/{id}/integration", null, null, null, 0, 0, Now, null, null, null, null);
+        new(id, repositoryId, 10, "Spec title", status, position, null, $"webdevloop/{id}/integration", null, null, 0, 0, Now, null, null, null, null);
 
     public static TicketRunView TicketRun(string id = "t-1", string specRunId = "run-1", params string[] blockedBy) =>
         new(id, specRunId, 11, "Ticket title", TicketRunStatus.Ready, 0, 0, $"webdevloop/{specRunId}/{id}", null, null, null, null, null, blockedBy, Now, Now, null);
@@ -112,7 +112,7 @@ internal sealed class FakeSpecEnqueuer : ISpecEnqueuer
     }
 }
 
-internal sealed class FakeRunQueries : IRunQueries
+internal sealed class FakeRunQueries : IRunQueries, IParentBlockerQueries
 {
     public List<SpecRunView> SpecRuns { get; } = [];
 
@@ -124,15 +124,17 @@ internal sealed class FakeRunQueries : IRunQueries
 
     public List<StackLayerView> Stack { get; } = [];
 
-    public Dictionary<string, List<SpecDependencyView>> Dependencies { get; } = [];
+    public Dictionary<string, List<ParentBlockerView>> Blockers { get; } = [];
 
-    public Task<IReadOnlyList<SpecDependencyView>> ListSpecDependenciesAsync(RunId specRunId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<SpecDependencyView>>(Dependencies.GetValueOrDefault(specRunId.Value) ?? []);
+    public Dictionary<string, string> BlockerErrors { get; } = [];
 
-    public Task<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>> ListSpecDependenciesForRepositoryAsync(int repositoryId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>>(
-            Dependencies.Where(entry => SpecRuns.Any(run => run.Id == entry.Key && run.RepositoryId == repositoryId))
-                .ToDictionary(entry => entry.Key, entry => (IReadOnlyList<SpecDependencyView>)entry.Value));
+    public Task<ParentBlockersView> GetBlockersAsync(RunId specRunId, CancellationToken cancellationToken) =>
+        Task.FromResult(new ParentBlockersView(Blockers.GetValueOrDefault(specRunId.Value) ?? [], BlockerErrors.GetValueOrDefault(specRunId.Value)));
+
+    public Task<IReadOnlyDictionary<string, ParentBlockersView>> ListBlockersAsync(int repositoryId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, ParentBlockersView>>(
+            SpecRuns.Where(spec => spec.RepositoryId == repositoryId)
+                .ToDictionary(spec => spec.Id, spec => new ParentBlockersView(Blockers.GetValueOrDefault(spec.Id) ?? [], BlockerErrors.GetValueOrDefault(spec.Id))));
 
     public Task<IntegrationSagaView?> GetLatestSagaAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) =>
         Task.FromResult<IntegrationSagaView?>(null);

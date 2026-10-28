@@ -90,7 +90,7 @@ public sealed class DashboardOverviewTests : UiTestContext
         Assert.Equal("2 / 2", widgets.QuerySelector("[data-testid=slots]")!.TextContent.Trim());
         Assert.Equal(["r-1", "r-2", "r-3"], widgets.QuerySelectorAll("[data-run-id]").Select(row => row.GetAttribute("data-run-id")!).ToArray());
         Assert.Equal("1 / 2", cut.Find("[data-repo-lane='2'] [data-testid=slots]").TextContent.Trim());
-        Assert.Equal("Mode: Wait for merge", widgets.QuerySelector("[data-testid=dependency-mode]")!.TextContent.Trim());
+        Assert.Null(widgets.QuerySelector("[data-testid=dependency-mode]"));
     }
 
     [Fact]

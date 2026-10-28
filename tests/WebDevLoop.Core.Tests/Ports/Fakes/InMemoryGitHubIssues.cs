@@ -31,7 +31,7 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
     public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken) =>
         _issues.TryGetValue(Key(issue), out IssueSnapshot? snapshot)
             ? Task.FromResult(snapshot)
-            : throw new GitHubIssuesException($"Issue {issue} is unavailable.");
+            : throw new GitHubIssuesException($"GitHub issue {issue} is unavailable.");
 
     public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken)
     {
@@ -110,6 +110,8 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
 
     /// <summary>A human replaces the native "blocked by" relations of the issue on GitHub.</summary>
     public void SetBlockedBy(IssueRef issue, params IssueRef[] blockers) => _issues[Key(issue)] = _issues[Key(issue)] with { BlockedBy = blockers };
+
+    public void RemoveIssue(IssueRef issue) => _issues.Remove(Key(issue));
 
     public Task CloseAsync(IssueRef issue, IssueCloseReason reason, CancellationToken cancellationToken)
     {

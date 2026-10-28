@@ -39,7 +39,6 @@ Use the links on the left (**General**, **Concurrency & retries**, **Troubleshoo
 | Setting | Meaning | Default |
 | --- | --- | --- |
 | Base (trunk) branch | The branch every run starts from. The final pull requests target it. | `main` |
-| Spec dependency mode | What happens when one spec is blocked by another. **Wait for merge** starts the blocked spec after the blocker's stack is merged. **Stack on top** starts it right away on top of the blocker's branch. | Wait for merge |
 | Workspace root directory (global only) | The folder with the clones and worktrees. | `<data folder>/workspaces` |
 | Copilot base directory (global only) | The Copilot home used by the agents. | `<data folder>/copilot` |
 
@@ -51,7 +50,7 @@ The workspace root and the Copilot base directory are read once at startup. A ch
 
 | Setting | Meaning | Default |
 | --- | --- | --- |
-| Max active specs per repository | How many specs of a repository run at the same time. More specs wait in the [queue](queue.md#slots-and-mode). | 1 |
+| Max active specs per repository | How many specs of a repository run at the same time. More specs wait in the [queue](queue.md#slots-and-parent-blockers). | 1 |
 | Max concurrent implementers (all repositories) (global only) | The total number of implementer agents at once. | 4 |
 | Max concurrent implementers per repository | Implementer agents at once in one repository. | 2 |
 | Max review iterations per ticket | How many review and fix rounds a ticket gets before it needs your decision. | 5 |

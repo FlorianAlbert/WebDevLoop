@@ -15,7 +15,7 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261010150022_TroubleshooterSettings";
+    public override string LastMigrationId => "20261028064701_RemoveParentDependencySnapshots";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -356,9 +356,6 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("INTEGER")
                     .HasComputedColumnSql("COALESCE(\"RepositoryId\", 0)", true);
 
-                b.Property<string>("SpecDependencyMode")
-                    .HasColumnType("TEXT");
-
                 b.Property<int?>("TesterCycleLimit")
                     .HasColumnType("INTEGER");
 
@@ -403,59 +400,6 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                 b.ToTable("SettingsProfiles");
             });
 
-        modelBuilder.Entity("WebDevLoop.Core.Domain.SpecDependency", b =>
-            {
-                b.Property<long>("Id")
-                    .ValueGeneratedOnAdd()
-                    .HasColumnType("INTEGER");
-
-                b.Property<string>("BlockedSpecRunId")
-                    .IsRequired()
-                    .HasColumnType("TEXT");
-
-                b.Property<string>("BlockingSpecRunId")
-                    .HasColumnType("TEXT");
-
-                b.Property<string>("ModeAtStart")
-                    .IsRequired()
-                    .HasColumnType("TEXT");
-
-                b.Property<string>("Source")
-                    .IsRequired()
-                    .HasColumnType("TEXT");
-
-                b.ComplexProperty(typeof(Dictionary<string, object>), "ExternalBlockingIssue", "WebDevLoop.Core.Domain.SpecDependency.ExternalBlockingIssue#IssueRef", b1 =>
-                    {
-                        b1.Property<long?>("DatabaseId")
-                            .HasColumnType("INTEGER");
-
-                        b1.Property<string>("NodeId")
-                            .HasColumnType("TEXT");
-
-                        b1.Property<int>("Number")
-                            .HasColumnType("INTEGER");
-
-                        b1.Property<string>("Owner")
-                            .IsRequired()
-                            .HasColumnType("TEXT");
-
-                        b1.Property<string>("Repo")
-                            .IsRequired()
-                            .HasColumnType("TEXT");
-                    });
-
-                b.HasKey("Id");
-
-                b.HasIndex("BlockingSpecRunId");
-
-                b.HasIndex("BlockedSpecRunId", "BlockingSpecRunId")
-                    .IsUnique()
-                    .HasDatabaseName("UX_SpecDependencies_Blocked_Blocking")
-                    .HasFilter("\"BlockingSpecRunId\" IS NOT NULL");
-
-                b.ToTable("SpecDependencies");
-            });
-
         modelBuilder.Entity("WebDevLoop.Core.Domain.SpecRun", b =>
             {
                 b.Property<string>("Id")
@@ -476,9 +420,6 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<long>("CreatedAt")
                     .HasColumnType("INTEGER");
-
-                b.Property<string>("DependencyModeUsed")
-                    .HasColumnType("TEXT");
 
                 b.Property<string>("FailureReason")
                     .HasColumnType("TEXT");
@@ -926,20 +867,6 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                     .WithMany()
                     .HasForeignKey("RepositoryId")
                     .OnDelete(DeleteBehavior.Cascade);
-            });
-
-        modelBuilder.Entity("WebDevLoop.Core.Domain.SpecDependency", b =>
-            {
-                b.HasOne("WebDevLoop.Core.Domain.SpecRun", null)
-                    .WithMany()
-                    .HasForeignKey("BlockedSpecRunId")
-                    .OnDelete(DeleteBehavior.Restrict)
-                    .IsRequired();
-
-                b.HasOne("WebDevLoop.Core.Domain.SpecRun", null)
-                    .WithMany()
-                    .HasForeignKey("BlockingSpecRunId")
-                    .OnDelete(DeleteBehavior.Restrict);
             });
 
         modelBuilder.Entity("WebDevLoop.Core.Domain.SpecRun", b =>

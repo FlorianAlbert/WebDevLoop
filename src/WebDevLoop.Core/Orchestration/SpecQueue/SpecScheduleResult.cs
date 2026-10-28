@@ -10,8 +10,16 @@ namespace WebDevLoop.Core.Orchestration.SpecQueue;
 /// </param>
 public sealed record SpecScheduleResult(IReadOnlyList<RunId> Activated, IReadOnlyList<RunId> Waiting, bool ConcurrencyConflict)
 {
+    /// <summary>Individual decisions deferred because current GitHub state could not be verified.</summary>
+    public IReadOnlyList<SpecScheduleFault> Faults { get; init; } = [];
+
     public static SpecScheduleResult Nothing { get; } = new([], [], false);
 
     /// <summary>A label lookup failed; no work was activated. The caller reports the diagnostic and retries normally.</summary>
     public GitHubIssuesException? LookupError { get; init; }
+}
+
+public sealed record SpecScheduleFault(RunId SpecRunId, string Error)
+{
+    public string Message => $"Spec run '{SpecRunId}': {Error}";
 }

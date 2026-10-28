@@ -27,8 +27,6 @@ public enum ReconciliationActionKind
     IntegrationLaunched,
     /// <summary>A pull request on the ticket's run-scoped stack branch does not carry this run's identifiers; it was not adopted.</summary>
     ForeignPullRequestRejected,
-    /// <summary>The bottom PR of a stack-on-top spec was retargeted to trunk because the blocking stack below it merged.</summary>
-    PullRequestBaseRetargeted,
 }
 
 /// <param name="Detail">Human-readable specifics (outcome, ids, refs).</param>

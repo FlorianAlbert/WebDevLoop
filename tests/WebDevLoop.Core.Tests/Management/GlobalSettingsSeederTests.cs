@@ -30,7 +30,6 @@ public sealed class GlobalSettingsSeederTests
         Assert.Equal(_defaults.CopilotBaseDirectory, global.CopilotBaseDirectory);
         Assert.Equal(_defaults.BaseBranch, global.BaseBranch);
         Assert.Equal(_defaults.MaxActiveSpecsPerRepo, global.MaxActiveSpecsPerRepo);
-        Assert.Equal(_defaults.SpecDependencyMode, global.SpecDependencyMode);
         Assert.Equal(_defaults.MaxConcurrentImplementersGlobal, global.MaxConcurrentImplementersGlobal);
         Assert.Equal(_defaults.MaxConcurrentImplementersPerRepo, global.MaxConcurrentImplementersPerRepo);
         Assert.Equal(_defaults.MaxReviewIterations, global.MaxReviewIterations);

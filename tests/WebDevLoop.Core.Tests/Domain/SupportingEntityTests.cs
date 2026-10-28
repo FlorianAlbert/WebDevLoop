@@ -11,34 +11,6 @@ public sealed class SupportingEntityTests
     private static readonly CommitSha ShaB = new(new string('b', 40));
 
     [Fact]
-    public void spec_dependency_on_another_run_keeps_mode_at_start()
-    {
-        var dependency = SpecDependency.OnSpecRun(new RunId("run2"), Run, SpecDependencyMode.StackOnTop);
-
-        Assert.Equal(Run, dependency.BlockingSpecRunId);
-        Assert.Null(dependency.ExternalBlockingIssue);
-        Assert.Equal(SpecDependencyMode.StackOnTop, dependency.ModeAtStart);
-        Assert.Equal(DependencySource.GitHub, dependency.Source);
-    }
-
-    [Fact]
-    public void spec_dependency_on_itself_is_rejected()
-    {
-        Assert.Throws<DependencyCycleException>(() => SpecDependency.OnSpecRun(Run, Run, SpecDependencyMode.WaitForMerge));
-    }
-
-    [Fact]
-    public void spec_dependency_on_external_issue_has_no_blocking_run()
-    {
-        var issue = new IssueRef("o", "r", 3);
-
-        var dependency = SpecDependency.OnExternalIssue(Run, issue, SpecDependencyMode.WaitForMerge);
-
-        Assert.Null(dependency.BlockingSpecRunId);
-        Assert.Equal(issue, dependency.ExternalBlockingIssue);
-    }
-
-    [Fact]
     public void ticket_dependency_rejects_self_links_and_exposes_an_edge()
     {
         Assert.Throws<DependencyCycleException>(() => TicketDependency.Create(Run, Ticket, Ticket, DependencySource.GitHub));
@@ -267,7 +239,6 @@ public sealed class SupportingEntityTests
 
         Assert.False(repoProfile.IsGlobal);
         Assert.Equal(7, repoProfile.RepositoryId);
-        Assert.Null(repoProfile.SpecDependencyMode);
     }
 
     [Fact]

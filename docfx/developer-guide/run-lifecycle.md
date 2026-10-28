@@ -28,9 +28,9 @@ Finding tickets created by parent review or the tester are normal tickets. They 
 ```mermaid
 stateDiagram-v2
     [*] --> Queued
-    Queued --> WaitingForDependency: blocked by an unmerged spec
+    Queued --> WaitingForDependency: at least one current native parent blocker open
     Queued --> Preparing: free slot, startable
-    WaitingForDependency --> Preparing: blocker merged, or stack-on-top ready
+    WaitingForDependency --> Preparing: every current native parent blocker closed
     Preparing --> Running: branch created, tickets snapshotted
     Running --> ParentReviewing: every ticket done
     ParentReviewing --> Running: findings become tickets
@@ -56,7 +56,7 @@ stateDiagram-v2
 | Status | Active slot | Meaning |
 | --- | --- | --- |
 | `Queued` | no | Waiting in the repository queue |
-| `WaitingForDependency` | no | A spec dependency is not merged and the mode does not allow starting |
+| `WaitingForDependency` | no | At least one current native GitHub blocker of the parent issue is open. Unverifiable state defers starting; once all blockers are closed or removed, the spec can start from current trunk. |
 | `Preparing` | yes | Clone/fetch, snapshot, integration branch, optional exploration |
 | `Running` | yes | Tickets are being worked on |
 | `ParentReviewing` | yes | Two reviewers check the whole integration branch |
@@ -167,23 +167,34 @@ Here `#3` depends on `#1` (done), so it is `Ready`; `#4` waits for `#2` and `#3`
 
 ## Queueing and the active-spec limit
 
-1. `POST /api/repos/{id}/spec-runs` (or the typed UI input) calls <xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecQueueService>. A non-terminal run of the same issue gives `AlreadyQueued`. Otherwise it fetches current GitHub state and labels: the parent must be open and labeled `webdevloop`, with at least one independently labeled open sub-issue. Triage labels do not authorize work; all eligible tickets may be blocked. Ineligibility or a GitHub lookup failure returns a clear reason without saving a run. On success it creates a `Queued` `SpecRun` with the next `QueuePosition`, mirrors GitHub "blocked by" relations as `SpecDependency` rows, and appends `SpecRunQueued`.
+1. `POST /api/repos/{id}/spec-runs` (or the typed UI input) calls <xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecQueueService>. A non-terminal run of the same issue gives `AlreadyQueued`. Otherwise it fetches current GitHub state and labels: the parent must be open and labeled `webdevloop`, with at least one independently labeled open sub-issue. Triage labels do not authorize work; all eligible tickets may be blocked. Ineligibility or a GitHub lookup failure returns a clear reason without saving a run. On success it creates a `Queued` `SpecRun` with the next `QueuePosition` and appends `SpecRunQueued`. Parent blocker relationships are not persisted.
 2. <xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecQueueScheduler> runs on `SpecRunQueued`, on status changes that may free a slot, and in every recovery cycle. It visits queued specs in order:
    - blocked specs move to `WaitingForDependency` and do **not** hold up independent specs behind them;
    - startable specs take the lowest free slot (1..`MaxActiveSpecsPerRepo`) and move to `Preparing`. Each claim is one compare-and-swap save; the unique index on (repository, slot) makes a concurrent claim lose.
 3. The limit counts **active** specs only (`Preparing`, `Running`, `ParentReviewing`, `Testing`). A spec waiting for review or merge does not hold a slot. A parked spec has released its slot, so a retry needs a free one (`NoActiveSlot`).
 
-### Dependency modes
+### Parent blockers
 
-<xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecDependencyGate> decides per spec. A blocker is *merged* when its run is `Completed`, or (no usable run) when its GitHub issue is closed.
+<xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecDependencyGate> re-reads the parent issue, current native blocker
+relationships, and each blocker's issue state on every scheduling pass through `ParentBlockerReader`. The display query
+uses the same reader and its closed-state rule; only tracked-run enrichment and request-local caching belong to the query.
+Any open blocker holds the spec regardless of opt-in, repository, tracked-run completion, or PR merge state.
+An unavailable parent or blocker defers only that spec's start. `SpecScheduleResult.Faults` identifies the run and provides
+actionable access/retry guidance; queue recovery includes these faults in its report and logs them. The scheduler continues
+to independent specs in the same repository. Event-driven scheduling reports faults through the event bus's logging
+boundary after the pass, without stopping independent scheduling or delivery to other subscribers.
+The handler deliberately throws an `AggregateException` for the event bus to log, as frontier reconciliation does;
+saved claims remain committed, and normal recovery retries deferred decisions.
 
-| Situation | `WaitForMerge` (default) | `StackOnTop` |
-| --- | --- | --- |
-| No unmerged blocker | Start from trunk | Start from trunk |
-| One blocker spec run in `ReadyForReview` or `AwaitingMerge` | Wait | Start on top: integration base is the blocker's `IntegrationTipSha`; the first PR layer is based on the blocker's top stack branch |
-| Blocker still running, several blockers, or an open issue without a run | Wait | Wait |
+Local run reads (`EfRunQueries`) never call GitHub. `IParentBlockerQueries` enriches only non-terminal runs, or just the
+requested run on its detail page, with request-local deduplication of shared issue reads. Lookup failures return an explicit
+unavailable view instead of throwing away local page data or claiming there are no blockers.
+`ParentBlocker` is the shared GitHub read result; `ParentBlockerView` adds tracked-run display information, and
+`ParentBlockersView` carries the list plus its availability/evaluation status.
 
-`DependencyModeUsed` records which one the spec started with. When a stack-on-top blocker is merged, `StackBaseReconciler` retargets the bottom PR to trunk.
+When every blocker is closed (or removed), preparation chooses current remote trunk. A closed blocker with unmerged PRs
+is sufficient; its changes may not be on trunk. There is no cross-spec stacking, configuration, or recovery retargeting.
+Ticket PR layers within a spec still form their own stack.
 
 ## Control actions
 

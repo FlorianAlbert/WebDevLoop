@@ -162,14 +162,11 @@ public sealed class SharedComponentsTests : BunitContext
     [Fact]
     public void display_names_are_readable()
     {
-        Assert.Equal("Wait for merge", DisplayNames.For(SpecDependencyMode.WaitForMerge));
-        Assert.Equal("Stack on top", DisplayNames.For(SpecDependencyMode.StackOnTop));
         Assert.Equal("Reviewer – coding standards", DisplayNames.For(AgentRole.ReviewerCodingStandards));
         Assert.Equal("Conflict resolver", DisplayNames.For(AgentRole.ConflictResolver));
         Assert.Equal("Troubleshooter", DisplayNames.For(AgentRole.Troubleshooter));
         Assert.Equal("Tester", DisplayNames.For(AgentRole.Tester));
         Assert.Equal("Needs attention", DisplayNames.Humanize("NeedsAttention"));
-        Assert.All(Enum.GetValues<SpecDependencyMode>(), m => Assert.NotEmpty(DisplayNames.Describe(m)));
     }
 
     [Fact]

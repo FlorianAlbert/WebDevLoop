@@ -176,7 +176,7 @@ Both bases collapse bursts: events that arrive during a load cause exactly one m
 | --- | --- |
 | `DashboardOverview`, `QueuePage` | `ReactsTo` returns `SpecQueueEvents.Affects(...)`: only `SpecRunQueued` and `SpecRunStatusChanged`. They also reload when `RepositoryContext.Changed` fires. |
 | `RepositorySwitcher`, `RepositoriesPage` | No events by default (`ReactsTo` is `false`). They reload on `RepositoryContext.Changed`. |
-| `SpecRunDetail` | Events of this spec run (`RunEventSubscription.Concerns`), plus events of any run that blocks it (`SpecDependencyView.BlockingSpecRunId`). |
+| `SpecRunDetail` | Events of this spec run (`RunEventSubscription.Concerns`), plus events of tracked runs for current native parent blockers (`ParentBlockerView.BlockingSpecRunId`). |
 | `TicketRunDetail`, `StepRunDetail` | Events of the owning spec run. Until the item is loaded, every event counts. |
 | `AgentLogTail` | Not event-driven. Polls the log reader every 15 s (`DefaultPollInterval`) while the step is pending or running. |
 | Health, GitHub, banners | Read `DiagnosticReadiness` or `IGitHubSignInState`; the sign-in banner and GitHub page subscribe to its `Changed` event. |

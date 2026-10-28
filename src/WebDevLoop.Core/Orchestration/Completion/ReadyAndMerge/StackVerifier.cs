@@ -7,9 +7,7 @@ namespace WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 /// Verifies a spec's PR stack before it is marked ready (workflow step 8): layer order, trunk, linear ancestry from the
 /// integration base through every layer to the integration tip, the GitHub stack order, and that every PR still shows exactly
 /// its ticket's squash commit (open, unchanged head, base containing the layer below but not the layer itself, diff verified
-/// by the integration saga). A stack-on-top spec whose blocking stack merged (often as a squash, so trunk does not contain the
-/// blocking layer commits) may have its bottom PR on trunk instead of the blocking stack branch; that is accepted once the
-/// blocking stack branch's PR is merged.
+/// by the integration saga).
 /// </summary>
 internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pulls)
 {
@@ -50,10 +48,8 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
                 return $"layer #{layer.PullRequestNumber} is at position {layer.Position} instead of {index + 1}.";
             }
 
-            BranchName? expectedBase = index > 0 ? layers[index - 1].BranchName
-                : spec.DependencyModeUsed == SpecDependencyMode.StackOnTop ? null
-                : trunk;
-            if (expectedBase is { } required && layer.BaseBranch != required)
+            BranchName required = index > 0 ? layers[index - 1].BranchName : trunk;
+            if (layer.BaseBranch != required)
             {
                 return $"layer #{layer.PullRequestNumber} is based on '{layer.BaseBranch}' instead of '{required}'.";
             }
@@ -90,8 +86,7 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
         BranchName trunk,
         CancellationToken cancellationToken)
     {
-        if (layers.Count == 1
-            && (spec.DependencyModeUsed != SpecDependencyMode.StackOnTop || await RestsOnMergedBlockingStackAsync(location, layers[0], trunk, cancellationToken)))
+        if (layers.Count == 1)
         {
             return null;
         }
@@ -119,8 +114,7 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
         CommitSha? below = spec.IntegrationBaseSha;
         foreach (PullStackLayer layer in layers)
         {
-            bool isBottom = layer.Position == 1;
-            if (await FindPullRequestProblemAsync(location, layer, below, isBottom ? trunk : null, cancellationToken) is { } problem)
+            if (await FindPullRequestProblemAsync(location, layer, below, cancellationToken) is { } problem)
             {
                 return problem;
             }
@@ -131,12 +125,10 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
         return null;
     }
 
-    /// <param name="alternativeBase">For the bottom layer: trunk, which GitHub retargets it to once the stack below it merged.</param>
     private async Task<string?> FindPullRequestProblemAsync(
         GitRepositoryLocation location,
         PullStackLayer layer,
         CommitSha? below,
-        BranchName? alternativeBase,
         CancellationToken cancellationToken)
     {
         PullRequestNumber number = layer.PullRequestNumber;
@@ -151,7 +143,7 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
             return $"pull request #{number} has head commit {pull.HeadSha} on '{pull.Head}' instead of {layer.CommitSha} on '{layer.BranchName}'.";
         }
 
-        if (pull.Base != layer.BaseBranch && pull.Base != alternativeBase)
+        if (pull.Base != layer.BaseBranch)
         {
             return $"pull request #{number} targets '{pull.Base}' instead of '{layer.BaseBranch}'.";
         }
@@ -162,11 +154,9 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
             return $"stack branch '{layer.BranchName}' is at {stackBranchTip?.Value ?? "(missing)"} instead of {layer.CommitSha}.";
         }
 
-        // After a squash merge of the blocking stack, trunk holds its changes but not its commits.
-        bool baseMustContainBelow = pull.Base == layer.BaseBranch || !await IsBlockingStackMergedAsync(location, layer, cancellationToken);
         CommitSha? baseTip = await git.GetBranchTipAsync(location, pull.Base, GitRefScope.Remote, cancellationToken);
         if (baseTip is not { } baseHead
-            || (baseMustContainBelow && below is { } parent && !await git.IsAncestorAsync(location, parent, baseHead, cancellationToken))
+            || (below is { } parent && !await git.IsAncestorAsync(location, parent, baseHead, cancellationToken))
             || await git.IsAncestorAsync(location, layer.CommitSha, baseHead, cancellationToken))
         {
             return $"base '{pull.Base}' of pull request #{number} at {baseTip?.Value ?? "(missing)"} must contain {below?.Value ?? "the integration base"} "
@@ -182,18 +172,4 @@ internal sealed class StackVerifier(IGitWorkspace git, IGitHubPullsAndStacks pul
             ? $"layer commit {layer.CommitSha} of pull request #{number} changes no files."
             : null;
     }
-
-    /// <summary>A stack-on-top bottom layer that now targets trunk because the blocking stack branch below it merged.</summary>
-    private async Task<bool> RestsOnMergedBlockingStackAsync(
-        GitRepositoryLocation location,
-        PullStackLayer bottom,
-        BranchName trunk,
-        CancellationToken cancellationToken) =>
-        bottom.BaseBranch != trunk
-        && (await pulls.GetPullRequestAsync(location.Repo, bottom.PullRequestNumber, cancellationToken)).Base == trunk
-        && await IsBlockingStackMergedAsync(location, bottom, cancellationToken);
-
-    /// <summary>Whether the PR of the stack branch the layer was published onto is merged.</summary>
-    private async Task<bool> IsBlockingStackMergedAsync(GitRepositoryLocation location, PullStackLayer layer, CancellationToken cancellationToken) =>
-        await pulls.FindPullRequestByHeadAsync(location.Repo, layer.BaseBranch, cancellationToken) is { State: PullRequestState.Merged };
 }

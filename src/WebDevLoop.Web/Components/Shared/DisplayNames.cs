@@ -7,20 +7,6 @@ namespace WebDevLoop.Web.Components.Shared;
 /// <summary>User-facing names for domain enums and raw identifiers.</summary>
 public static class DisplayNames
 {
-    public static string For(SpecDependencyMode mode) => mode switch
-    {
-        SpecDependencyMode.WaitForMerge => "Wait for merge",
-        SpecDependencyMode.StackOnTop => "Stack on top",
-        _ => Humanize(mode.ToString()),
-    };
-
-    public static string Describe(SpecDependencyMode mode) => mode switch
-    {
-        SpecDependencyMode.WaitForMerge => "Start dependent specs only after the blocking pull request has been merged.",
-        SpecDependencyMode.StackOnTop => "Start dependent specs right away, stacked on top of the blocking branch.",
-        _ => string.Empty,
-    };
-
     public static string For(AgentRole role) => role switch
     {
         AgentRole.ReviewerCodingStandards => "Reviewer – coding standards",

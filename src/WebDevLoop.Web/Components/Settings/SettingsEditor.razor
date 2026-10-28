@@ -45,9 +45,6 @@ else if (_model is not null)
                 <SectionCard Id="section-general" Title="General">
                     <TextOverride Field="@nameof(SettingsProfileData.BaseBranch)" Label="@FieldLabel(nameof(SettingsProfileData.BaseBranch))" @bind-Value="_model.BaseBranch"
                                   Inherited="@_inherited.BaseBranch" Errors="@ErrorsFor(nameof(SettingsProfileData.BaseBranch))" />
-                    <ChoiceOverride Field="@nameof(SettingsProfileData.SpecDependencyMode)" Label="@FieldLabel(nameof(SettingsProfileData.SpecDependencyMode))" Options="DependencyModes"
-                                    Value="@_model.SpecDependencyMode?.ToString()" ValueChanged="SetDependencyMode"
-                                    Inherited="@DisplayNames.For(_inherited.SpecDependencyMode)" Errors="@ErrorsFor(nameof(SettingsProfileData.SpecDependencyMode))" />
                     @if (IsGlobal)
                     {
                         <div class="alert alert-warning" role="note" data-testid="startup-directories-note">
@@ -211,15 +208,11 @@ else
         ("section-roles", "Agent roles"),
     ];
 
-    private static readonly IReadOnlyList<(string Value, string Label)> DependencyModes =
-        Enum.GetValues<SpecDependencyMode>().Select(mode => (mode.ToString(), DisplayNames.For(mode))).ToArray();
-
     private static readonly IReadOnlyList<(string Value, string Label)> OnOffOptions = [("true", "On"), ("false", "Off")];
 
     private static readonly Dictionary<string, string> FieldLabels = new()
     {
         [nameof(SettingsProfileData.BaseBranch)] = "Base (trunk) branch",
-        [nameof(SettingsProfileData.SpecDependencyMode)] = "Spec dependency mode",
         [nameof(SettingsProfileData.WorkspaceRootDirectory)] = "Workspace root directory",
         [nameof(SettingsProfileData.CopilotBaseDirectory)] = "Copilot base directory",
         [nameof(SettingsProfileData.MaxActiveSpecsPerRepo)] = "Max active specs per repository",
@@ -515,9 +508,6 @@ else
 
     private IReadOnlyList<string> ErrorsFor(string field) =>
         _errors.Where(error => error.Field == field).Select(Describe).Distinct().ToArray();
-
-    private void SetDependencyMode(string? value) =>
-        _model!.SpecDependencyMode = Enum.TryParse(value, out SpecDependencyMode mode) ? mode : null;
 
     private void SetTroubleshooterEnabled(string? value) =>
         _model!.TroubleshooterEnabled = bool.TryParse(value, out bool enabled) ? enabled : null;

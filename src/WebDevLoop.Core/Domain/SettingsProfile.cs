@@ -26,7 +26,6 @@ public sealed class SettingsProfile : VersionedEntity
 
     public int? MaxActiveSpecsPerRepo { get; set; }
 
-    public SpecDependencyMode? SpecDependencyMode { get; set; }
 
     public int? MaxConcurrentImplementersGlobal { get; set; }
 

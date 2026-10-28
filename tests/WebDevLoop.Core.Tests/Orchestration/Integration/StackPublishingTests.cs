@@ -115,30 +115,5 @@ public sealed class StackPublishingTests
         Assert.DoesNotMatch(@"(?i)\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#", draft.Body);
     }
 
-    [Fact]
-    public async Task Stack_on_top_spec_publishes_its_first_layer_on_the_blocking_specs_top_layer_and_joins_its_stack()
-    {
-        SpecRun blocker = _f.SeedRunningSpec();
-        TicketRun blockerTicket = _f.SeedReviewedTicket(blocker, 1, "blocker.cs");
-        await _f.IntegrateAsync(blockerTicket);
-        PullStackLayer blockerTop = Assert.Single(_f.Layers(blocker));
-
-        SpecRun dependent = _f.SeedRunningSpec(blocker.IntegrationTipSha, SpecDependencyMode.StackOnTop);
-        _f.Store.AddDependency(SpecDependency.OnSpecRun(dependent.Id, blocker.Id, SpecDependencyMode.StackOnTop));
-        TicketRun ticket = _f.SeedReviewedTicket(dependent, 2, "dependent.cs");
-
-        IntegrationResult result = await _f.IntegrateAsync(ticket);
-
-        Assert.Equal(IntegrationOutcome.Integrated, result.Outcome);
-        PullStackLayer layer = Assert.Single(_f.Layers(dependent));
-        Assert.Equal(blockerTop.BranchName, layer.BaseBranch);
-        Assert.Equal(blockerTop.CommitSha, ParentOf(layer.CommitSha));
-        Assert.Equal(IntegrationFixture.Trunk, dependent.BaseBranch);
-        PullRequestSnapshot pull = await _f.Pulls.GetPullRequestAsync(IntegrationFixture.RepoRef, layer.PullRequestNumber, IntegrationFixture.Token);
-        Assert.Equal(blockerTop.BranchName, pull.Base);
-        PullStackSnapshot stack = Assert.Single(_f.Pulls.Stacks);
-        Assert.Equal([blockerTop.PullRequestNumber, layer.PullRequestNumber], stack.BottomToTop);
-    }
-
     private CommitSha ParentOf(CommitSha commit) => Assert.Single(_f.Git.ParentsOf(commit));
 }

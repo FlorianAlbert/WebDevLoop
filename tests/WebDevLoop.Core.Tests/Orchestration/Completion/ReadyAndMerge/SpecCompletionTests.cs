@@ -64,7 +64,6 @@ public sealed class SpecCompletionTests
         Assert.Null(ready.MaxActiveSpecsSlot);
         Assert.Equal(SpecRunStatus.Preparing, next.Status);
         Assert.Equal(1, next.MaxActiveSpecsSlot);
-        Assert.Null(next.DependencyModeUsed);
     }
 
     [Fact]

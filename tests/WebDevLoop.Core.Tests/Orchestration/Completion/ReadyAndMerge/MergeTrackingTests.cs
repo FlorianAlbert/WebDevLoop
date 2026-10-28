@@ -35,7 +35,6 @@ public sealed class MergeTrackingTests
         Assert.Equal(_fixture.Clock.UtcNow, blocking.CompletedAt);
         Assert.Contains((SpecRunStatus.AwaitingMerge, SpecRunStatus.Completed), _fixture.Transitions(blocking));
         Assert.Equal(SpecRunStatus.Running, dependent.Status);
-        Assert.Equal(SpecDependencyMode.WaitForMerge, dependent.DependencyModeUsed);
         Assert.Equal(trunk, dependent.IntegrationBaseSha);
         Assert.Equal(trunk, await _fixture.Git.GetBranchTipAsync(_fixture.Location, dependent.IntegrationBranch, GitRefScope.Local, Token));
     }

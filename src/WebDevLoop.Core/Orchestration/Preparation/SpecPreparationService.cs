@@ -86,8 +86,7 @@ public sealed class SpecPreparationService(
     }
 
     /// <summary>
-    /// The scheduler presets the base for <see cref="SpecDependencyMode.StackOnTop"/> (the blocker's integration tip);
-    /// otherwise the base is the current remote trunk tip.
+    /// New specs start at the current remote trunk tip; retries reuse the recorded base.
     /// </summary>
     /// <returns>Null on success; otherwise why no base could be chosen.</returns>
     private async Task<AttentionReason?> ChooseIntegrationBaseAsync(

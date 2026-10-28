@@ -150,6 +150,25 @@ public sealed class GitHubIssuesReadTests : GitHubIssuesTestBase
         Assert.Equal([3, 4], snapshot.BlockedBy.Select(blocker => blocker.Number));
     }
 
+    [Theory]
+    [InlineData("open", IssueState.Open)]
+    [InlineData("closed", IssueState.Closed)]
+    public async Task Native_cross_repository_blockers_keep_their_identity_and_are_read_from_their_own_repository(string state, IssueState expected)
+    {
+        Api.Get(IssuePath(7), Issue(7, 700));
+        Api.Get(BlockedByPath(7), new[] { Issue(7, 900, repo: "elsewhere") });
+        Api.Get("/repos/acme/elsewhere/issues/7", Issue(7, 900, state: state, repo: "elsewhere"));
+        Api.Get("/repos/acme/elsewhere/issues/7/dependencies/blocked_by", Array.Empty<object>());
+        GitHubIssues issues = CreateSut();
+
+        IssueSnapshot parent = await issues.GetIssueAsync(Ref(7), CancellationToken.None);
+        IssueSnapshot blocker = await issues.GetIssueAsync(Assert.Single(parent.BlockedBy), CancellationToken.None);
+
+        Assert.Equal("acme/elsewhere#7", blocker.Ref.ToString());
+        Assert.Equal(expected, blocker.State);
+        Assert.Equal(IssueState.Open, parent.State);
+    }
+
     [Fact]
     public async Task GetSpecGraph_combines_parent_sub_issues_and_dependencies_into_a_dag()
     {

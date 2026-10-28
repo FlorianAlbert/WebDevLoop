@@ -7,7 +7,6 @@ public static class DefaultSettings
 {
     public static BranchName BaseBranch { get; } = new("main");
     public const int MaxActiveSpecsPerRepo = 1;
-    public const SpecDependencyMode DependencyMode = SpecDependencyMode.WaitForMerge;
     public const int MaxConcurrentImplementersGlobal = 4;
     public const int MaxConcurrentImplementersPerRepo = 2;
     public const int MaxReviewIterations = 5;
@@ -67,7 +66,6 @@ public static class DefaultSettings
             CopilotBaseDirectory = Path.Combine(dataRoot, CopilotDirectoryName),
             BaseBranch = BaseBranch,
             MaxActiveSpecsPerRepo = MaxActiveSpecsPerRepo,
-            SpecDependencyMode = DependencyMode,
             MaxConcurrentImplementersGlobal = MaxConcurrentImplementersGlobal,
             MaxConcurrentImplementersPerRepo = MaxConcurrentImplementersPerRepo,
             MaxReviewIterations = MaxReviewIterations,

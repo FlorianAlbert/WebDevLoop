@@ -15,7 +15,6 @@ public sealed record SpecRunView(
     string IntegrationBranch,
     string? IntegrationBaseSha,
     string? IntegrationTipSha,
-    SpecDependencyMode? DependencyModeUsed,
     int ReviewCycle,
     int TestCycle,
     DateTimeOffset CreatedAt,

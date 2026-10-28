@@ -8,8 +8,8 @@ namespace WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 
 /// <summary>
 /// Tracks the human merge of ready PR stacks (periodic entry point <see cref="TrackAllAsync"/>, run by a hosted timer).
-/// A stack merged into trunk (trunk contains the top layer) completes its spec, which unblocks <c>WaitForMerge</c>
-/// dependents; a stack closed unmerged needs attention. When every PR is merged but trunk does not contain the top layer,
+/// A stack merged into trunk (trunk contains the top layer) completes its spec; a stack closed unmerged needs attention.
+/// Parent dependency decisions use GitHub issue closure independently. When every PR is merged but trunk does not contain the top layer,
 /// the first such poll is recorded (run event <see cref="AwaitingTrunkRunEventType"/>) and the spec needs attention once
 /// trunk still lacks it after <see cref="ReadyAndMergeOptions.TrunkContainmentTimeout"/>. The pass also resumes
 /// completions that a fault or crash interrupted (<c>Testing</c> with a passing verdict, or <c>ReadyForReview</c>).

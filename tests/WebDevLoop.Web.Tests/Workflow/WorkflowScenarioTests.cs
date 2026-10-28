@@ -21,8 +21,79 @@ public sealed class WorkflowScenarioTests
     private const int DependentSpec = 200;
     private const int DependentTicket = 201;
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task parent_or_blocker_lookup_failure_defers_a_waiting_spec_with_actionable_recovery_and_retries(bool parentUnavailable)
+    {
+        using var scenario = new WorkflowScenario(TicketA, DependentTicket);
+        scenario.Issues.Seed(900, "External blocker");
+        scenario.Issues.Seed(Spec, "Waiting spec", parent: null, blockedBy: 900);
+        scenario.Issues.Seed(TicketA, "Ticket A", parent: Spec);
+        scenario.Issues.Seed(DependentSpec, "Independent spec");
+        scenario.Issues.Seed(DependentTicket, "Independent ticket", parent: DependentSpec);
+        await using var host = new WorkflowHost(scenario);
+        var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        string run = await api.EnqueueAsync(repositoryId, Spec);
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.WaitingForDependency));
+        scenario.Issues.UnavailableIssue = scenario.Issues.Ref(parentUnavailable ? Spec : 900);
+        await scenario.Issues.CloseAsync(scenario.Issues.Ref(900), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        while (!scenario.Logs.Entries.Any(entry => entry.Contains("retry queue recovery", StringComparison.Ordinal)))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100), deadline.Token);
+        }
+
+        Assert.Equal("WaitingForDependency", (await api.GetAsync($"/api/spec-runs/{run}")).GetProperty("status").GetString());
+        Assert.Empty(await api.TicketsAsync(run));
+        Assert.Contains(scenario.Logs.Entries, entry => entry.Contains("Check issue access", StringComparison.Ordinal));
+        Assert.Contains(scenario.Logs.Entries, entry => entry.Contains(run, StringComparison.Ordinal) && entry.Contains("retry queue recovery", StringComparison.Ordinal));
+        string independent = await api.EnqueueAsync(repositoryId, DependentSpec);
+        await api.WaitForStatusAsync(independent, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Empty(await api.TicketsAsync(run));
+        scenario.Issues.UnavailableIssue = null;
+
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Equal("main", Assert.Single(await api.StackAsync(run)).GetProperty("baseBranch").GetString());
+    }
+
     [Fact]
-    public async Task diamond_and_independent_tickets_are_implemented_reviewed_stacked_and_completed_after_the_merge_including_a_stacked_dependent_spec()
+    public async Task current_external_parent_relationships_hold_work_without_holding_up_independent_specs_and_removal_starts_from_updated_trunk()
+    {
+        using var scenario = new WorkflowScenario(TicketA, DependentTicket);
+        scenario.Issues.Seed(900, "Original external blocker");
+        scenario.Issues.Seed(Spec, "Waiting spec", parent: null, blockedBy: 900);
+        scenario.Issues.Seed(TicketA, "Ticket A", parent: Spec);
+        scenario.Issues.Seed(DependentSpec, "Independent spec");
+        scenario.Issues.Seed(DependentTicket, "Independent ticket", parent: DependentSpec);
+        var foreign = new IssueRef("elsewhere", "other", 900);
+        scenario.Issues.SeedExternal(foreign, "New cross-repository blocker");
+        await using var host = new WorkflowHost(scenario);
+        var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        string waitingRun = await api.EnqueueAsync(repositoryId, Spec);
+        await api.WaitForStatusAsync(waitingRun, nameof(SpecRunStatus.WaitingForDependency));
+        scenario.Issues.SetBlockedBy(Spec, foreign);
+        await scenario.Issues.CloseAsync(scenario.Issues.Ref(900), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+
+        string independentRun = await api.EnqueueAsync(repositoryId, DependentSpec);
+        JsonElement[] independentStack = await AwaitMergeAndCompleteAsync(api, scenario, independentRun);
+
+        Assert.Equal("WaitingForDependency", (await api.GetAsync($"/api/spec-runs/{waitingRun}")).GetProperty("status").GetString());
+        Assert.Empty(await api.TicketsAsync(waitingRun));
+        scenario.Issues.SetBlockedBy(Spec);
+
+        JsonElement started = await api.WaitForStatusAsync(waitingRun, nameof(SpecRunStatus.AwaitingMerge));
+
+        Assert.Equal(independentStack[^1].GetProperty("commitSha").GetString(), started.GetProperty("integrationBaseSha").GetString());
+        Assert.Equal("main", Assert.Single(await api.StackAsync(waitingRun)).GetProperty("baseBranch").GetString());
+    }
+
+    [Fact]
+    public async Task diamond_ticket_stack_is_preserved_and_a_closed_unmerged_parent_blocker_releases_an_independent_trunk_based_spec()
     {
         using var scenario = new WorkflowScenario(TicketA, TicketB, TicketC, TicketD, TicketE, DependentTicket);
         SeedDiamondSpec(scenario.Issues);
@@ -35,26 +106,27 @@ public sealed class WorkflowScenarioTests
         var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
 
         int repositoryId = await api.RegisterRepositoryAsync(scenario);
-        await api.UseDependencyModeAsync(repositoryId, nameof(SpecDependencyMode.StackOnTop));
         string specRun = await api.EnqueueAsync(repositoryId, Spec);
         string dependentRun = await api.EnqueueAsync(repositoryId, DependentSpec);
 
         await api.WaitForStatusAsync(specRun, nameof(SpecRunStatus.AwaitingMerge));
+        await api.WaitForStatusAsync(dependentRun, nameof(SpecRunStatus.WaitingForDependency));
+        await scenario.Issues.CloseAsync(scenario.Issues.Ref(Spec), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
         JsonElement dependent = await api.WaitForStatusAsync(dependentRun, nameof(SpecRunStatus.AwaitingMerge));
-        Assert.Equal(nameof(SpecDependencyMode.StackOnTop), dependent.GetProperty("dependencyModeUsed").GetString());
+        Assert.False(dependent.TryGetProperty("dependencyModeUsed", out _));
+        Assert.Equal("main", dependent.GetProperty("baseBranch").GetString());
 
         JsonElement[] stack = await api.StackAsync(specRun);
         JsonElement[] dependentStack = await api.StackAsync(dependentRun);
         Assert.Equal(5, stack.Length);
         Assert.Single(dependentStack);
         Assert.All(stack.Concat(dependentStack), layer => Assert.False(layer.GetProperty("isDraft").GetBoolean()));
-        Assert.Equal(stack[^1].GetProperty("branchName").GetString(), dependentStack[0].GetProperty("baseBranch").GetString());
+        Assert.Equal("main", dependentStack[0].GetProperty("baseBranch").GetString());
         Assert.Equal(
-            [.. stack.Concat(dependentStack).Select(layer => new PullRequestNumber(layer.GetProperty("pullRequestNumber").GetInt32()))],
+            [.. stack.Select(layer => new PullRequestNumber(layer.GetProperty("pullRequestNumber").GetInt32()))],
             Assert.Single(scenario.Pulls.Stacks()));
 
-        MergeStack(scenario, stack);
-        await api.WaitForStatusAsync(specRun, nameof(SpecRunStatus.Completed));
+        Assert.All(scenario.Pulls.All(), pull => Assert.Equal(PullRequestState.Open, pull.State));
         MergeStack(scenario, dependentStack);
         await api.WaitForStatusAsync(dependentRun, nameof(SpecRunStatus.Completed));
 
@@ -72,7 +144,7 @@ public sealed class WorkflowScenarioTests
         Assert.DoesNotContain(calls, call => call.HasGitHubWriteToken);
         Assert.All([TicketA, TicketB, TicketC, TicketD, TicketE, DependentTicket], ticket => Assert.Equal(IssueState.Closed, scenario.Issues.StateOf(ticket)));
         Assert.Equal(6, scenario.Pulls.All().Count);
-        Assert.All(scenario.Pulls.All(), pull => Assert.Equal(PullRequestState.Merged, pull.State));
+        Assert.Equal(SpecRunStatus.AwaitingMerge.ToString(), (await api.GetAsync($"/api/spec-runs/{specRun}")).GetProperty("status").GetString());
         Assert.Contains($"ticket-{DependentTicket}.txt", scenario.Sandbox.FilesOnTrunk());
     }
 

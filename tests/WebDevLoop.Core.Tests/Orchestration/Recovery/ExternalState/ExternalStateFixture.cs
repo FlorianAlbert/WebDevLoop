@@ -44,16 +44,15 @@ internal sealed class ExternalStateFixture
             new FindingIssuanceReconciler(f.Store, f.Store, issues, f.Ids, unitOfWork, f.Clock),
             new WorktreeReconciler(f.Store, f.Store, git),
             new IntegrationSagaReconciler(f.Store, f.Store, pulls, f.Runner(unitOfWork), Launcher, f.Store, unitOfWork, f.Clock, Options),
-            new StackBaseReconciler(f.Store, pulls, f.Store, unitOfWork, f.Clock),
             tracking);
     }
 
     public Task<ExternalReconciliationReport> ReconcileAsync() => Reconciler().ReconcileAsync(Token);
 
     /// <summary>A running spec on the trunk tip whose parent issue exists on GitHub, so its ticket graph can be read.</summary>
-    public SpecRun RunningSpec(SpecDependencyMode? mode = null)
+    public SpecRun RunningSpec()
     {
-        SpecRun spec = Integration.SeedRunningSpec(mode: mode);
+        SpecRun spec = Integration.SeedRunningSpec();
         Integration.Issues.Seed(spec.ParentIssue, spec.Title);
         return spec;
     }

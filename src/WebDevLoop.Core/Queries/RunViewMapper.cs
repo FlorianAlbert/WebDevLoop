@@ -15,7 +15,6 @@ public static class RunViewMapper
         run.IntegrationBranch.Value,
         run.IntegrationBaseSha?.Value,
         run.IntegrationTipSha?.Value,
-        run.DependencyModeUsed,
         run.ReviewCycle,
         run.TestCycle,
         run.CreatedAt,

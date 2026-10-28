@@ -256,7 +256,7 @@ sequenceDiagram
     Note right of Saga: IssueTransitioned, then Completed
 ```
 
-PR bases form a chain (`PullRequestBasePlanner`): the first layer targets trunk (or the blocking spec's top layer in `StackOnTop` mode); every later layer targets the previous layer's stack branch.
+PR bases form a chain (`PullRequestBasePlanner`): the first layer targets trunk; every later layer targets the previous layer's stack branch within the same spec. A dependent spec starts from current trunk after all native parent blockers close, never from another spec's unmerged branch.
 
 ### Polling
 

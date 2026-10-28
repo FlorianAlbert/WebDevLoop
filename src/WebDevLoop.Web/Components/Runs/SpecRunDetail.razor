@@ -21,10 +21,6 @@ else if (_spec is not null)
         <StatusBadge Status="@_spec.Status.ToString()" data-testid="spec-status" />
         <span>Spec issue #@_spec.ParentIssueNumber</span>
         <span>Queue position @_spec.QueuePosition</span>
-        @if (_spec.DependencyModeUsed is { } mode)
-        {
-            <span data-testid="dependency-mode">Mode: @DisplayNames.For(mode)</span>
-        }
     </div>
     @if (_spec.Status == SpecRunStatus.NeedsAttention)
     {
@@ -74,12 +70,12 @@ else if (_spec is not null)
     private IReadOnlyList<StackLayerView> _stack = [];
     private IReadOnlyList<RunEventView> _events = [];
     private IReadOnlyDictionary<string, IntegrationSagaView> _sagas = new Dictionary<string, IntegrationSagaView>();
-    private IReadOnlyList<SpecDependencyView> _blockers = [];
+    private ParentBlockersView _blockers = ParentBlockersView.NotEvaluated;
 
     [Parameter] public string Id { get; set; } = string.Empty;
 
     protected override bool IsRelevant(LiveEventView view) =>
-        RunEventSubscription.Concerns(view, Id) || _blockers.Any(blocker => blocker.BlockingSpecRunId == view.SpecRunId);
+        RunEventSubscription.Concerns(view, Id) || _blockers.Blockers.Any(blocker => blocker.BlockingSpecRunId == view.SpecRunId);
 
     protected override async Task LoadAsync(CancellationToken cancellationToken)
     {
@@ -97,6 +93,6 @@ else if (_spec is not null)
         _stack = await queries.ListStackAsync(runId, cancellationToken);
         _events = await queries.ListEventsAsync(runId, cancellationToken);
         _sagas = await queries.ListLatestSagasAsync(runId, cancellationToken);
-        _blockers = await queries.ListSpecDependenciesAsync(runId, cancellationToken);
+        _blockers = await ScopedServices.GetRequiredService<IParentBlockerQueries>().GetBlockersAsync(runId, cancellationToken);
     }
 }

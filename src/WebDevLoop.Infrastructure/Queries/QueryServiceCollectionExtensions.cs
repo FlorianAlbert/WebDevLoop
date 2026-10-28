@@ -12,6 +12,7 @@ public static class QueryServiceCollectionExtensions
     {
         services.TryAddScoped<IRepositoryQueries, EfRepositoryQueries>();
         services.TryAddScoped<IRunQueries, EfRunQueries>();
+        services.TryAddScoped<IParentBlockerQueries, ParentBlockerQueries>();
         services.TryAddSingleton(new AgentLogStoreOptions());
         services.TryAddSingleton<PersistentAgentLogStore>();
         services.TryAddSingleton<IAgentLogSink>(provider => provider.GetRequiredService<PersistentAgentLogStore>());

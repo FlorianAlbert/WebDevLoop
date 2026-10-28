@@ -79,7 +79,7 @@ internal sealed class IntegrationFixture
     }
 
     /// <summary>A running spec whose run-scoped integration branch starts at <paramref name="baseSha"/> (default: trunk tip).</summary>
-    public SpecRun SeedRunningSpec(CommitSha? baseSha = null, SpecDependencyMode? mode = null)
+    public SpecRun SeedRunningSpec(CommitSha? baseSha = null)
     {
         CommitSha start = baseSha ?? TrunkTip;
         int issueNumber = ++_nextSpecIssue;
@@ -87,7 +87,6 @@ internal sealed class IntegrationFixture
         spec.TransitionTo(SpecRunStatus.Preparing, T0);
         spec.MaxActiveSpecsSlot = 1;
         spec.BaseBranch = Trunk;
-        spec.DependencyModeUsed = mode;
         spec.IntegrationBaseSha = start;
         spec.IntegrationTipSha = start;
         spec.TransitionTo(SpecRunStatus.Running, T0);

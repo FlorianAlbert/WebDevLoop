@@ -20,12 +20,6 @@ public interface IRunQueries
 
     Task<IReadOnlyList<RunEventView>> ListEventsAsync(RunId specRunId, CancellationToken cancellationToken);
 
-    /// <summary>The spec issues blocking a spec run, in the order the dependencies were recorded.</summary>
-    Task<IReadOnlyList<SpecDependencyView>> ListSpecDependenciesAsync(RunId specRunId, CancellationToken cancellationToken);
-
-    /// <summary>Blocking specs of every spec run of the repository that has any, keyed by the blocked spec run id.</summary>
-    Task<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>> ListSpecDependenciesForRepositoryAsync(int repositoryId, CancellationToken cancellationToken);
-
     /// <summary><c>null</c> when no integration saga was started for the ticket.</summary>
     Task<IntegrationSagaView?> GetLatestSagaAsync(TicketRunId ticketRunId, CancellationToken cancellationToken);
 

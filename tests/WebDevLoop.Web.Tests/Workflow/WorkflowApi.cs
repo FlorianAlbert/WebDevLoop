@@ -21,12 +21,6 @@ internal sealed class WorkflowApi(HttpClient client, CapturedLogs? logs = null)
         return (await response.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("id").GetInt32();
     }
 
-    public async Task UseDependencyModeAsync(int repositoryId, string mode)
-    {
-        using HttpResponseMessage response = await client.PutAsJsonAsync($"/api/repos/{repositoryId}/settings", new { specDependencyMode = mode }, Ct);
-        await EnsureAsync(response, HttpStatusCode.OK);
-    }
-
     public async Task<string> EnqueueAsync(int repositoryId, int specIssue)
     {
         using HttpResponseMessage response = await client.PostAsJsonAsync($"/api/repos/{repositoryId}/spec-runs", new { specIssueNumber = specIssue }, Ct);

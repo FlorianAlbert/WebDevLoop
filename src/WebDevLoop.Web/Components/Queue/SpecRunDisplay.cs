@@ -24,14 +24,10 @@ public static partial class SpecRunDisplay
     };
 
     /// <summary>A short explanation of what a non-running spec is waiting for; <c>null</c> when there is nothing to add.</summary>
-    public static string? Note(SpecRunView run, SpecDependencyMode effectiveMode, IReadOnlyList<SpecDependencyView>? blockers = null) => run.Status switch
+    public static string? Note(SpecRunView run, IReadOnlyList<ParentBlockerView>? blockers = null) => run.Status switch
     {
         SpecRunStatus.Queued => "Waiting for a free active-spec slot",
-        SpecRunStatus.WaitingForDependency => WithBlockers(
-            (run.DependencyModeUsed ?? effectiveMode) == SpecDependencyMode.WaitForMerge
-                ? "Waiting for the dependency to be merged"
-                : "Waiting until the dependency's stack is ready to build on",
-            blockers),
+        SpecRunStatus.WaitingForDependency => WithBlockers("Waiting for all native GitHub blockers to close", blockers),
         SpecRunStatus.ReadyForReview => "Ready for human review",
         SpecRunStatus.AwaitingMerge => "Stack is open; waiting for a human to merge it",
         SpecRunStatus.NeedsAttention => AttentionDisplay.Headline(run.Attention, run.FailureReason) ?? "Needs a human decision",
@@ -39,14 +35,14 @@ public static partial class SpecRunDisplay
         _ => null,
     };
 
-    private static string WithBlockers(string note, IReadOnlyList<SpecDependencyView>? blockers)
+    private static string WithBlockers(string note, IReadOnlyList<ParentBlockerView>? blockers)
     {
-        string[] unmerged = (blockers ?? []).Where(blocker => !blocker.IsSatisfied).Select(Describe).ToArray();
-        return unmerged.Length == 0 ? note : $"{note}: {string.Join(", ", unmerged)}";
+        string[] openBlockers = (blockers ?? []).Where(blocker => !blocker.IsSatisfied).Select(Describe).ToArray();
+        return openBlockers.Length == 0 ? note : $"{note}: {string.Join(", ", openBlockers)}";
     }
 
-    private static string Describe(SpecDependencyView blocker) =>
-        $"#{blocker.IssueNumber} ({(blocker.Status is { } status ? Label(status) : "not tracked")})";
+    private static string Describe(ParentBlockerView blocker) =>
+        $"{blocker.Issue} ({(blocker.Status is { } status ? Label(status) : "not tracked")})";
 
     [GeneratedRegex("(?<=[a-z])(?=[A-Z])")]
     private static partial Regex WordBoundary();

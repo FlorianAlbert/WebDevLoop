@@ -26,7 +26,6 @@ public sealed class SettingsResolver(EffectiveSettings embeddedDefaults)
             CopilotBaseDirectory = FirstText(repository?.CopilotBaseDirectory, global.CopilotBaseDirectory, embeddedDefaults.CopilotBaseDirectory),
             BaseBranch = repository?.BaseBranch ?? global.BaseBranch ?? embeddedDefaults.BaseBranch,
             MaxActiveSpecsPerRepo = repository?.MaxActiveSpecsPerRepo ?? global.MaxActiveSpecsPerRepo ?? embeddedDefaults.MaxActiveSpecsPerRepo,
-            SpecDependencyMode = repository?.SpecDependencyMode ?? global.SpecDependencyMode ?? embeddedDefaults.SpecDependencyMode,
             // Global-only: a repository row never raises or lowers the process-wide implementer cap.
             MaxConcurrentImplementersGlobal = global.MaxConcurrentImplementersGlobal ?? embeddedDefaults.MaxConcurrentImplementersGlobal,
             MaxConcurrentImplementersPerRepo = repository?.MaxConcurrentImplementersPerRepo ?? global.MaxConcurrentImplementersPerRepo ?? embeddedDefaults.MaxConcurrentImplementersPerRepo,

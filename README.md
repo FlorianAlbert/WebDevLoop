@@ -144,8 +144,8 @@ section; `src/WebDevLoop.Web/appsettings.json` lists them with their defaults.
 | `AgentLogs:MaxEntriesPerStep`, `BatchSize`, `FlushInterval`, `PageSize` | `5000`, `50`, `00:00:01`, `1000` | Persisted live agent logs |
 
 Workflow behaviour is edited in the app (Settings page or `/api/settings`) and stored in the database: global values with
-nullable per-repository overrides for Models, Reasoning Effort, prompt templates, timeouts, the active-spec limit, the
-dependency mode (`WaitForMerge`/`StackOnTop`), implementer concurrency, review/retry/cycle limits, tester run
+nullable per-repository overrides for Models, Reasoning Effort, prompt templates, timeouts, the active-spec limit,
+implementer concurrency, review/retry/cycle limits, tester run
 instructions, the test port range, and the Troubleshooter switch and attempt limit. The global settings are seeded from the embedded defaults
 (including the prompt templates) on first start. The workspace root and the Copilot home are global-only and startup-scoped:
 they configure process-wide resources (the git workspace confines every clone and worktree path to the root it started
@@ -204,6 +204,18 @@ The API lives under `/api`; the OpenAPI document is served at `/openapi/v1.json`
 | `GET /api/ticket-runs/{id}` and `…/steps`, `GET /api/steps/{id}` and `…/logs` | Ticket and agent step details, persisted agent logs |
 | `POST /api/spec-runs/{id}/retry`, `…/abort`; `POST /api/ticket-runs/{id}/retry`, `…/abort` | Run controls (see below) |
 | `GET /api/events/stream`, `GET /api/spec-runs/{id}/events/stream` | Live updates as server-sent events |
+
+### Parent blockers
+
+Each scheduling decision re-reads the parent issue and its current native GitHub blockers. Every open blocker holds
+the spec, including issues outside the spec or repository, regardless of opt-in or completed WebDevLoop runs.
+Unavailable issues defer only the affected spec with an actionable, run-specific queue-recovery error; normal recovery
+retries the decision while independent queued specs can still start. Queue and run pages retain local data and show
+**Blockers unavailable** rather than treating unknown state as no blockers.
+Once every blocker is closed (or its relationship removed), a new spec starts from current trunk even if a blocker's
+pull request is unmerged. Closing that issue before merging accepts that its changes may not be on trunk.
+Queue order cannot bypass blockers. Cross-spec stacking is not supported or configurable; ticket PR stacks within
+each spec remain unchanged.
 
 ### Repository label consent
 

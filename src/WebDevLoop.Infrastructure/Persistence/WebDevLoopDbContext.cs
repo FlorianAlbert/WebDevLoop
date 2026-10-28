@@ -9,7 +9,6 @@ public sealed class WebDevLoopDbContext(DbContextOptions<WebDevLoopDbContext> op
 
     public DbSet<SpecRun> SpecRuns => Set<SpecRun>();
 
-    public DbSet<SpecDependency> SpecDependencies => Set<SpecDependency>();
 
     public DbSet<TicketRun> TicketRuns => Set<TicketRun>();
 

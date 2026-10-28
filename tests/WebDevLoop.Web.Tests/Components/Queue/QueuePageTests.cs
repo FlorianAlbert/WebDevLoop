@@ -21,8 +21,8 @@ public sealed class QueuePageTests : UiTestContext
         Selection.Select(1);
     }
 
-    private static SpecRunView Run(string id, SpecRunStatus status, int position, int repositoryId = 1, int issue = 10, SpecDependencyMode? mode = null, string? failure = null) =>
-        ApiData.SpecRun(id, repositoryId, status, position) with { ParentIssueNumber = issue, Title = $"Spec {issue}", DependencyModeUsed = mode, FailureReason = failure };
+    private static SpecRunView Run(string id, SpecRunStatus status, int position, int repositoryId = 1, int issue = 10, string? failure = null) =>
+        ApiData.SpecRun(id, repositoryId, status, position) with { ParentIssueNumber = issue, Title = $"Spec {issue}", FailureReason = failure };
 
     [Fact]
     public void asks_to_pick_a_repository_when_none_is_selected()
@@ -60,28 +60,27 @@ public sealed class QueuePageTests : UiTestContext
     }
 
     [Fact]
-    public void dependent_spec_waits_under_wait_for_merge()
+    public void dependent_spec_waits_for_closed_native_blockers_without_a_dependency_mode()
     {
-        Runs.SpecRuns.Add(Run("r-dep", SpecRunStatus.WaitingForDependency, 2, mode: SpecDependencyMode.WaitForMerge));
+        Runs.SpecRuns.Add(Run("r-dep", SpecRunStatus.WaitingForDependency, 2));
 
         IRenderedComponent<QueuePage> cut = Render<QueuePage>();
 
         var row = cut.Find("[data-lane=Waiting] [data-run-id=r-dep]");
         Assert.Contains("Waiting for dependency", row.TextContent);
-        Assert.Contains("Mode: Wait for merge", row.TextContent);
-        Assert.Contains("merged", row.TextContent);
-        Assert.Equal("Mode: Wait for merge", cut.Find("[data-testid=dependency-mode]").TextContent.Trim());
+        Assert.Contains("Waiting for all native GitHub blockers to close", row.TextContent);
+        Assert.Empty(cut.FindAll("[data-testid=dependency-mode]"));
     }
 
     [Fact]
-    public void waiting_note_names_the_blocking_specs_that_are_not_merged_yet()
+    public void waiting_note_names_the_current_native_parent_blockers_that_are_not_closed()
     {
-        Runs.SpecRuns.Add(Run("r-dep", SpecRunStatus.WaitingForDependency, 3, mode: SpecDependencyMode.WaitForMerge));
-        Runs.Dependencies["r-dep"] =
+        Runs.SpecRuns.Add(Run("r-dep", SpecRunStatus.WaitingForDependency, 3));
+        Runs.Blockers["r-dep"] =
         [
-            new SpecDependencyView("r-a", "acme/widgets#12", 12, "Foundations", SpecRunStatus.Running, false),
-            new SpecDependencyView(null, "acme/widgets#5", 5, null, null, false),
-            new SpecDependencyView("r-b", "acme/widgets#9", 9, "Done", SpecRunStatus.Completed, true),
+            new ParentBlockerView("r-a", "acme/widgets#12", 12, "Foundations", SpecRunStatus.Running, false),
+            new ParentBlockerView(null, "acme/widgets#5", 5, null, null, false),
+            new ParentBlockerView("r-b", "acme/widgets#9", 9, "Done", SpecRunStatus.Completed, true),
         ];
 
         IRenderedComponent<QueuePage> cut = Render<QueuePage>();
@@ -93,14 +92,28 @@ public sealed class QueuePageTests : UiTestContext
     }
 
     [Fact]
-    public void waiting_run_without_recorded_mode_falls_back_to_the_effective_dependency_mode()
+    public void unavailable_blockers_show_a_warning_without_hiding_the_queue()
     {
-        Settings.EffectiveResult = CommandResult<EffectiveSettingsView>.Succeeded(Effective(mode: SpecDependencyMode.StackOnTop));
+        Runs.SpecRuns.Add(Run("r-dep", SpecRunStatus.Queued, 1));
+        Runs.BlockerErrors["r-dep"] = "Blockers unavailable: check issue access and refresh.";
+
+        var cut = Render<QueuePage>();
+
+        Assert.Contains("Spec 10", cut.Find("[data-run-id=r-dep]").TextContent);
+        Assert.Contains("Blockers unavailable", cut.Find("[data-testid=run-note-r-dep]").TextContent);
+        Assert.DoesNotContain("Could not load the queue", cut.Markup);
+        Assert.NotEmpty(cut.FindAll("form"));
+    }
+
+    [Fact]
+    public void queue_does_not_offer_cross_spec_stacking()
+    {
         Runs.SpecRuns.Add(Run("r-dep", SpecRunStatus.WaitingForDependency, 2));
 
         IRenderedComponent<QueuePage> cut = Render<QueuePage>();
 
-        Assert.Contains("Stack on top", cut.Find("[data-run-id=r-dep]").TextContent);
+        Assert.DoesNotContain("Stack on top", cut.Markup);
+        Assert.DoesNotContain("Wait for merge", cut.Markup);
     }
 
     [Fact]

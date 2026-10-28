@@ -24,7 +24,6 @@ public sealed class InMemoryWorkflowStore :
 {
     private readonly List<RepositoryRecord> _repositories = [];
     private readonly List<SpecRun> _specRuns = [];
-    private readonly List<SpecDependency> _specDependencies = [];
     private readonly List<TicketRun> _ticketRuns = [];
     private readonly List<TicketDependency> _ticketDependencies = [];
     private readonly List<StepRun> _steps = [];
@@ -85,15 +84,10 @@ public sealed class InMemoryWorkflowStore :
     public Task<IReadOnlyList<SpecRun>> ListNonTerminalAsync(CancellationToken cancellationToken) =>
         List(_specRuns.Where(run => !run.IsTerminal));
 
-    Task<IReadOnlyList<SpecDependency>> ISpecRunRepository.ListDependenciesAsync(RunId blockedSpecRunId, CancellationToken cancellationToken) =>
-        List(_specDependencies.Where(dependency => dependency.BlockedSpecRunId == blockedSpecRunId));
-
     public Task<SpecRunStatus?> GetCommittedStatusAsync(RunId id, CancellationToken cancellationToken) =>
         Task.FromResult(_specRuns.FirstOrDefault(run => run.Id == id)?.Status);
 
     public void Add(SpecRun specRun) => _specRuns.Add(specRun);
-
-    public void AddDependency(SpecDependency dependency) => _specDependencies.Add(dependency);
 
     public Task<TicketRun?> GetAsync(TicketRunId id, CancellationToken cancellationToken) =>
         Task.FromResult(_ticketRuns.FirstOrDefault(ticket => ticket.Id == id));

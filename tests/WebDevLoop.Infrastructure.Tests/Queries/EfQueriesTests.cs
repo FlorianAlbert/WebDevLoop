@@ -1,11 +1,15 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Orchestration.SpecQueue;
+using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Queries;
 using WebDevLoop.Infrastructure.Queries;
 using WebDevLoop.Infrastructure.Tests.Persistence;
+using WebDevLoop.Infrastructure.Tests.GitHub.Issues;
+using static WebDevLoop.Infrastructure.Tests.GitHub.Issues.FakeIssuesApiHandler;
 
 namespace WebDevLoop.Infrastructure.Tests.Queries;
 
-public sealed class EfQueriesTests : IDisposable
+public sealed class EfQueriesTests : GitHubIssuesTestBase, IDisposable
 {
     private static readonly CommitSha LayerSha = new(new string('c', 40));
 
@@ -131,8 +135,90 @@ public sealed class EfQueriesTests : IDisposable
         Assert.Empty(read.Context.ChangeTracker.Entries());
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task unavailable_github_does_not_break_the_run_read_model(bool parentUnavailable)
+    {
+        (_, RunId runId) = await TestData.SeedSpecRunAsync(_harness, "run-1");
+        if (!parentUnavailable)
+        {
+            Api.Get(IssuePath(10), Issue(10, 100));
+            Api.Get(BlockedByPath(10), new[] { Issue(7, 70) });
+        }
+
+        int unavailable = parentUnavailable ? 10 : 7;
+        Api.Respond(HttpMethod.Get, IssuePath(unavailable), System.Net.HttpStatusCode.ServiceUnavailable, new { message = "GitHub unavailable" });
+        using PersistenceScope read = _harness.OpenScope();
+        var queries = new EfRunQueries(read.Context);
+        var blockers = new ParentBlockerQueries(queries, new EfRepositoryQueries(read.Context), CreateSut());
+
+        ParentBlockersView result = await blockers.GetBlockersAsync(runId, CancellationToken.None);
+
+        Assert.Contains("Blockers unavailable for acme/widgets#10", result.UnavailableReason);
+        Assert.Contains("Check issue access", result.UnavailableReason);
+        Assert.Contains($"could not read acme/widgets#{unavailable}", result.UnavailableReason);
+        Assert.NotNull(await queries.GetSpecRunAsync(runId, CancellationToken.None));
+
+        var gate = new SpecDependencyGate(CreateSut());
+        GitHubIssuesException schedulingError = await Assert.ThrowsAsync<GitHubIssuesException>(() =>
+            gate.EvaluateAsync(TestData.NewSpecRun(1, runId.Value), CancellationToken.None));
+
+        Assert.Contains(schedulingError.Message, result.UnavailableReason);
+    }
+
     [Fact]
-    public async Task spec_dependencies_show_each_blocking_spec_with_its_status_and_whether_it_is_merged()
+    public async Task blocker_enrichment_is_scoped_deduplicated_and_isolates_failures_from_other_runs()
+    {
+        (int repositoryId, RunId runId) = await TestData.SeedSpecRunAsync(_harness, "run-1");
+        using (PersistenceScope write = _harness.OpenScope())
+        {
+            write.SpecRuns.Add(TestData.NewSpecRun(repositoryId, "run-2", issueNumber: 20, queuePosition: 2));
+            SpecRun finished = TestData.NewSpecRun(repositoryId, "run-finished", issueNumber: 30, queuePosition: 3);
+            finished.TransitionTo(SpecRunStatus.Aborted, TestData.Now);
+            write.SpecRuns.Add(finished);
+            write.SpecRuns.Add(TestData.NewSpecRun(repositoryId, "run-unavailable", issueNumber: 40, queuePosition: 4));
+            await write.SaveAsync();
+        }
+
+        foreach (int number in new[] { 10, 20 })
+        {
+            Api.Get(IssuePath(number), Issue(number, number * 10));
+            Api.Get(BlockedByPath(number), new[] { Issue(7, 70, repo: "other") });
+        }
+
+        const string externalPath = "/repos/acme/other/issues/7";
+        Api.Get(externalPath, Issue(7, 70, state: "closed", repo: "other"));
+        Api.Get($"{externalPath}/dependencies/blocked_by", Array.Empty<object>());
+        using PersistenceScope read = _harness.OpenScope();
+        var queries = new ParentBlockerQueries(new EfRunQueries(read.Context), new EfRepositoryQueries(read.Context), CreateSut());
+
+        ParentBlockersView detail = await queries.GetBlockersAsync(runId, CancellationToken.None);
+
+        Assert.True(Assert.Single(detail.Blockers).IsSatisfied);
+        Assert.Null(detail.UnavailableReason);
+        Assert.DoesNotContain(Api.Requests, request => request.Path is "/repos/acme/widgets/issues/20" or "/repos/acme/widgets/issues/30" or "/repos/acme/widgets/issues/40");
+        Api.Requests.Clear();
+
+        IReadOnlyDictionary<string, ParentBlockersView> queue = await queries.ListBlockersAsync(repositoryId, CancellationToken.None);
+
+        Assert.True(Assert.Single(queue["run-1"].Blockers).IsSatisfied);
+        Assert.True(Assert.Single(queue["run-2"].Blockers).IsSatisfied);
+        Assert.Contains("could not read acme/widgets#40", queue["run-unavailable"].UnavailableReason);
+        Assert.False(queue.ContainsKey("run-finished"));
+        Assert.Single(Api.RequestsTo(HttpMethod.Get, externalPath));
+        Assert.DoesNotContain(Api.Requests, request => request.Path == IssuePath(30));
+
+        Api.Requests.Clear();
+        ParentBlockersView terminal = await queries.GetBlockersAsync(new RunId("run-finished"), CancellationToken.None);
+        Assert.False(terminal.Evaluated);
+        Assert.Empty(Api.Requests);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task blocker_presentation_and_scheduling_agree_independently_of_tracked_run_status(bool allClosed)
     {
         (int repositoryId, _) = await TestData.SeedSpecRunAsync(_harness, "run-1");
         using (PersistenceScope write = _harness.OpenScope())
@@ -152,28 +238,38 @@ public sealed class EfQueriesTests : IDisposable
 
             write.SpecRuns.Add(blocked);
             write.SpecRuns.Add(merged);
-            write.SpecRuns.AddDependency(SpecDependency.OnSpecRun(blocked.Id, running.Id, SpecDependencyMode.WaitForMerge));
-            write.SpecRuns.AddDependency(SpecDependency.OnExternalIssue(blocked.Id, new IssueRef("acme", "widgets", 30), SpecDependencyMode.WaitForMerge));
-            write.SpecRuns.AddDependency(SpecDependency.OnExternalIssue(blocked.Id, new IssueRef("acme", "widgets", 5), SpecDependencyMode.WaitForMerge));
             await write.SaveAsync();
         }
 
         using PersistenceScope read = _harness.OpenScope();
-        var queries = new EfRunQueries(read.Context);
+        Api.Get(IssuePath(20), Issue(20, 200));
+        Api.Get(BlockedByPath(20), new[] { Issue(10, 100), Issue(30, 300), Issue(6, 600) });
+        foreach (int number in new[] { 10, 30, 6 })
+        {
+            Api.Get(IssuePath(number), Issue(number, number * 10, "Spec title", state: number == 10 || allClosed ? "closed" : "open"));
+            Api.Get(BlockedByPath(number), Array.Empty<object>());
+        }
 
-        IReadOnlyList<SpecDependencyView> dependencies = await queries.ListSpecDependenciesAsync(new RunId("run-2"), CancellationToken.None);
-        IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>> byRun = await queries.ListSpecDependenciesForRepositoryAsync(repositoryId, CancellationToken.None);
+        var queries = new ParentBlockerQueries(new EfRunQueries(read.Context), new EfRepositoryQueries(read.Context), CreateSut());
+
+        ParentBlockersView blockers = await queries.GetBlockersAsync(new RunId("run-2"), CancellationToken.None);
+        IReadOnlyDictionary<string, ParentBlockersView> byRun = await queries.ListBlockersAsync(repositoryId, CancellationToken.None);
 
         Assert.Equal(
             [
-                new SpecDependencyView("run-1", "acme/widgets#10", 10, "Spec title", SpecRunStatus.Running, false),
-                new SpecDependencyView("run-3", "acme/widgets#30", 30, "Spec title", SpecRunStatus.Completed, true),
-                new SpecDependencyView(null, "acme/widgets#5", 5, null, null, false),
+                new ParentBlockerView("run-1", "acme/widgets#10", 10, "Spec title", SpecRunStatus.Running, true),
+                new ParentBlockerView("run-3", "acme/widgets#30", 30, "Spec title", SpecRunStatus.Completed, allClosed),
+                new ParentBlockerView(null, "acme/widgets#6", 6, "Spec title", null, allClosed),
             ],
-            dependencies);
-        Assert.Equal(dependencies, byRun["run-2"]);
-        Assert.Single(byRun);
-        Assert.Empty(await queries.ListSpecDependenciesAsync(new RunId("run-1"), CancellationToken.None));
+            blockers.Blockers);
+        Assert.Equal(blockers.Blockers, byRun["run-2"].Blockers);
+        Assert.Equal(2, byRun.Count);
+        Assert.False(byRun.ContainsKey("run-3"));
+        Assert.Empty((await queries.GetBlockersAsync(new RunId("run-1"), CancellationToken.None)).Blockers);
+        var gate = new SpecDependencyGate(CreateSut());
+        SpecStartDecision decision = await gate.EvaluateAsync(
+            TestData.NewSpecRun(repositoryId, "run-2", issueNumber: 20), CancellationToken.None);
+        Assert.Equal(allClosed ? SpecStartKind.FromTrunk : SpecStartKind.Wait, decision.Kind);
         Assert.Empty(read.Context.ChangeTracker.Entries());
     }
 

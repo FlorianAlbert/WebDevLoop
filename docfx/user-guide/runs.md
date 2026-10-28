@@ -20,8 +20,7 @@ Under the title you see:
 
 - the status, for example **Needs attention** or **Running**,
 - **Spec issue #N**: the GitHub issue,
-- **Queue position**,
-- **Mode**: the dependency mode used by this run (shown when it is known).
+- **Queue position**.
 
 ### Run statuses
 
@@ -64,9 +63,13 @@ When the run needs attention, a yellow **Action needed** card is shown at the to
 | Cycles | How often the parent review and the tester have run. The limits are in [Settings](settings.md#concurrency-review-and-retries). |
 | Created | When the run was queued. |
 
-## Blocked by specs
+## Native parent blockers
 
-Lists other specs that block this one, with their status and whether they are **merged** or **waiting**. It says "Not blocked by any spec" when there are none. A blocker that WebDevLoop does not track is shown as "not tracked by this app". The blockers come from the "blocked by" links of the spec issue on GitHub.
+Lists current native GitHub blockers, including external and cross-repository issues, and whether their issues are
+**closed** or **open; waiting**. A tracked run's status is shown separately: completion does not close an open blocker.
+An untracked issue is shown as "not tracked by this app". It says "No native parent blockers" when there are none.
+If GitHub cannot verify the parent or a blocker, the panel instead says **Blockers unavailable** with access and refresh
+guidance. Local run details remain available. Finished runs do not re-query current GitHub blockers.
 
 ## Tickets and the DAG
 

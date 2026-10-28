@@ -24,6 +24,34 @@ public sealed class SpecQueueRecomputationTests
 
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task unavailable_parent_or_blocker_is_an_actionable_recoverable_queue_fault(bool missingParent)
+    {
+        _fixture.SeedSpec(1, 7);
+        _fixture.SeedSpec(7);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        _fixture.Issues.RemoveIssue(SpecWorkflowFixture.Issue(missingParent ? 1 : 7));
+
+        QueueRecomputationReport deferred = await Recomputation().RecomputeAsync(Token);
+
+        Assert.Contains("Check issue access", Assert.Single(deferred.Faults).Error);
+        Assert.Contains(run.Id.Value, Assert.Single(deferred.Faults).Error);
+        Assert.Equal(run.Id, Assert.Single(Assert.Single(deferred.Repositories).Schedule.Faults).SpecRunId);
+        Assert.Equal(SpecRunStatus.WaitingForDependency, run.Status);
+        Assert.Null(run.MaxActiveSpecsSlot);
+        _fixture.SeedSpec(1, 7);
+        _fixture.SeedSpec(7);
+        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(7), IssueCloseReason.Completed, Token);
+
+        QueueRecomputationReport recovered = await Recomputation().RecomputeAsync(Token);
+
+        Assert.Empty(recovered.Faults);
+        Assert.Equal([run.Id], Assert.Single(recovered.Repositories).Schedule.Activated);
+    }
+
     [Fact]
     public async Task recomputation_schedules_the_queue_of_every_enabled_repository_and_skips_disabled_ones()
     {

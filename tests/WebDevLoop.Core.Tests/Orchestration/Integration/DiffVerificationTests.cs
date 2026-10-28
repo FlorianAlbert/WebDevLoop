@@ -42,14 +42,14 @@ public sealed class DiffVerificationTests
     }
 
     [Fact]
-    public async Task Stack_on_top_layer_without_a_published_blocking_layer_fails_verification_instead_of_showing_the_blockers_changes()
+    public async Task Spec_whose_integration_base_is_not_an_ancestor_of_its_bottom_layer_base_fails_diff_verification()
     {
-        SpecRun blocker = _f.SeedRunningSpec();
-        TicketRun blockerTicket = _f.SeedReviewedTicket(blocker, 1, "blocker.cs");
-        await _f.IntegrateAsync(blockerTicket);
-        // The dependent run started on the blocker's tip, but nothing links it to the blocking spec, so its base falls back to trunk.
-        SpecRun dependent = _f.SeedRunningSpec(blocker.IntegrationTipSha, SpecDependencyMode.StackOnTop);
-        TicketRun ticket = _f.SeedReviewedTicket(dependent, 2, "dependent.cs");
+        SpecRun foreign = _f.SeedRunningSpec();
+        TicketRun foreignTicket = _f.SeedReviewedTicket(foreign, 1, "foreign.cs");
+        await _f.IntegrateAsync(foreignTicket);
+        // An invalid integration base ahead of trunk would expose foreign changes in the bottom layer's diff.
+        SpecRun spec = _f.SeedRunningSpec(foreign.IntegrationTipSha);
+        TicketRun ticket = _f.SeedReviewedTicket(spec, 2, "ticket.cs");
 
         IntegrationResult result = await _f.IntegrateAsync(ticket);
 

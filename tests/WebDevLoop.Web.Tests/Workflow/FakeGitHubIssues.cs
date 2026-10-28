@@ -19,6 +19,8 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public Exception? IssueReadFailure { get; set; }
 
+    public IssueRef? UnavailableIssue { get; set; }
+
     public Exception? SubIssueReadFailure { get; set; }
 
     public Exception? FindingCreationFailure { get; set; }
@@ -52,6 +54,14 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
         lock (_gate)
         {
             return _issues[Key(Ref(number))].State;
+        }
+    }
+
+    public void SeedExternal(IssueRef issue, string title)
+    {
+        lock (_gate)
+        {
+            _issues[Key(issue)] = new IssueSnapshot(issue, title, title, IssueState.Open, []);
         }
     }
 
@@ -114,6 +124,11 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken)
     {
+        if (issue == UnavailableIssue)
+        {
+            throw new GitHubIssuesException($"GitHub issue {issue} is unavailable.");
+        }
+
         if (IssueReadFailure is { } failure)
         {
             throw failure;

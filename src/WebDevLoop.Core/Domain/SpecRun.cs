@@ -30,7 +30,6 @@ public sealed class SpecRun : VersionedEntity
 
     public CommitSha? IntegrationTipSha { get; set; }
 
-    public SpecDependencyMode? DependencyModeUsed { get; set; }
 
     public int? MaxActiveSpecsSlot { get; set; }
 

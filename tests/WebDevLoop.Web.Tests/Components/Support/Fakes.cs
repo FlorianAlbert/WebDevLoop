@@ -11,7 +11,7 @@ using WebDevLoop.Web.Tests.Api;
 
 namespace WebDevLoop.Web.Tests.Components.Support;
 
-internal sealed class FakeRunQueries : IRunQueries
+internal sealed class FakeRunQueries : IRunQueries, IParentBlockerQueries
 {
     public List<SpecRunView> Specs { get; } = [];
 
@@ -23,7 +23,8 @@ internal sealed class FakeRunQueries : IRunQueries
 
     public List<StackLayerView> Stack { get; } = [];
 
-    public Dictionary<string, List<SpecDependencyView>> Dependencies { get; } = [];
+    public Dictionary<string, List<ParentBlockerView>> Blockers { get; } = [];
+    public Dictionary<string, string> BlockerErrors { get; } = [];
 
     /// <summary>Latest saga per ticket run id.</summary>
     public Dictionary<string, IntegrationSagaView> Sagas { get; } = [];
@@ -55,13 +56,13 @@ internal sealed class FakeRunQueries : IRunQueries
     public Task<IReadOnlyList<StackLayerView>> ListStackAsync(RunId specRunId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<StackLayerView>>(Stack.ToList());
 
-    public Task<IReadOnlyList<SpecDependencyView>> ListSpecDependenciesAsync(RunId specRunId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<SpecDependencyView>>(Dependencies.GetValueOrDefault(specRunId.Value) ?? []);
+    public Task<ParentBlockersView> GetBlockersAsync(RunId specRunId, CancellationToken cancellationToken) =>
+        Task.FromResult(new ParentBlockersView(Blockers.GetValueOrDefault(specRunId.Value) ?? [], BlockerErrors.GetValueOrDefault(specRunId.Value)));
 
-    public Task<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>> ListSpecDependenciesForRepositoryAsync(int repositoryId, CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>>(
-            Dependencies.Where(entry => Specs.Any(spec => spec.Id == entry.Key && spec.RepositoryId == repositoryId))
-                .ToDictionary(entry => entry.Key, entry => (IReadOnlyList<SpecDependencyView>)entry.Value));
+    public Task<IReadOnlyDictionary<string, ParentBlockersView>> ListBlockersAsync(int repositoryId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyDictionary<string, ParentBlockersView>>(
+            Specs.Where(spec => spec.RepositoryId == repositoryId)
+                .ToDictionary(spec => spec.Id, spec => new ParentBlockersView(Blockers.GetValueOrDefault(spec.Id) ?? [], BlockerErrors.GetValueOrDefault(spec.Id))));
 
     public Task<IntegrationSagaView?> GetLatestSagaAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) =>
         Task.FromResult(Sagas.GetValueOrDefault(ticketRunId.Value));
@@ -181,7 +182,7 @@ internal sealed class FakeSettingsManager : ISettingsManager
 
     public Task<CommandResult<EffectiveSettingsView>> GetEffectiveAsync(int repositoryId, CancellationToken cancellationToken) =>
         Task.FromResult(CommandResult<EffectiveSettingsView>.Succeeded(new EffectiveSettingsView(
-            "/ws", "/copilot", "main", 1, SpecDependencyMode.WaitForMerge, 2, 1, 3, 2, 2, 2, "run it", new PortRangeData(5000, 5010), Roles, true, 2)));
+            "/ws", "/copilot", "main", 1, 2, 1, 3, 2, 2, 2, "run it", new PortRangeData(5000, 5010), Roles, true, 2)));
 
     public Task<SettingsProfileData> GetGlobalAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
 
@@ -201,6 +202,7 @@ internal sealed class RunDetailHarness : BunitContext
         Settings = new FakeSettingsManager();
         Bus = Events.NewBus();
         Services.AddSingleton<IRunQueries>(Queries);
+        Services.AddSingleton<IParentBlockerQueries>(Queries);
         Services.AddSingleton<IAgentLogReader>(Logs);
         Services.AddSingleton<IAgentLogNotifications>(Logs);
         Services.AddSingleton<ISettingsManager>(Settings);

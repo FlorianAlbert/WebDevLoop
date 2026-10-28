@@ -19,7 +19,6 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
             global.CopilotBaseDirectory = "/copilot";
             global.BaseBranch = new BranchName("trunk");
             global.MaxActiveSpecsPerRepo = 2;
-            global.SpecDependencyMode = SpecDependencyMode.StackOnTop;
             global.MaxConcurrentImplementersGlobal = 4;
             global.MaxConcurrentImplementersPerRepo = 2;
             global.MaxReviewIterations = 3;
@@ -45,7 +44,6 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
         Assert.Equal("/copilot", loaded.CopilotBaseDirectory);
         Assert.Equal(new BranchName("trunk"), loaded.BaseBranch);
         Assert.Equal(2, loaded.MaxActiveSpecsPerRepo);
-        Assert.Equal(SpecDependencyMode.StackOnTop, loaded.SpecDependencyMode);
         Assert.Equal(4, loaded.MaxConcurrentImplementersGlobal);
         Assert.Equal(2, loaded.MaxConcurrentImplementersPerRepo);
         Assert.Equal(3, loaded.MaxReviewIterations);
@@ -91,7 +89,6 @@ public sealed class SettingsProfilePersistenceTests : IDisposable
         Assert.Null(loaded.WorkspaceRootDirectory);
         Assert.Null(loaded.BaseBranch);
         Assert.Null(loaded.MaxActiveSpecsPerRepo);
-        Assert.Null(loaded.SpecDependencyMode);
         Assert.Null(loaded.MaxReviewIterations);
         Assert.Null(loaded.TestPortRange);
         Assert.Equal(new RoleSettingsOverride(TimeoutSeconds: 60), loaded.Roles[AgentRole.Explorer]);

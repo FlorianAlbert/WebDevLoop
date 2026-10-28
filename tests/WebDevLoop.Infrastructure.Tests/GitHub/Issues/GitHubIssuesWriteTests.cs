@@ -135,7 +135,7 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
         ScriptRepoIssues(
             new { number = 9, id = 900L, node_id = "I_900", title = "A pull request", body = FindingFingerprintMarker.Render(fingerprint), state = "open", pull_request = new { url = "x" } },
             new { number = 6, id = 600L, node_id = "I_600", title = "Unrelated", body = "nothing", state = "open" },
-            new { number = 5, id = 500L, node_id = "I_500", title = "Orphan", body = $"Details\n\n{FindingFingerprintMarker.Render(fingerprint)}", state = "open" });
+            new { number = 5, id = 500L, node_id = "I_500", title = "Orphan", body = $"Details\n\n{FindingFingerprintMarker.Render(fingerprint)}", state = "open", labels = Array.Empty<object>() });
         Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(7, 700, "Duplicate"));
         Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
         Api.Get(BlockedByPath(5), Array.Empty<object>());

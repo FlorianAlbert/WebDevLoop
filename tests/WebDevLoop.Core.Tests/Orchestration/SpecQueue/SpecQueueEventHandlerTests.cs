@@ -8,6 +8,12 @@ public sealed class SpecQueueEventHandlerTests
 {
     private readonly SpecWorkflowFixture _fixture = new();
 
+    public SpecQueueEventHandlerTests()
+    {
+        _fixture.SeedTicket(11, spec: 1);
+        _fixture.SeedTicket(12, spec: 2);
+    }
+
     private SpecQueueEventHandler Handler => new(_fixture.Scheduler);
 
     [Fact]

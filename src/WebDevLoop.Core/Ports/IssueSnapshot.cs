@@ -8,4 +8,8 @@ public sealed record IssueSnapshot(
     string Title,
     string Body,
     IssueState State,
-    IReadOnlyList<IssueRef> BlockedBy);
+    IReadOnlyList<IssueRef> BlockedBy)
+{
+    /// <summary>Labels read from GitHub for this issue only; no labels means no WebDevLoop Opt-in.</summary>
+    public IReadOnlyList<string> Labels { get; init; } = [];
+}

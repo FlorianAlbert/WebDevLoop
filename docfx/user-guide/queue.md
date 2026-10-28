@@ -15,6 +15,10 @@ The Queue page shows every spec run of the current repository and lets you queue
 
 A spec is a GitHub issue with open sub-issues (the tickets). WebDevLoop does not create the tickets for you.
 
+Before queueing, the parent must be **open** and labeled **`webdevloop`** (WebDevLoop Opt-in), and at least one
+sub-issue must independently be **open** and labeled **`webdevloop`**. A parent's label does not opt in its children.
+Triage labels such as `ready-for-agent` do not authorize WebDevLoop. Eligible tickets may all be blocked.
+
 1. Select the repository in the sidebar.
 2. Enter the issue in **Queue parent spec issue**. You can type `123`, `#123` or the full issue URL.
 3. Click **Queue**.
@@ -27,11 +31,17 @@ A message tells you what happened:
 | #123 is already queued. | There already is a run for this issue. A link opens it. |
 | The queue changed at the same time; please try again. | Another change was faster. Click **Queue** again. |
 | Enter a positive issue number... | The text was not an issue number or URL. |
+| Parent spec #123 must be open. | Reopen the parent on GitHub before queueing. |
+| Parent spec #123 requires the 'webdevloop' label... | Opt the parent in on GitHub; labeled children cannot authorize the parent. |
+| Parent spec #123 needs at least one open sub-issue independently labeled 'webdevloop'. | Add or opt in an open child; the parent's label alone is not enough. |
+| Could not verify current GitHub eligibility for #123... | Nothing was queued. Check GitHub access or retry a temporary failure. |
 | Could not queue #123: ... | The issue could not be read, for example because it does not exist or the App cannot reach the repository. See [GitHub](github.md). |
 
 The form is disabled while WebDevLoop is in diagnostic-only mode. See [Health](health.md).
 
-WebDevLoop reads the sub-issues when the run starts, not when you queue it. If the spec has no open sub-issues, the run needs attention. Add the sub-issues on GitHub and press **Retry**. See [Needs attention](needs-attention.md).
+The form and direct API calls recheck current GitHub state and labels at submission, even if an issue was eligible
+when you first saw it. An ineligible spec or failed lookup creates no run. WebDevLoop reads the ticket graph again
+when the run starts; this enqueue check does not reserve a snapshot of the tickets.
 
 ## Slots and mode
 

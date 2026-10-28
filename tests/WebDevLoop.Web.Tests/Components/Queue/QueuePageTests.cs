@@ -165,9 +165,11 @@ public sealed class QueuePageTests : UiTestContext
     [InlineData(EnqueueOutcome.AlreadyQueued, "already queued")]
     [InlineData(EnqueueOutcome.RepositoryNotFound, "no longer exists")]
     [InlineData(EnqueueOutcome.ConcurrencyConflict, "try again")]
+    [InlineData(EnqueueOutcome.Ineligible, "Current issue is not eligible")]
+    [InlineData(EnqueueOutcome.GitHubUnavailable, "GitHub lookup failed")]
     public void explains_every_non_queued_outcome(EnqueueOutcome outcome, string expectedText)
     {
-        Enqueuer.Result = new EnqueueResult(outcome, outcome == EnqueueOutcome.AlreadyQueued ? new RunId("run-7") : null);
+        Enqueuer.Result = new EnqueueResult(outcome, outcome == EnqueueOutcome.AlreadyQueued ? new RunId("run-7") : null, expectedText);
         IRenderedComponent<QueuePage> cut = Render<QueuePage>();
 
         cut.Find("input[name=issueNumber]").Input("7");

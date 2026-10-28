@@ -167,7 +167,7 @@ Here `#3` depends on `#1` (done), so it is `Ready`; `#4` waits for `#2` and `#3`
 
 ## Queueing and the active-spec limit
 
-1. `POST /api/repos/{id}/spec-runs` (or the UI) calls <xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecQueueService>. It loads the spec issue, creates a `Queued` `SpecRun` with the next `QueuePosition`, mirrors GitHub "blocked by" relations as `SpecDependency` rows, and appends `SpecRunQueued`. A non-terminal run of the same issue gives `AlreadyQueued`.
+1. `POST /api/repos/{id}/spec-runs` (or the typed UI input) calls <xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecQueueService>. A non-terminal run of the same issue gives `AlreadyQueued`. Otherwise it fetches current GitHub state and labels: the parent must be open and labeled `webdevloop`, with at least one independently labeled open sub-issue. Triage labels do not authorize work; all eligible tickets may be blocked. Ineligibility or a GitHub lookup failure returns a clear reason without saving a run. On success it creates a `Queued` `SpecRun` with the next `QueuePosition`, mirrors GitHub "blocked by" relations as `SpecDependency` rows, and appends `SpecRunQueued`.
 2. <xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecQueueScheduler> runs on `SpecRunQueued`, on status changes that may free a slot, and in every recovery cycle. It visits queued specs in order:
    - blocked specs move to `WaitingForDependency` and do **not** hold up independent specs behind them;
    - startable specs take the lowest free slot (1..`MaxActiveSpecsPerRepo`) and move to `Preparing`. Each claim is one compare-and-swap save; the unique index on (repository, slot) makes a concurrent claim lose.

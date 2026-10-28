@@ -39,6 +39,12 @@ No. The sign-in is stored encrypted on your machine and renews itself. You only 
 
 ## Specs and queue
 
+**Why was my spec rejected before it appeared in the queue?**
+The parent must be open and labeled `webdevloop`, and at least one open sub-issue needs that label independently.
+Triage labels do not grant WebDevLoop Opt-in. Queueing checks current GitHub data, so a recent label removal or closure
+can make a previously eligible issue ineligible. A GitHub lookup failure also queues nothing: check access or retry.
+Eligible but blocked tickets do not prevent queueing. See [Queue](queue.md#queue-a-spec).
+
 **I queued a spec and it says "The spec has no open tickets to implement".**
 WebDevLoop does not split specs. Add the work as open sub-issues of the spec on GitHub, then press **Retry** on the run. See [Needs attention](needs-attention.md#the-spec-or-the-repository).
 

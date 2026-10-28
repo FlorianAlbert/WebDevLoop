@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Infrastructure.GitHub.Issues;
@@ -10,6 +11,87 @@ namespace WebDevLoop.Infrastructure.Tests.GitHub.Issues;
 public sealed class GitHubIssuesErrorTests : GitHubIssuesTestBase
 {
     private Task<IssueSnapshot> GetIssue() => CreateSut().GetIssueAsync(Ref(7), CancellationToken.None);
+
+    [Fact]
+    public async Task invalid_json_is_a_useful_github_failure()
+    {
+        Api.GetRaw(IssuePath(7), "{invalid");
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(GetIssue);
+
+        Assert.Equal(GitHubApiErrorKind.Invalid, error.Kind);
+        Assert.Contains("JSON", error.Message);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("""{"title":"Missing reference","state":"open","labels":[]}""")]
+    [InlineData("""{"number":7,"state":"open","labels":[]}""")]
+    public async Task incomplete_issue_responses_are_reported_instead_of_leaking_parser_errors(string json)
+    {
+        Api.GetRaw(IssuePath(7), json);
+        Api.Get(BlockedByPath(7), Array.Empty<object>());
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(GetIssue);
+
+        Assert.Equal(GitHubApiErrorKind.Invalid, error.Kind);
+        Assert.Contains("issue", error.Message);
+    }
+
+    [Fact]
+    public async Task an_unsafe_next_page_link_is_a_failure_not_a_partial_list()
+    {
+        Api.Get(SubIssuesPath(1), new[] { Issue(2, 200, labels: ["webdevloop"]) },
+            ("Link", "<https://other.example/issues?page=2>; rel=\"next\""));
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut().GetSubIssuesAsync(Ref(1), CancellationToken.None));
+
+        Assert.Equal(GitHubApiErrorKind.Invalid, error.Kind);
+        Assert.Single(Api.Requests);
+    }
+
+    [Theory]
+    [InlineData("""{"number":7,"title":"Title","state":"unknown","labels":[]}""", "state")]
+    [InlineData("""{"number":7,"title":"Title","labels":[]}""", "state")]
+    [InlineData("""{"number":7,"title":"Title","state":"open"}""", "labels")]
+    [InlineData("""{"number":7,"title":"Title","state":"open","labels":null}""", "labels")]
+    [InlineData("""{"number":7,"title":"Title","state":"open","labels":[{"name":null}]}""", "labels")]
+    public async Task incomplete_issue_permission_data_is_an_explicit_github_failure(string json, string field)
+    {
+        Api.Get(IssuePath(7), JsonSerializer.Deserialize<JsonElement>(json));
+        Api.Get(BlockedByPath(7), Array.Empty<object>());
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(GetIssue);
+
+        Assert.Equal(GitHubApiErrorKind.Invalid, error.Kind);
+        Assert.Contains(field, error.Message);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task a_failed_later_sub_issue_page_never_returns_a_partial_eligible_list(HttpStatusCode status)
+    {
+        Api.Get(SubIssuesPath(1) + "?per_page=100", new[] { Issue(2, 200, labels: ["webdevloop"]) },
+            ("Link", $"<https://api.github.com{SubIssuesPath(1)}?per_page=100&page=2>; rel=\"next\""));
+        Api.Respond(HttpMethod.Get, SubIssuesPath(1) + "?per_page=100&page=2", status, new { message = "Cannot read remaining tickets" });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut().GetSubIssuesAsync(Ref(1), CancellationToken.None));
+
+        Assert.Equal(status, error.StatusCode);
+        Assert.Contains("Cannot read remaining tickets", error.Message);
+    }
+
+    [Fact]
+    public async Task a_non_array_sub_issue_page_is_a_failure_not_an_empty_list()
+    {
+        Api.Get(SubIssuesPath(1), new { message = "Unexpected response" });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut().GetSubIssuesAsync(Ref(1), CancellationToken.None));
+
+        Assert.Equal(GitHubApiErrorKind.Invalid, error.Kind);
+    }
 
     [Theory]
     [InlineData(HttpStatusCode.InternalServerError, GitHubApiErrorKind.Transient, true)]

@@ -41,6 +41,8 @@ internal sealed class FindingIssueTracker : IGitHubIssues
 
     public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken) => throw new NotSupportedException();
 
+    public Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken) => throw new NotSupportedException();
+
     public Task<IssueSnapshot?> FindFindingIssueAsync(IssueRef specIssue, FindingFingerprint fingerprint, CancellationToken cancellationToken)
     {
         FindCalls++;

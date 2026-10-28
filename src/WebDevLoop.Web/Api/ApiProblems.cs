@@ -13,6 +13,9 @@ internal static class ApiProblems
 
     public static ProblemHttpResult Conflict(string detail) => TypedResults.Problem(detail, statusCode: StatusCodes.Status409Conflict, title: "Conflict");
 
+    public static ProblemHttpResult GitHubEligibilityFailed(string detail) => TypedResults.Problem(
+        detail, statusCode: StatusCodes.Status503ServiceUnavailable, title: "GitHub eligibility check failed");
+
     public static ProblemHttpResult BadRequest(string detail) => TypedResults.Problem(detail, statusCode: StatusCodes.Status400BadRequest, title: "Bad request");
 
     public static ValidationProblem Validation(IEnumerable<SettingsValidationError> errors) => TypedResults.ValidationProblem(

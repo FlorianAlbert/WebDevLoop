@@ -2,10 +2,16 @@ using WebDevLoop.Core.Domain;
 
 namespace WebDevLoop.Core.Ports;
 
-/// <summary>GitHub issue reads and mutations. Only the app calls this port; agents never mutate issues.</summary>
+/// <summary>
+/// GitHub issue reads and mutations. Reads return current state and labels or throw <see cref="GitHubIssuesException"/>;
+/// unavailable information must not be replaced with stale snapshots. Only the app calls this port; agents never mutate issues.
+/// </summary>
 public interface IGitHubIssues
 {
     Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken);
+
+    /// <summary>Current sub-issues across all pages, including closed issues; does not validate their dependency graph.</summary>
+    Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken);
 
     Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken);
 

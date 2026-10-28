@@ -16,6 +16,10 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public GitHubRepoRef Repository { get; }
 
+    public Exception? IssueReadFailure { get; set; }
+
+    public Exception? SubIssueReadFailure { get; set; }
+
     public IssueRef Ref(int number) => new(Repository.Owner, Repository.Name, number);
 
     /// <summary>Seeds an open issue, optionally as sub-issue of <paramref name="parent"/>, blocked by the given issues.</summary>
@@ -23,7 +27,10 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            _issues[number] = new IssueSnapshot(Ref(number), title, $"Implement {title}.", IssueState.Open, [.. blockedBy.Select(Ref)]);
+            _issues[number] = new IssueSnapshot(Ref(number), title, $"Implement {title}.", IssueState.Open, [.. blockedBy.Select(Ref)])
+            {
+                Labels = [WebDevLoopOptIn.Label],
+            };
             if (parent is { } parentNumber)
             {
                 SubIssuesOf(parentNumber).Add(number);
@@ -39,6 +46,14 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
         }
     }
 
+    public void SetLabels(int number, params string[] labels)
+    {
+        lock (_gate)
+        {
+            _issues[number] = _issues[number] with { Labels = labels };
+        }
+    }
+
     public IReadOnlyList<string> CommentsOn(int number)
     {
         lock (_gate)
@@ -49,6 +64,11 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken)
     {
+        if (IssueReadFailure is { } failure)
+        {
+            throw failure;
+        }
+
         lock (_gate)
         {
             return Task.FromResult(_issues[issue.Number]);
@@ -63,6 +83,16 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
             DependencyEdge<IssueRef>[] edges = [.. tickets.SelectMany(ticket => ticket.BlockedBy.Select(blocker => new DependencyEdge<IssueRef>(ticket.Ref, blocker)))];
             return Task.FromResult(new SpecIssueGraph(_issues[specIssue.Number], tickets, edges));
         }
+    }
+
+    public async Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken)
+    {
+        if (SubIssueReadFailure is { } failure)
+        {
+            throw failure;
+        }
+
+        return (await GetSpecGraphAsync(parent, cancellationToken)).Tickets;
     }
 
     public Task<IssueSnapshot?> FindFindingIssueAsync(IssueRef specIssue, FindingFingerprint fingerprint, CancellationToken cancellationToken)

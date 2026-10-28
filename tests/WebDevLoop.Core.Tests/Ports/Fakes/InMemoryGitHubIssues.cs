@@ -13,7 +13,10 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
 
     public IssueSnapshot Seed(IssueRef issue, string title, IssueRef? parent = null, params IssueRef[] blockedBy)
     {
-        var snapshot = new IssueSnapshot(issue, title, $"body of {title}", IssueState.Open, blockedBy);
+        var snapshot = new IssueSnapshot(issue, title, $"body of {title}", IssueState.Open, blockedBy)
+        {
+            Labels = [WebDevLoopOptIn.Label],
+        };
         _issues[issue.Number] = snapshot;
         if (parent is { } parentRef)
         {
@@ -34,6 +37,9 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
             .ToArray();
         return Task.FromResult(new SpecIssueGraph(_issues[specIssue.Number], tickets, edges));
     }
+
+    public async Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken) =>
+        (await GetSpecGraphAsync(parent, cancellationToken)).Tickets;
 
     public Task<IssueSnapshot?> FindFindingIssueAsync(IssueRef specIssue, FindingFingerprint fingerprint, CancellationToken cancellationToken) =>
         Task.FromResult(SubIssuesOf(specIssue)

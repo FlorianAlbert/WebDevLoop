@@ -9,6 +9,12 @@ public enum EnqueueOutcome
 
     RepositoryNotFound,
 
+    /// <summary>Current GitHub issue state or opt-in does not permit queueing this spec.</summary>
+    Ineligible,
+
+    /// <summary>Required current GitHub information could not be fetched; nothing was queued.</summary>
+    GitHubUnavailable,
+
     /// <summary>Another writer changed the queue first; nothing was saved and the caller may retry.</summary>
     ConcurrencyConflict,
 }

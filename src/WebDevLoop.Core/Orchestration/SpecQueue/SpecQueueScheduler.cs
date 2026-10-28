@@ -200,10 +200,7 @@ public sealed class SpecQueueScheduler(
 
     private async Task<bool> TrySaveTransitionAsync(SpecRun run, SpecRunStatus next, CancellationToken cancellationToken)
     {
-        SpecRunStatus previous = run.Status;
-        DateTimeOffset now = clock.UtcNow;
-        run.TransitionTo(next, now);
-        outbox.Append(new SpecRunStatusChanged(run.Id, run.RepositoryId, previous, next, now));
+        _journal.Move(run, next);
         return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved;
     }
 }

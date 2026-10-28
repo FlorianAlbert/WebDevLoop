@@ -9,7 +9,7 @@ public static class SpecRunStatusRules
             [SpecRunStatus.WaitingForDependency] = [SpecRunStatus.Preparing],
             [SpecRunStatus.Preparing] = [SpecRunStatus.Running],
             [SpecRunStatus.Running] = [SpecRunStatus.ParentReviewing, SpecRunStatus.Completed, SpecRunStatus.WaitingForTickets],
-            [SpecRunStatus.WaitingForTickets] = [SpecRunStatus.Running],
+            [SpecRunStatus.WaitingForTickets] = [SpecRunStatus.Running, SpecRunStatus.Completed],
             [SpecRunStatus.ParentReviewing] = [SpecRunStatus.Running, SpecRunStatus.Testing],
             // Testing -> Completed is the no-PR completion path.
             [SpecRunStatus.Testing] = [SpecRunStatus.Running, SpecRunStatus.ReadyForReview, SpecRunStatus.Completed],

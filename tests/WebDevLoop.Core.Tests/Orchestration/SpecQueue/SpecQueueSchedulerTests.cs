@@ -26,6 +26,122 @@ public sealed class SpecQueueSchedulerTests
         }
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task parked_parent_opt_out_completes_without_resuming_or_claiming_a_slot(bool closed, bool slotBusy)
+    {
+        IssueSnapshot parent = _fixture.SeedSpec(1);
+        _fixture.SeedSpec(7);
+        _fixture.Issues.SetBlockedBy(SpecWorkflowFixture.Issue(101), SpecWorkflowFixture.Issue(7));
+        SpecRun parked = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        await _fixture.PrepareAsync(parked);
+        parked.TransitionTo(SpecRunStatus.WaitingForTickets, _fixture.Clock.UtcNow);
+        CommitSha? originalTip = parked.IntegrationTipSha;
+        if (slotBusy)
+        {
+            _fixture.SeedSpec(2);
+            await _fixture.EnqueueAsync(2);
+            await _fixture.ScheduleAsync();
+        }
+        _fixture.Issues.Seed(closed ? parent with { State = IssueState.Closed } : parent with { Labels = [] });
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+
+        Assert.Empty(result.Activated);
+        Assert.DoesNotContain(parked.Id, result.Waiting);
+        Assert.Equal(SpecRunStatus.Completed, parked.Status);
+        Assert.Contains(closed ? "is closed" : "opted out of WebDevLoop", parked.WorkDecisionReason);
+        Assert.Null(parked.MaxActiveSpecsSlot);
+        Assert.Equal(_fixture.Clock.UtcNow, parked.CompletedAt);
+        Assert.Equal(originalTip, parked.IntegrationTipSha);
+        Assert.Equal(0, parked.ReviewCycle);
+        Assert.Equal(0, parked.TestCycle);
+        Assert.Single(_fixture.Store.PendingEvents.OfType<SpecRunStatusChanged>(),
+            changed => changed.SpecRunId == parked.Id && changed.From == SpecRunStatus.WaitingForTickets && changed.To == SpecRunStatus.Completed);
+        Assert.DoesNotContain(_fixture.Store.PendingEvents.OfType<SpecRunStatusChanged>(),
+            changed => changed.SpecRunId == parked.Id && changed.From == SpecRunStatus.WaitingForTickets && changed.To == SpecRunStatus.Running);
+
+        _fixture.Issues.Seed(parent);
+        Assert.Empty((await _fixture.ScheduleAsync()).Activated);
+        Assert.Equal(SpecRunStatus.Completed, parked.Status);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task parked_work_with_no_eligible_tickets_completes_without_a_slot_even_with_parent_blockers(
+        bool slotBusy, bool parentBlocked)
+    {
+        _fixture.SeedSpec(1);
+        _fixture.SeedSpec(7);
+        IssueSnapshot child = _fixture.SeedTicket(111, 1, 7);
+        _fixture.Issues.SetBlockedBy(SpecWorkflowFixture.Issue(101), SpecWorkflowFixture.Issue(7));
+        SpecRun parked = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        await _fixture.PrepareAsync(parked);
+        parked.TransitionTo(SpecRunStatus.WaitingForTickets, _fixture.Clock.UtcNow);
+        if (slotBusy)
+        {
+            _fixture.SeedSpec(2);
+            await _fixture.EnqueueAsync(2);
+            await _fixture.ScheduleAsync();
+        }
+        IssueSnapshot firstChild = await _fixture.Issues.GetIssueAsync(SpecWorkflowFixture.Issue(101), TestContext.Current.CancellationToken);
+        _fixture.Issues.Seed(firstChild with { Labels = [] });
+        _fixture.Issues.Seed(child with { Labels = [] });
+        if (parentBlocked)
+        {
+            _fixture.Issues.SetBlockedBy(parked.ParentIssue, SpecWorkflowFixture.Issue(7));
+        }
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+
+        Assert.Empty(result.Activated);
+        Assert.DoesNotContain(parked.Id, result.Waiting);
+        Assert.Equal(SpecRunStatus.Completed, parked.Status);
+        Assert.Contains("No eligible work remains and no tickets were integrated", parked.WorkDecisionReason);
+        Assert.Null(parked.MaxActiveSpecsSlot);
+        Assert.Equal(_fixture.Clock.UtcNow, parked.CompletedAt);
+        Assert.Equal(0, parked.ReviewCycle);
+        Assert.Equal(0, parked.TestCycle);
+        Assert.Single(_fixture.Store.PendingEvents.OfType<SpecRunStatusChanged>(),
+            changed => changed.SpecRunId == parked.Id && changed.From == SpecRunStatus.WaitingForTickets && changed.To == SpecRunStatus.Completed);
+        Assert.DoesNotContain(_fixture.Store.PendingEvents.OfType<SpecRunStatusChanged>(),
+            changed => changed.SpecRunId == parked.Id && changed.From == SpecRunStatus.WaitingForTickets && changed.To == SpecRunStatus.Running);
+
+        _fixture.Issues.Seed(child);
+        Assert.Empty((await _fixture.ScheduleAsync()).Activated);
+        Assert.Equal(SpecRunStatus.Completed, parked.Status);
+        Assert.NotEqual(parked.Id, (await _fixture.EnqueueAsync(1)).Id);
+    }
+
+    [Fact]
+    public async Task unknown_parent_eligibility_does_not_complete_a_parked_run_as_empty()
+    {
+        IssueSnapshot parent = _fixture.SeedSpec(1);
+        SpecRun parked = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        await _fixture.PrepareAsync(parked);
+        parked.TransitionTo(SpecRunStatus.WaitingForTickets, _fixture.Clock.UtcNow);
+        _fixture.Issues.RemoveIssue(parent.Ref);
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+
+        Assert.Empty(result.Activated);
+        Assert.Equal([parked.Id], result.Waiting);
+        Assert.Single(result.Faults);
+        Assert.Equal(SpecRunStatus.WaitingForTickets, parked.Status);
+        Assert.Contains("Could not verify current parent/sub-issue eligibility", parked.WorkDecisionReason);
+        Assert.Null(parked.CompletedAt);
+        Assert.Null(parked.MaxActiveSpecsSlot);
+    }
+
     [Fact]
     public async Task a_blocker_with_an_unrecognized_state_holds_the_spec_until_explicitly_closed()
     {

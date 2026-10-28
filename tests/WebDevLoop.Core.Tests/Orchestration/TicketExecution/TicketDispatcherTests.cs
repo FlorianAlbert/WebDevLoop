@@ -1,13 +1,44 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Completion;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.TicketExecution;
+using WebDevLoop.Core.Orchestration.WorkSelection;
+using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
 public sealed class TicketDispatcherTests
 {
     private readonly TicketExecutionFixture _fixture = new();
+
+    [Fact]
+    public async Task a_stale_dispatch_cannot_start_work_after_the_spec_released_its_active_slot()
+    {
+        SeededSpec seeded = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        await _fixture.MoveAsync(seeded[1], TicketRunStatus.Ready);
+        CasWorkflowScope stale = _fixture.Db.OpenScope();
+        SpecRun spec = (await stale.GetAsync(seeded.Id, TicketExecutionFixture.Token))!;
+        TicketRun ticket = (await stale.GetAsync(seeded[1], TicketExecutionFixture.Token))!;
+        var blocker = new IssueRef("elsewhere", "library", 900);
+        _fixture.Issues.Seed(blocker, "New blocker");
+        _fixture.Issues.SetBlockedBy(ticket.Issue, blocker);
+        CasWorkflowScope writer = _fixture.Db.OpenScope();
+        var completion = new WorkCompletionDecider(writer, writer, new CurrentWorkEligibility(_fixture.Issues),
+            writer, writer, _fixture.Clock, new RepositoryOptIn(_fixture.Labels));
+        Assert.Equal(WorkCompletionOutcome.Parked, (await completion.DecideCompletionAsync(spec.Id, TicketExecutionFixture.Token)).Outcome);
+        var dispatcher = new TicketDispatcher(_fixture.Settings, new ImplementerCapacity(stale), _fixture.Gate,
+            _fixture.Launcher, stale, stale, _fixture.Clock);
+
+        DispatchResult result = await dispatcher.DispatchAsync(spec, [ticket], TicketExecutionFixture.Token);
+
+        Assert.True(result.ConcurrencyConflict);
+        Assert.Empty(result.Dispatched);
+        Assert.Empty(_fixture.Launcher.Launched);
+        Assert.Equal(TicketRunStatus.Ready, _fixture.Ticket(ticket.Id).Status);
+        Assert.Equal(SpecRunStatus.WaitingForTickets, _fixture.Spec(spec.Id).Status);
+    }
 
     [Fact]
     public async Task claim_moves_the_ticket_to_implementing_with_a_run_scoped_worktree_path()

@@ -67,7 +67,7 @@ public sealed class AwaitingMergeRecoveryTests
             new WorktreeReconciler(store, store, f.Git),
             new IntegrationSagaReconciler(store, store, f.Pulls, saga, new RecordingIntegrationLauncher(), store, store, f.Clock, new ExternalReconciliationOptions()),
             f.Tracking());
-        var scheduler = new SpecQueueScheduler(store, store, f.Issues, f.Settings, store, store, f.Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()));
+        var scheduler = new SpecQueueScheduler(store, store, f.Issues, f.Settings, store, store, f.Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()), store);
         var noAgentWork = new RecoveryStageFakes();
         return new RecoveryCoordinator(
             external,

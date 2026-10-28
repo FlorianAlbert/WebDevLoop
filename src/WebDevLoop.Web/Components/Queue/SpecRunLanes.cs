@@ -7,7 +7,7 @@ public static class SpecRunLanes
     public static SpecRunLane For(SpecRunStatus status) => status switch
     {
         _ when status.IsActive() => SpecRunLane.Active,
-        SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency => SpecRunLane.Waiting,
+        SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency or SpecRunStatus.WaitingForTickets => SpecRunLane.Waiting,
         SpecRunStatus.ReadyForReview or SpecRunStatus.AwaitingMerge => SpecRunLane.AwaitingMerge,
         SpecRunStatus.NeedsAttention => SpecRunLane.NeedsAttention,
         _ => SpecRunLane.Completed,

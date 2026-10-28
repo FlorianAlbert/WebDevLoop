@@ -71,7 +71,7 @@ public sealed class CurrentOptInWorkflowTests
         var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
         int repository = await api.RegisterRepositoryAsync(scenario);
         string run = await api.EnqueueAsync(repository, 100);
-        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.Running));
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.WaitingForTickets));
 
         scenario.Issues.SetLabels(101);
         var finished = await api.WaitForStatusAsync(run, nameof(SpecRunStatus.Completed));

@@ -23,7 +23,7 @@ public sealed class TicketBlockerWorkflowTests
         var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
         int repository = await api.RegisterRepositoryAsync(scenario);
         string run = await api.EnqueueAsync(repository, 100);
-        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.Running));
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.WaitingForTickets));
 
         await ReconcileAsync(host, run);
 
@@ -50,7 +50,7 @@ public sealed class TicketBlockerWorkflowTests
         var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
         int repository = await api.RegisterRepositoryAsync(scenario);
         string run = await api.EnqueueAsync(repository, 100);
-        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.Running));
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.WaitingForTickets));
         await ReconcileAsync(host, run);
 
         scenario.Issues.SetBlockedBy(101, scenario.Issues.Ref(900), crossRepository);

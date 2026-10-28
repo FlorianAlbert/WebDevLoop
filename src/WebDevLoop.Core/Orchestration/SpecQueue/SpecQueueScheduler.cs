@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
 
@@ -13,6 +14,8 @@ namespace WebDevLoop.Core.Orchestration.SpecQueue;
 /// behind them, and startable specs claim a free active slot (1..<c>MaxActiveSpecsPerRepo</c>) and move to
 /// <see cref="SpecRunStatus.Preparing"/>. Each claim is saved separately with compare-and-swap; the persisted unique
 /// (repository, slot) index makes a concurrent claim of the same slot lose with <see cref="SaveOutcome.ConcurrencyConflict"/>.
+/// Parked <see cref="SpecRunStatus.WaitingForTickets"/> runs recheck current eligibility and blockers and claim a free slot
+/// to resume directly at <see cref="SpecRunStatus.Running"/>, without repeating preparation or preempting active work.
 /// </summary>
 public sealed class SpecQueueScheduler(
     IRepositoryRecordRepository repositories,
@@ -22,9 +25,11 @@ public sealed class SpecQueueScheduler(
     IOutbox outbox,
     IUnitOfWork unitOfWork,
     IClock clock,
-    RepositoryOptIn optIn)
+    RepositoryOptIn optIn,
+    ITicketRunRepository ticketRuns)
 {
     private readonly SpecDependencyGate _gate = new(issues);
+    private readonly CurrentWorkEligibility _eligibility = new(issues);
 
     public async Task<SpecScheduleResult> ScheduleRepositoryAsync(int repositoryId, CancellationToken cancellationToken)
     {
@@ -51,45 +56,83 @@ public sealed class SpecQueueScheduler(
 
         foreach (SpecRun run in queue.Where(IsWaitingToStart))
         {
-            SpecStartDecision decision;
-            try
-            {
-                decision = await _gate.EvaluateAsync(run, cancellationToken);
-            }
-            catch (GitHubIssuesException exception)
-            {
-                faults.Add(new SpecScheduleFault(run.Id, exception.Message));
-                continue;
-            }
-
-            if (decision.Kind == SpecStartKind.Wait)
-            {
-                waiting.Add(run.Id);
-                if (run.Status == SpecRunStatus.Queued
-                    && !await TrySaveTransitionAsync(run, SpecRunStatus.WaitingForDependency, cancellationToken))
-                {
-                    return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: true) { Faults = faults };
-                }
-
-                continue;
-            }
-
-            if (!freeSlots.TryDequeue(out int slot))
-            {
-                continue;
-            }
-
-            run.MaxActiveSpecsSlot = slot;
-            run.BaseBranch = effective.BaseBranch;
-            if (!await TrySaveTransitionAsync(run, SpecRunStatus.Preparing, cancellationToken))
+            SpecScheduleResult result = run.Status == SpecRunStatus.WaitingForTickets
+                ? await ScheduleResumeAsync(run, freeSlots, cancellationToken)
+                : await ScheduleStartAsync(run, freeSlots, effective.BaseBranch, cancellationToken);
+            activated.AddRange(result.Activated);
+            waiting.AddRange(result.Waiting);
+            faults.AddRange(result.Faults);
+            if (result.ConcurrencyConflict)
             {
                 return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: true) { Faults = faults };
             }
-
-            activated.Add(run.Id);
         }
 
         return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: false) { Faults = faults };
+    }
+
+    private async Task<SpecScheduleResult> ScheduleStartAsync(
+        SpecRun run, Queue<int> freeSlots, BranchName baseBranch, CancellationToken cancellationToken)
+    {
+        SpecStartDecision decision;
+        try
+        {
+            decision = await _gate.EvaluateAsync(run, cancellationToken);
+        }
+        catch (GitHubIssuesException exception)
+        {
+            return SpecScheduleResult.Nothing with { Faults = [new SpecScheduleFault(run.Id, exception.Message)] };
+        }
+
+        if (decision.Kind == SpecStartKind.Wait)
+        {
+            bool saved = run.Status != SpecRunStatus.Queued
+                || await TrySaveTransitionAsync(run, SpecRunStatus.WaitingForDependency, cancellationToken);
+            return new SpecScheduleResult([], [run.Id], ConcurrencyConflict: !saved);
+        }
+
+        if (!freeSlots.TryDequeue(out int slot))
+        {
+            return SpecScheduleResult.Nothing;
+        }
+
+        run.BaseBranch = baseBranch;
+        return await ClaimSlotAsync(run, slot, SpecRunStatus.Preparing, cancellationToken);
+    }
+
+    private async Task<SpecScheduleResult> ScheduleResumeAsync(
+        SpecRun run, Queue<int> freeSlots, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(run.Id, cancellationToken);
+        CurrentWork current = await _eligibility.ReadAsync(run, tickets, cancellationToken);
+        bool hasWork = current.Eligible.Count > 0 || tickets.Any(ticket => ticket.Status == TicketRunStatus.Integrated);
+        string? reason = current.Errors.FirstOrDefault()?.Message
+            ?? (hasWork ? current.WaitReason : null)
+            ?? (current.AllEligibleBlocked ? CurrentWork.BlockedReason : null);
+        if (reason is not null)
+        {
+            bool saved = await TrySaveReasonAsync(run, reason, cancellationToken);
+            return new SpecScheduleResult([], [run.Id], ConcurrencyConflict: !saved)
+            {
+                Faults = current.Errors.Select(error => new SpecScheduleFault(run.Id, error.Message)).ToArray(),
+            };
+        }
+
+        if (!freeSlots.TryDequeue(out int slot))
+        {
+            bool saved = await TrySaveReasonAsync(run, CurrentWork.ResumeSlotWaitReason, cancellationToken);
+            return new SpecScheduleResult([], [], ConcurrencyConflict: !saved);
+        }
+
+        return await ClaimSlotAsync(run, slot, SpecRunStatus.Running, cancellationToken);
+    }
+
+    private async Task<SpecScheduleResult> ClaimSlotAsync(
+        SpecRun run, int slot, SpecRunStatus next, CancellationToken cancellationToken)
+    {
+        run.MaxActiveSpecsSlot = slot;
+        bool saved = await TrySaveTransitionAsync(run, next, cancellationToken);
+        return new SpecScheduleResult(saved ? [run.Id] : [], [], ConcurrencyConflict: !saved);
     }
 
     /// <summary>
@@ -105,7 +148,18 @@ public sealed class SpecQueueScheduler(
     }
 
     private static bool IsWaitingToStart(SpecRun run) =>
-        run.Status is SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency;
+        run.Status is SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency or SpecRunStatus.WaitingForTickets;
+
+    private async Task<bool> TrySaveReasonAsync(SpecRun run, string reason, CancellationToken cancellationToken)
+    {
+        if (run.WorkDecisionReason == reason)
+        {
+            return true;
+        }
+
+        run.SetWorkDecisionReason(reason);
+        return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved;
+    }
 
     /// <summary>Lowest free slot numbers first, so concurrent schedulers collide on the same slot instead of overfilling.</summary>
     private static IEnumerable<int> FreeSlots(IReadOnlyList<SpecRun> queue, int maxActiveSpecs)

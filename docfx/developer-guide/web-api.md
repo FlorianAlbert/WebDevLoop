@@ -98,11 +98,19 @@ authorize work, and eligible children can all be blocked. Failure problem `detai
 missing eligible children, or a failed GitHub lookup (including permission and transient failures). Nothing is queued
 on failure. An unfinished duplicate is returned without creating another run.
 
-Run responses include nullable `workDecisionReason`: a current-work deferral while `Running`, or why `Completed`
+Run responses include nullable `workDecisionReason`: a current-work deferral while `Running`, the current wait while
+`WaitingForTickets`, or why `Completed`
 stopped after parent opt-out/closure or with no eligible work. Domain transitions clear stale reasons; attention
 uses `attention` and `failureReason` instead. Completed runs require explicit enqueue after renewed eligibility.
 The merge-status query reports preserved opt-out stacks as `Stopped` with the reason in `detail`, not `Merged`.
 No-eligible-work completion publishes no empty PR and starts no empty parent review or test.
+
+`WaitingForTickets` is non-terminal and holds no active-spec slot. It is entered only after selected tickets finish
+and all remaining eligible tickets have confirmed open native blockers; partial integration does not trigger review.
+Capacity exhaustion alone is not blocking. Normal scheduling/recovery rechecks current GitHub states and relationships,
+including after restart. Required query failures defer resumption with diagnostics. When progress is possible and a
+slot is free, the same run and branch resume without preempting active specs or repeating integrated work.
+Parked runs remain unfinished duplicates for enqueue and discovery; use abort to cancel them, not retry or re-enqueue.
 
 Discovery uses `ISpecCandidateQueries`. It excludes pull requests, sub-issues, and specs with unfinished runs. Search
 matches issue numbers or titles case-insensitively. `onlyUnblocked=true` excludes specs with open native **parent**

@@ -8,7 +8,8 @@ public static class SpecRunStatusRules
             [SpecRunStatus.Queued] = [SpecRunStatus.WaitingForDependency, SpecRunStatus.Preparing],
             [SpecRunStatus.WaitingForDependency] = [SpecRunStatus.Preparing],
             [SpecRunStatus.Preparing] = [SpecRunStatus.Running],
-            [SpecRunStatus.Running] = [SpecRunStatus.ParentReviewing, SpecRunStatus.Completed],
+            [SpecRunStatus.Running] = [SpecRunStatus.ParentReviewing, SpecRunStatus.Completed, SpecRunStatus.WaitingForTickets],
+            [SpecRunStatus.WaitingForTickets] = [SpecRunStatus.Running],
             [SpecRunStatus.ParentReviewing] = [SpecRunStatus.Running, SpecRunStatus.Testing],
             // Testing -> Completed is the no-PR completion path.
             [SpecRunStatus.Testing] = [SpecRunStatus.Running, SpecRunStatus.ReadyForReview, SpecRunStatus.Completed],
@@ -32,7 +33,7 @@ public static class SpecRunStatusRules
 
     /// <summary>
     /// Statuses that occupy an active-spec slot (being implemented). <c>ReadyForReview</c>/<c>AwaitingMerge</c> are tracked
-    /// (non-terminal) while a human merges the stack, but free the slot; <c>NeedsAttention</c> is parked, not active.
+    /// (non-terminal) while a human merges the stack, but free the slot; <c>NeedsAttention</c> and <c>WaitingForTickets</c> are parked, not active.
     /// </summary>
     public static bool IsActive(this SpecRunStatus status) =>
         status is SpecRunStatus.Preparing

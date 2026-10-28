@@ -36,7 +36,7 @@ internal sealed class SpecWorkflowFixture
 
         var settingsProvider = new PersistedEffectiveSettingsProvider(Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
         Queue = new SpecQueueService(Store, Store, Issues, Store, Store, Ids, Clock);
-        Scheduler = new SpecQueueScheduler(Store, Store, Issues, settingsProvider, Store, Store, Clock, new RepositoryOptIn(Labels));
+        Scheduler = new SpecQueueScheduler(Store, Store, Issues, settingsProvider, Store, Store, Clock, new RepositoryOptIn(Labels), Store);
         var options = new SpecPreparationOptions(SkillsRoot, explorationEnabled);
         var explorer = new SpecExplorer(Store, Store, Git, Agents, Directories, new PromptRenderer(), Store, Store, Ids, Clock, options);
         Preparation = new SpecPreparationService(

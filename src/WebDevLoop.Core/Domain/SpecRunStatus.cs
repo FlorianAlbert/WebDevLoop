@@ -13,4 +13,7 @@ public enum SpecRunStatus
     Completed,
     NeedsAttention,
     Aborted,
+
+    /// <summary>Eligible tickets are blocked; no active slot is held while scheduling waits to resume this run.</summary>
+    WaitingForTickets,
 }

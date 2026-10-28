@@ -27,6 +27,61 @@ public sealed class SpecQueueRecomputationTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public async Task recovery_rechecks_parked_work_fails_closed_and_resumes_only_in_a_free_slot_without_repreparing(bool missingParent)
+    {
+        _fixture.SeedSpec(1);
+        _fixture.SeedSpec(2);
+        _fixture.SeedSpec(7);
+        _fixture.Issues.SetBlockedBy(SpecWorkflowFixture.Issue(11), SpecWorkflowFixture.Issue(7));
+        SpecRun parked = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        await _fixture.PrepareAsync(parked);
+        parked.TransitionTo(SpecRunStatus.WaitingForTickets, _fixture.Clock.UtcNow);
+        parked.SetWorkDecisionReason("All eligible tickets have open native blockers.");
+        CommitSha? originalBase = parked.IntegrationBaseSha;
+        CommitSha? originalTip = parked.IntegrationTipSha;
+        DateTimeOffset? originalStart = parked.StartedAt;
+        IssueRef missing = SpecWorkflowFixture.Issue(missingParent ? 1 : 7);
+        _fixture.Issues.RemoveIssue(missing);
+        SpecRun independent = await _fixture.EnqueueAsync(2);
+
+        QueueRecomputationReport deferred = await Recomputation().RecomputeAsync(Token);
+
+        Assert.Equal([independent.Id], Assert.Single(deferred.Repositories).Schedule.Activated);
+        Assert.Contains("unavailable", Assert.Single(deferred.Faults).Error);
+        Assert.Contains("unavailable", parked.WorkDecisionReason);
+        Assert.Equal(SpecRunStatus.WaitingForTickets, parked.Status);
+        Assert.Null(parked.MaxActiveSpecsSlot);
+
+        _fixture.SeedSpec(1);
+        _fixture.SeedSpec(7);
+        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(7), IssueCloseReason.Completed, Token);
+        QueueRecomputationReport occupied = await Recomputation().RecomputeAsync(Token);
+        Assert.Empty(Assert.Single(occupied.Repositories).Schedule.Activated);
+        Assert.Empty(occupied.Faults);
+        Assert.Equal(SpecRunStatus.WaitingForTickets, parked.Status);
+        Assert.Contains("free active-spec slot", parked.WorkDecisionReason);
+
+        _fixture.Advance(independent, SpecRunStatus.Running, SpecRunStatus.ParentReviewing, SpecRunStatus.Testing, SpecRunStatus.ReadyForReview);
+        _fixture.GlobalSettings.BaseBranch = new BranchName("changed-trunk");
+        QueueRecomputationReport resumed = await Recomputation().RecomputeAsync(Token);
+
+        Assert.Equal([parked.Id], Assert.Single(resumed.Repositories).Schedule.Activated);
+        Assert.Equal(SpecRunStatus.Running, parked.Status);
+        Assert.Equal(1, parked.MaxActiveSpecsSlot);
+        Assert.Equal(SpecWorkflowFixture.Trunk, parked.BaseBranch);
+        Assert.Equal(originalBase, parked.IntegrationBaseSha);
+        Assert.Equal(originalTip, parked.IntegrationTipSha);
+        Assert.Equal(originalStart, parked.StartedAt);
+        Assert.Null(parked.WorkDecisionReason);
+        Assert.Empty((await Recomputation().RecomputeAsync(Token)).Faults);
+        Assert.Single(_fixture.Store.PendingEvents.OfType<Core.Events.SpecRunStatusChanged>(),
+            changed => changed.SpecRunId == parked.Id && changed.From == SpecRunStatus.WaitingForTickets && changed.To == SpecRunStatus.Running);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public async Task unavailable_parent_or_blocker_is_an_actionable_recoverable_queue_fault(bool missingParent)
     {
         _fixture.SeedSpec(1, 7);
@@ -131,7 +186,7 @@ public sealed class SpecQueueRecomputationTests
     private SpecQueueScheduler Scheduler(IRepositoryRecordRepository? repositories = null)
     {
         var settings = new PersistedEffectiveSettingsProvider(_fixture.Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
-        return new SpecQueueScheduler(repositories ?? _fixture.Store, _fixture.Store, _fixture.Issues, settings, _fixture.Store, _fixture.Store, _fixture.Clock, new RepositoryOptIn(_fixture.Labels));
+        return new SpecQueueScheduler(repositories ?? _fixture.Store, _fixture.Store, _fixture.Issues, settings, _fixture.Store, _fixture.Store, _fixture.Clock, new RepositoryOptIn(_fixture.Labels), _fixture.Store);
     }
 
     private RepositoryRecord AddRepository(string name, int id, bool enabled)

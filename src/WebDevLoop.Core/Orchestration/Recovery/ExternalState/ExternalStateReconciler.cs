@@ -44,7 +44,7 @@ public sealed class ExternalStateReconciler(
         return new ExternalReconciliationReport(actions, faults, merges);
     }
 
-    /// <summary>Queued, waiting, and preparing runs have no Git/GitHub state of their own yet; the queue and preparation own them.</summary>
+    /// <summary>Unstarted queued, parent-dependency-waiting, and preparing runs have no external state yet; parked ticket waits retain theirs.</summary>
     private static bool HasExternalState(SpecRun spec) =>
         spec.Status is not (SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency or SpecRunStatus.Preparing);
 

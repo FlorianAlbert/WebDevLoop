@@ -10,6 +10,7 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
     public async Task<CurrentWork> ReadAsync(SpecRun spec, IReadOnlyList<TicketRun> tickets, CancellationToken cancellationToken)
     {
         var eligible = new List<IssueRef>();
+        var blocked = new List<IssueRef>();
         var runnable = new HashSet<TicketRunId>();
         var errors = new List<GitHubIssuesException>();
         string? waitReason = null;
@@ -47,7 +48,11 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
                     }
 
                     eligible.Add(current.Ref);
-                    if (await IsUnblockedAsync(current, cancellationToken) && ticket is not null && waitReason is null)
+                    if (!await IsUnblockedAsync(current, cancellationToken))
+                    {
+                        blocked.Add(current.Ref);
+                    }
+                    else if (ticket is not null && waitReason is null)
                     {
                         runnable.Add(ticket.Id);
                     }
@@ -63,7 +68,7 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
             errors.Add(new GitHubIssuesException($"Could not verify current parent/sub-issue eligibility for {spec.ParentIssue}; work deferred for recovery. {exception.Message}", exception));
         }
 
-        return new CurrentWork(null, waitReason, eligible, runnable, errors);
+        return new CurrentWork(null, waitReason, eligible, runnable, errors) { Blocked = blocked };
     }
 
     private static bool IsEligible(IssueSnapshot issue) =>

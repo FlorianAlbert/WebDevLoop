@@ -126,7 +126,7 @@ internal sealed class ReadyAndMergeFixture
     }
 
     public Task<SpecScheduleResult> ScheduleAsync() =>
-        new SpecQueueScheduler(Store, Store, Issues, Settings, Store, Store, Clock, new RepositoryOptIn(new InMemoryRepositoryLabels())).ScheduleRepositoryAsync(Repository.Id, Token);
+        new SpecQueueScheduler(Store, Store, Issues, Settings, Store, Store, Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()), Store).ScheduleRepositoryAsync(Repository.Id, Token);
 
     public async Task PrepareAsync(SpecRun spec)
     {

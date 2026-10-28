@@ -6,7 +6,7 @@ namespace WebDevLoop.Core.Orchestration.SpecQueue;
 
 /// <summary>
 /// Event-bus subscriber that runs the repository queue (<see cref="SpecQueueScheduler"/>) when a spec may start: a spec was
-/// queued, or a spec left its active slot (ready/awaiting merge, completed, aborted or needs attention). The scheduler's own claims
+/// queued, or a spec left its active slot (waiting for tickets, ready/awaiting merge, completed, aborted or needs attention). The scheduler's own claims
 /// (<c>WaitingForDependency</c>, <c>Preparing</c>) and other active transitions do not trigger another pass. Periodic
 /// recovery recomputes every queue as well, so a missed event only delays a start.
 /// </summary>

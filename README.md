@@ -261,7 +261,14 @@ parent review, tester run, or pull request. If some work was integrated, it proc
 Eligible tickets with open blockers remain outstanding; they are not an empty spec and do not trigger parent review.
 Completed runs are never implicitly revived by label changes: opt tickets in and enqueue again explicitly.
 
-The run API exposes the persisted `workDecisionReason` for deferred decisions and terminal opt-out/no-work outcomes.
+When every remaining eligible ticket has an open native blocker and no selected ticket is still in flight, the run
+moves to **Waiting for tickets** (`WaitingForTickets`). This releases its active-spec slot for unrelated queued specs,
+including after partial integration, without starting parent review. Agent-capacity exhaustion alone never parks a spec.
+Normal scheduling and restart recovery recheck current GitHub state, labels and relationships; unavailable information
+keeps work deferred with a retry reason. Runnable parked work claims a free slot in queue order, without preempting an
+active spec, then resumes the **same run and integration branch** without repeating preparation or integrated tickets.
+
+The run API exposes the persisted `workDecisionReason` for waiting/deferred decisions and terminal opt-out/no-work outcomes.
 The queue and run detail pages display that reason. A preserved opt-out stack has merge state `Stopped`, not `Merged`.
 
 ### Parent review and testing scope

@@ -11,6 +11,37 @@ public sealed class FrontierServiceTests
 {
     private readonly TicketExecutionFixture _fixture = new();
 
+    [Theory]
+    [InlineData(TicketRunStatus.Implementing)]
+    [InlineData(TicketRunStatus.Reviewing)]
+    [InlineData(TicketRunStatus.FixingReviewFindings)]
+    [InlineData(TicketRunStatus.Integrating)]
+    [InlineData(TicketRunStatus.NeedsAttention)]
+    public async Task every_selected_phase_keeps_the_spec_active_while_other_eligible_work_is_blocked(TicketRunStatus phase)
+    {
+        SeededSpec seeded = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
+        var blocker = new IssueRef("elsewhere", "library", 900);
+        _fixture.Issues.Seed(blocker, "Open blocker");
+        _fixture.Issues.SetBlockedBy(_fixture.Ticket(seeded[2]).Issue, blocker);
+        await _fixture.MoveAsync(seeded[1], TicketRunStatus.Ready, TicketRunStatus.Implementing);
+        if (phase != TicketRunStatus.Implementing)
+        {
+            await _fixture.MoveAsync(seeded[1], TicketRunStatus.Reviewing);
+            if (phase != TicketRunStatus.Reviewing)
+            {
+                await _fixture.MoveAsync(seeded[1], phase);
+            }
+        }
+
+        await _fixture.ReconcileAsync(seeded.Id);
+
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(seeded.Id).Status);
+        Assert.Equal(1, _fixture.Spec(seeded.Id).MaxActiveSpecsSlot);
+        Assert.Equal(phase, _fixture.Ticket(seeded[1]).Status);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(seeded[2]).Status);
+        Assert.Equal(0, _fixture.Spec(seeded.Id).ReviewCycle);
+    }
+
     [Fact]
     public async Task one_frontier_pass_uses_one_github_snapshot_for_dispatch_and_completion()
     {
@@ -279,7 +310,7 @@ public sealed class FrontierServiceTests
     [Fact]
     public async Task a_ready_ticket_observes_new_cross_repository_blockers_on_every_decision()
     {
-        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
         TicketRun ticket = _fixture.Ticket(spec[1]);
         var blocker = new IssueRef("elsewhere", "library", 1);
         _fixture.Issues.Seed(blocker, "Same number, different repository");
@@ -291,7 +322,7 @@ public sealed class FrontierServiceTests
         await _fixture.Issues.CloseAsync(blocker, IssueCloseReason.Completed, TicketExecutionFixture.Token);
         FrontierResult released = await _fixture.ReconcileAsync(spec.Id);
 
-        Assert.Empty(blocked.Dispatched);
+        Assert.Equal([spec[2]], blocked.Dispatched);
         Assert.Equal([ticket.Id], released.Dispatched);
     }
 

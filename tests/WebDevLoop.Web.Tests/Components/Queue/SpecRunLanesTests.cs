@@ -12,6 +12,7 @@ public sealed class SpecRunLanesTests
     [InlineData(SpecRunStatus.Testing, SpecRunLane.Active)]
     [InlineData(SpecRunStatus.Queued, SpecRunLane.Waiting)]
     [InlineData(SpecRunStatus.WaitingForDependency, SpecRunLane.Waiting)]
+    [InlineData(SpecRunStatus.WaitingForTickets, SpecRunLane.Waiting)]
     [InlineData(SpecRunStatus.ReadyForReview, SpecRunLane.AwaitingMerge)]
     [InlineData(SpecRunStatus.AwaitingMerge, SpecRunLane.AwaitingMerge)]
     [InlineData(SpecRunStatus.NeedsAttention, SpecRunLane.NeedsAttention)]

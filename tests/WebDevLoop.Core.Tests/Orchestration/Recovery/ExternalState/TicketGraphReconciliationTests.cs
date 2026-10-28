@@ -6,6 +6,7 @@ using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Orchestration.Preparation;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.Recovery.ExternalState;
+using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.Integration;
@@ -20,6 +21,27 @@ public sealed class TicketGraphReconciliationTests
     private readonly ExternalStateFixture _x = new();
 
     private IntegrationFixture F => _x.Integration;
+
+    [Fact]
+    public async Task parked_specs_reconcile_reopened_and_new_sub_issues_before_resumption()
+    {
+        SpecRun spec = await SnapshotSpecAsync((1, []), (2, [900]));
+        F.Issues.Seed(Issue(900), "External blocker");
+        TicketRun skipped = Ticket(spec, 1);
+        await F.Issues.CloseAsync(skipped.Issue, IssueCloseReason.Completed, ExternalStateFixture.Token);
+        await _x.ReconcileAsync();
+        spec.TransitionTo(SpecRunStatus.WaitingForTickets, F.Clock.UtcNow);
+        F.Issues.Reopen(skipped.Issue);
+        SeedSubIssue(spec, 3);
+
+        ExternalReconciliationReport report = await _x.ReconcileAsync();
+
+        Assert.Equal(SpecRunStatus.WaitingForTickets, spec.Status);
+        Assert.Equal(TicketRunStatus.Skipped, skipped.Status);
+        Assert.Equal(TicketRunStatus.Blocked, Assert.Single(_x.Tickets(spec), ticket => ticket.Issue.Number == 1 && ticket.Id != skipped.Id).Status);
+        Assert.Equal(TicketRunStatus.Blocked, Ticket(spec, 3).Status);
+        Assert.Equal(2, report.Actions.Count(action => action.Kind == ReconciliationActionKind.TicketAdded));
+    }
 
     [Fact]
     public async Task a_stale_running_graph_cannot_add_tickets_after_parent_review_started()
@@ -126,6 +148,8 @@ public sealed class TicketGraphReconciliationTests
         Assert.Equal(TicketRunStatus.Blocked, dependent.Status);
 
         await F.Issues.CloseAsync(removed.Issue, IssueCloseReason.Completed, ExternalStateFixture.Token);
+        await new SpecQueueScheduler(F.Store, F.Store, F.Issues, F.Settings, F.Store, F.Store, F.Clock, optIn, F.Store)
+            .ScheduleRepositoryAsync(spec.RepositoryId, ExternalStateFixture.Token);
         FrontierResult released = await frontier.ReconcileAsync(spec.Id, ExternalStateFixture.Token);
 
         Assert.Equal([dependent.Id], released.Dispatched);

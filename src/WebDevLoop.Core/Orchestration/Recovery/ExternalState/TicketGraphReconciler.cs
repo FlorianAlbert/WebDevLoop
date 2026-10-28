@@ -35,7 +35,7 @@ public sealed class TicketGraphReconciler(
     {
         ArgumentNullException.ThrowIfNull(context);
         SpecRun spec = context.Spec;
-        if (spec.Status != SpecRunStatus.Running)
+        if (spec.Status is not (SpecRunStatus.Running or SpecRunStatus.WaitingForTickets))
         {
             return [];
         }
@@ -64,7 +64,7 @@ public sealed class TicketGraphReconciler(
             outbox.Append(new FrontierReconciliationRequested(spec.Id, pass.Now));
         }
 
-        // A stale Running graph must lose to a concurrent phase change or another graph writer, including finding issuance.
+        // A stale graph must lose to a concurrent phase change or another graph writer, including finding issuance.
         spec.AdvanceVersion();
         return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved ? pass.Actions : [];
     }

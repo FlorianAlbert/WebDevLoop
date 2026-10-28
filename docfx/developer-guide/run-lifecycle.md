@@ -34,6 +34,8 @@ stateDiagram-v2
     Preparing --> Running: branch created, tickets snapshotted
     Running --> ParentReviewing: integrated work, no selected or eligible work remains
     Running --> Completed: parent opted out/closed, or no eligible/integrated work
+    Running --> WaitingForTickets: all remaining eligible tickets blocked, no selected work in flight
+    WaitingForTickets --> Running: fresh eligibility permits progress, free active slot
     ParentReviewing --> Running: findings become tickets
     ParentReviewing --> Testing: review clean
     Testing --> Running: issues become tickets
@@ -60,6 +62,7 @@ stateDiagram-v2
 | `WaitingForDependency` | no | At least one current native GitHub blocker of the parent issue is open. Unverifiable state defers starting; once all blockers are closed or removed, the spec can start from current trunk. |
 | `Preparing` | yes | Clone/fetch, snapshot, integration branch, optional exploration |
 | `Running` | yes | Tickets are being worked on |
+| `WaitingForTickets` | no | Fully blocked eligible tickets; scheduler/recovery rechecks current GitHub information and reclaims a free slot before resuming the same run and branch. |
 | `ParentReviewing` | yes | Two reviewers check integrated work only |
 | `Testing` | yes | Tester agent runs the integrated app |
 | `ReadyForReview` | no | Transient: PRs are marked ready, worktrees are cleaned |
@@ -74,9 +77,11 @@ stateDiagram-v2
 frontier dispatch. Required GitHub failures defer safely. Parent opt-out/closure lets selected tickets finish,
 then completes without new selection or parent review, preserving branches and PRs. With no selected or eligible
 work left, nothing integrated means explicit no-eligible-work completion without an empty review or PR; integrated
-work proceeds to scoped parent review. Eligible blocked tickets remain outstanding.
+work proceeds to scoped parent review. When all remaining eligible tickets have confirmed open native blockers
+and no selected work remains in flight, the run parks as `WaitingForTickets`, including with partial integration.
+Unknown blocker state or agent-capacity exhaustion alone does not cause parking.
 
-`WorkDecisionReason` records a running deferral or an explicit stopped/no-work completion outcome. It is
+`WorkDecisionReason` records a running deferral, parked waiting reason, or explicit stopped/no-work completion outcome. It is
 private-set and updated through `SetWorkDecisionReason`; every status transition clears the old reason.
 This keeps later attention/abort explanations authoritative. The queue, run detail and API expose the reason.
 A preserved opt-out stack has query merge state `Stopped`, not `Merged`. Finished runs do not revive on label
@@ -167,7 +172,7 @@ All end states are final. In practice a runner creates a step and starts it in t
 - **Frontier.** <xref:WebDevLoop.Core.Orchestration.Frontier.FrontierService> re-reads each unstarted ticket and its current native blockers through `IGitHubIssues`, stopping at the first open blocker. All blockers must be closed, including non-opted-in, external, and cross-repository issues. Closure is sufficient without PR merge; local completion is insufficient while an issue stays open. The saved DAG is not authoritative. Missing or unavailable information defers only the affected ticket; unrelated tickets and other running specs continue. Results identify GitHub lookup errors; the event handler reports them to the logging boundary after reconciliation, and periodic recovery retries. <xref:WebDevLoop.Core.Orchestration.Frontier.TicketFrontier> orders verified candidates by issue number.
 - **Dispatch.** <xref:WebDevLoop.Core.Orchestration.Frontier.FrontierService> saves the unblocking, then <xref:WebDevLoop.Core.Orchestration.TicketExecution.TicketDispatcher> claims `Ready` tickets (`Ready` to `Implementing`) up to the free capacity: `min(global limit − used, per-repository limit − used)`.
 - **Continuous.** The frontier is recomputed on events, not in waves. When a ticket integrates, its dependents start while other tickets are still in review.
-- **Live changes.** While a spec runs, `TicketGraphReconciler` skips unstarted tickets whose issue was closed or detached, and adds tickets for new open sub-issues.
+- **Live changes.** While a spec runs or waits for tickets, `TicketGraphReconciler` skips unstarted tickets whose issue was closed or detached, and adds tickets for new or reopened open sub-issues.
 
 ```mermaid
 flowchart LR
@@ -184,6 +189,7 @@ Here `#3` depends on `#1` (done), so it is `Ready`; `#4` waits for `#2` and `#3`
 2. <xref:WebDevLoop.Core.Orchestration.SpecQueue.SpecQueueScheduler> runs on `SpecRunQueued`, on status changes that may free a slot, and in every recovery cycle. It visits queued specs in order:
    - blocked specs move to `WaitingForDependency` and do **not** hold up independent specs behind them;
    - startable specs take the lowest free slot (1..`MaxActiveSpecsPerRepo`) and move to `Preparing`. Each claim is one compare-and-swap save; the unique index on (repository, slot) makes a concurrent claim lose.
+   - parked `WaitingForTickets` runs re-read current eligibility and blockers, failing closed with persisted reasons and reported faults. Once progress is possible they claim a free slot and move directly to `Running`, preserving the base, branch, tip, tickets and start time. They never preempt active specs or repeat preparation.
 3. The limit counts **active** specs only (`Preparing`, `Running`, `ParentReviewing`, `Testing`). A spec waiting for review or merge does not hold a slot. A parked spec has released its slot, so a retry needs a free one (`NoActiveSlot`).
 
 ### Parent blockers

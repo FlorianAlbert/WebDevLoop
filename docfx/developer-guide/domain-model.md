@@ -59,7 +59,7 @@ The state machines are in [run lifecycle](run-lifecycle.md). The enums:
 
 | Enum | Values |
 | --- | --- |
-| <xref:WebDevLoop.Core.Domain.SpecRunStatus> | `Queued`, `WaitingForDependency`, `Preparing`, `Running`, `ParentReviewing`, `Testing`, `ReadyForReview`, `AwaitingMerge`, `Completed`, `NeedsAttention`, `Aborted` |
+| <xref:WebDevLoop.Core.Domain.SpecRunStatus> | `Queued`, `WaitingForDependency`, `WaitingForTickets`, `Preparing`, `Running`, `ParentReviewing`, `Testing`, `ReadyForReview`, `AwaitingMerge`, `Completed`, `NeedsAttention`, `Aborted` |
 | <xref:WebDevLoop.Core.Domain.TicketRunStatus> | `Blocked`, `Ready`, `Implementing`, `Reviewing`, `FixingReviewFindings`, `Integrating`, `Integrated`, `NeedsAttention`, `Skipped`, `Aborted` |
 | <xref:WebDevLoop.Core.Domain.StepStatus> | `Pending`, `Running`, `Succeeded`, `Failed`, `TimedOut`, `Cancelled`, `NeedsAttention` |
 | <xref:WebDevLoop.Core.Domain.StepKind> | `Explore`, `Implement`, `Review`, `Fix`, `ResolveConflict`, `ParentReview`, `Test`, `Troubleshoot` |
@@ -162,7 +162,7 @@ Defaults are in <xref:WebDevLoop.Core.Settings.DefaultSettings>. Prompt template
 | Status changes follow the transition tables; terminal states are final | `TransitionTo` throws <xref:WebDevLoop.Core.Domain.InvalidStatusTransitionException>. Any non-terminal status may go to `Aborted` or `NeedsAttention`. |
 | `NeedsAttention` needs a structured reason | `MarkNeedsAttention(reason)`; `StepRun.Finish` refuses `NeedsAttention`. |
 | Leaving a status clears `FailureReason`, `Attention`, `NeedsAttentionFrom` | `TransitionTo` of `SpecRun` and `TicketRun`. |
-| Work-decision reasons cannot outlive their phase | `SpecRun.TransitionTo` clears `WorkDecisionReason`; its private setter is reached through `SetWorkDecisionReason` only for `Running` deferrals or explicit `Completed` stopped/no-work outcomes. |
+| Work-decision reasons cannot outlive their phase | `SpecRun.TransitionTo` clears `WorkDecisionReason`; its private setter is reached through `SetWorkDecisionReason` only for `Running` deferrals, `WaitingForTickets` waits or explicit `Completed` stopped/no-work outcomes. |
 | A spec holds an active slot only while it is active | `TransitionTo` clears `MaxActiveSpecsSlot` when the new status is not active. Unique index on (repository, slot) for active specs. |
 | A ticket has at most one active implement or fix step | Filtered unique index on `StepRuns` (ticket, active, kind implement/fix). |
 | An app-owned step (no agent role) is unique per spec and kind while active | Filtered unique index `UX_StepRuns_ActiveAppOwnedKindPerRun`. Today every step has an agent role, so this is a guard for future app-owned steps. Review and tester steps get deterministic ids instead, so a duplicate runner collides on the primary key. |

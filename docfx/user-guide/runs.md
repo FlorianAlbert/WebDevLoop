@@ -30,6 +30,12 @@ Queued, then Preparing, Running, Parent reviewing, Testing, Ready for review, Aw
 
 After parent review or testing, the run can go back to **Running** when the agents found problems. Those problems became new finding tickets. A run can also end in **Needs attention** or **Aborted**.
 
+If all remaining eligible tickets have open native blockers, the run moves from **Running** to **Waiting for tickets**
+after selected work finishes. Its note explains the wait; even a partially integrated spec releases its active slot
+without starting parent review. Normal scheduling and restart recovery check fresh GitHub information and resume the
+same run and branch only when a slot is free, without interrupting active specs or repeating integrated work.
+Unavailable GitHub information defers resumption; agent-capacity exhaustion alone does not park a run.
+
 The queue and run detail show recoverable work-decision reasons and explicit parent opt-out/no-eligible-work
 outcomes. Selected tickets may finish implementation, review and integration after label removal. If the parent
 opts out, automation completes after selected work, without new tickets or parent review; branches and PRs stay

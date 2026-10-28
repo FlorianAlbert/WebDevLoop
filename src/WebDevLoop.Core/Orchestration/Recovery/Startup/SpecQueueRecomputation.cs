@@ -9,7 +9,9 @@ namespace WebDevLoop.Core.Orchestration.Recovery.Startup;
 /// slot claims). Specs leave their active slot whenever they leave an active phase (e.g. parked in <c>NeedsAttention</c>
 /// by recovery), so the pass sees the free slots; a spec re-activated outside the queue takes its slot from
 /// <see cref="SpecQueueScheduler.FindFreeSlotAsync"/>. Specs a pass activates move to <c>Preparing</c> with their status
-/// event in the outbox, so preparation starts once the outbox is dispatched. A repository that fails is reported and
+/// event in the outbox, so preparation starts once the outbox is dispatched. Parked <c>WaitingForTickets</c> runs instead
+/// recheck current GitHub eligibility and blockers and resume directly at <c>Running</c> in a free slot, preserving their branch.
+/// A repository that fails is reported and
 /// does not stop the others; a lost claim race is left to the queue worker's next pass.
 /// </summary>
 public sealed class SpecQueueRecomputation(IRepositoryRecordRepository repositories, SpecQueueScheduler scheduler) : ISpecQueueRecomputation

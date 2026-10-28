@@ -38,6 +38,8 @@ public sealed class TicketDispatcher(
             foreach (TicketRun ticket in ready.Take(available))
             {
                 Claim(ticket, effective.WorkspaceRootDirectory);
+                // Serialize selection with parking: neither may commit against the other's stale spec state.
+                specRun.AdvanceVersion();
                 if (await unitOfWork.SaveChangesAsync(cancellationToken) != SaveOutcome.Saved)
                 {
                     conflict = true;

@@ -43,7 +43,6 @@ public sealed class ParentReviewTriggerTests
     {
         SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []));
         var blocker = new IssueRef("another-owner", "library", 900);
-        _fixture.Issues.Snapshots.Seed(blocker, "Open ticket blocker");
         _fixture.Issues.Snapshots.SetBlockedBy(_fixture.Execution.Ticket(spec[2]).Issue, blocker);
         await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
         Assert.NotNull(_fixture.Spec(spec.Id).WorkDecisionReason);
@@ -96,9 +95,10 @@ public sealed class ParentReviewTriggerTests
 
         WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(WorkCompletionOutcome.TicketsOutstanding, result.Outcome);
-        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
-        Assert.Contains("remain blocked", _fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Equal(WorkCompletionOutcome.Parked, result.Outcome);
+        Assert.Equal(SpecRunStatus.WaitingForTickets, _fixture.Spec(spec.Id).Status);
+        Assert.Contains("open native blocker", _fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Null(_fixture.Spec(spec.Id).MaxActiveSpecsSlot);
         Assert.Equal(0, _fixture.Spec(spec.Id).ReviewCycle);
     }
 

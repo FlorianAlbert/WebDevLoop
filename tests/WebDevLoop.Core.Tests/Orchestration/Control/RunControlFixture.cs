@@ -64,7 +64,7 @@ internal sealed class RunControlFixture : IDisposable
     public (SpecRunControl Specs, TicketRunControl Tickets) Controls()
     {
         var settings = new PersistedEffectiveSettingsProvider(Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
-        var scheduler = new SpecQueueScheduler(Store, Store, new InMemoryGitHubIssues(), settings, Store, Store, Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()));
+        var scheduler = new SpecQueueScheduler(Store, Store, new InMemoryGitHubIssues(), settings, Store, Store, Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()), Store);
         var journal = new RunControlJournal(Store, Store, Clock);
         var stopper = new ActiveWorkStopper(Agents, Targets);
         return (

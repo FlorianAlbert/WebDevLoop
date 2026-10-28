@@ -7,7 +7,7 @@ using WebDevLoop.Core.Ports;
 namespace WebDevLoop.Core.Orchestration.Completion;
 
 /// <summary>
-/// Decides from current permission and remaining work whether to defer, finish without further work, or start scoped parent review.
+/// Decides from current permission and remaining work whether to defer, park, finish without further work, or start scoped parent review.
 /// Selected tickets finish before opt-out takes effect; stopped and empty runs retain existing branches and pull requests.
 /// </summary>
 public sealed class WorkCompletionDecider(
@@ -61,7 +61,7 @@ public sealed class WorkCompletionDecider(
             _journal.Move(spec, next);
         }
 
-        if (spec.Status is SpecRunStatus.Running or SpecRunStatus.Completed)
+        if (spec.Status is SpecRunStatus.Running or SpecRunStatus.WaitingForTickets or SpecRunStatus.Completed)
         {
             spec.SetWorkDecisionReason(decision.Reason);
         }
@@ -75,6 +75,11 @@ public sealed class WorkCompletionDecider(
         bool selectedOutstanding = tickets.Any(ticket => ticket.IsSelectedAndOutstanding);
         bool hasIntegratedWork = tickets.Any(ticket => ticket.Status == TicketRunStatus.Integrated);
         bool hasRemainingOrIntegratedWork = selectedOutstanding || hasIntegratedWork || current.Eligible.Count > 0;
+        if (current.Errors.Count == 0 && !selectedOutstanding && current.AllEligibleBlocked)
+        {
+            return new(WorkCompletionOutcome.Parked, CurrentWork.BlockedReason, SpecRunStatus.WaitingForTickets);
+        }
+
         bool parentBlockersDeferProgress = current.WaitReason is not null && hasRemainingOrIntegratedWork;
         if (current.Errors.Count > 0 || parentBlockersDeferProgress)
         {

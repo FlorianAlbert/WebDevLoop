@@ -89,7 +89,7 @@ when the run starts; this enqueue check does not reserve a snapshot of the ticke
 
 Above the form you see:
 
-- **Active slots** `0 / 1`: how many specs are being worked on out of the allowed number. The limit is **Max active specs per repository** in [Settings](settings.md#concurrency-review-and-retries). Specs beyond the limit wait in the queue. Specs that await merge or need attention do not use a slot.
+- **Active slots** `0 / 1`: how many specs are being worked on out of the allowed number. The limit is **Max active specs per repository** in [Settings](settings.md#concurrency-review-and-retries). Specs beyond the limit wait in the queue. Specs that await tickets, await merge or need attention do not use a slot.
 
 At each scheduling decision, WebDevLoop re-reads the parent and its current native GitHub blockers.
 Every open blocker holds the spec, including issues outside the spec or repository, regardless of opt-in or completed runs.
@@ -101,6 +101,18 @@ When every blocker is closed or removed, the spec starts from **current trunk**,
 unmerged. Closing a blocker before merging accepts that its changes may not be on trunk. Queue order cannot bypass
 these dependencies. Cross-spec stacking is not supported; ticket pull requests within a spec still form a stack.
 
+### Fully blocked tickets
+
+When every remaining eligible ticket has an open native blocker, WebDevLoop waits for already selected tickets to
+finish implementation, review and integration, then parks the spec as **Waiting for tickets**. The note explains why
+it is waiting. Its slot is released so independent queued specs can proceed. Partial integration is preserved and
+parent review does not start while eligible blocked work remains. Busy agents alone never cause parking.
+
+Normal scheduling and restart recovery fetch current GitHub state, labels and blocker relationships again. Failed
+or unavailable lookups defer resumption and show retry guidance, never treating unknown blockers as closed.
+Once work is runnable and a slot is free, the same run and integration branch resume in queue order; active specs
+are not interrupted. Preparation and integrated tickets are not repeated. You do not need to enqueue a parked spec again.
+
 ## Lanes
 
 Runs are grouped into lanes. A lane only shows when it has runs. Within a lane, runs are sorted by queue position.
@@ -110,7 +122,7 @@ Runs are grouped into lanes. A lane only shows when it has runs. Within a lane, 
 | Running | Preparing, Running, Parent reviewing, Testing |
 | Awaiting merge | Ready for review, Awaiting merge |
 | Needs attention | Needs attention |
-| Waiting | Queued, Waiting for dependency |
+| Waiting | Queued, Waiting for dependency, Waiting for tickets |
 | Completed | Completed, Aborted |
 
 ## Statuses
@@ -119,6 +131,7 @@ Runs are grouped into lanes. A lane only shows when it has runs. Within a lane, 
 | --- | --- |
 | Queued | Waiting for a free active slot. |
 | Waiting for dependency | At least one current native GitHub blocker of the parent is open. The row names the blocking issues. |
+| Waiting for tickets | Remaining eligible tickets have open native blockers, or resumed work awaits a free slot or a fresh GitHub check. No active slot is held; the note explains the current wait. |
 | Preparing | WebDevLoop reads the tickets, creates the integration branch and explores the repository. |
 | Running | Tickets are implemented, reviewed and integrated. |
 | Parent reviewing | An agent reviews the whole integrated spec. |

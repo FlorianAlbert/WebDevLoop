@@ -29,4 +29,7 @@ public enum WorkCompletionOutcome
 
     /// <summary>The repository label lookup failed; new parent review waits for recovery.</summary>
     GitHubUnavailable,
+
+    /// <summary>Every remaining eligible ticket has an open blocker and no selected ticket remains in flight; the slot was released.</summary>
+    Parked,
 }

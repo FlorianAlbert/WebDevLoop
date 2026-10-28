@@ -46,6 +46,7 @@ internal static class SpecRunEndpoints
 
         group.MapGet("repos/{repoId:int}/spec-runs", ListQueueAsync)
             .WithName("ListSpecRuns")
+            .WithDescription("Includes non-terminal WaitingForTickets runs: fully blocked eligible work releases its active slot after selected tickets finish. workDecisionReason explains the wait or lookup failure. Normal scheduling and recovery recheck fresh GitHub state and resume the same run and branch in a free slot without preempting active specs or repeating integrated work. Agent-capacity exhaustion alone does not park a run.")
             .Produces<IReadOnlyList<SpecRunView>>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -54,6 +55,7 @@ internal static class SpecRunEndpoints
                 ? (IResult)TypedResults.Ok(run)
                 : SpecRunNotFound(id))
             .WithName("GetSpecRun")
+            .WithDescription("Returns persisted run state and workDecisionReason. WaitingForTickets holds no active slot and preserves partial integration without starting parent review. Scheduling/recovery rechecks current GitHub eligibility and blockers, fails closed on unavailable information, and resumes this same run and branch when progress is possible and a slot is free. Abort remains available; no explicit retry or re-enqueue is needed.")
             .Produces<SpecRunView>()
             .ProducesProblem(StatusCodes.Status404NotFound);
 

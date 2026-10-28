@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.SpecQueue;
+using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Tests.Orchestration.SpecQueue;
 
@@ -15,6 +16,20 @@ public sealed class SpecQueueEventHandlerTests
     }
 
     private SpecQueueEventHandler Handler => new(_fixture.Scheduler);
+
+    [Fact]
+    public async Task a_label_lookup_failure_reaches_the_event_bus_diagnostics_without_starting_work()
+    {
+        _fixture.SeedSpec(1);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        _fixture.Labels.LookupFailures[SpecWorkflowFixture.Repo] = new RepositoryLabelException("Check Issues permissions and retry.");
+
+        GitHubIssuesException error = await Assert.ThrowsAsync<GitHubIssuesException>(() =>
+            HandleAsync(new SpecRunQueued(run.Id, _fixture.Repository.Id, _fixture.Clock.UtcNow)));
+
+        Assert.Contains("Check Issues permissions and retry.", error.Message);
+        Assert.Equal(SpecRunStatus.Queued, run.Status);
+    }
 
     [Fact]
     public async Task a_queued_spec_is_scheduled_right_away()

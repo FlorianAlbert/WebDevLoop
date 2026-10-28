@@ -7,6 +7,57 @@ namespace WebDevLoop.Web.Tests.Api;
 
 public sealed class RepositoryEndpointTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task a_connected_repository_requires_explicit_approval_to_provision_a_missing_label(bool approval)
+    {
+        await using var factory = new ApiFactory();
+        factory.Repositories.Repositories.Add(ApiData.Repository());
+        factory.Labels.Exists = false;
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage response = await client.PostJsonAsync("/api/repos/1/opt-in", new { approveLabelCreation = approval });
+
+        Assert.Equal(approval ? HttpStatusCode.OK : HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(approval, factory.Labels.Exists);
+        Assert.Empty(factory.Registry.Updated);
+        Assert.Empty(factory.Registry.Removed);
+        if (!approval)
+        {
+            Assert.Equal("label_creation_approval_required", (await response.ReadJsonAsync()).GetProperty("code").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task omitted_approval_and_get_requests_never_create_a_missing_label()
+    {
+        await using var factory = new ApiFactory();
+        factory.Repositories.Repositories.Add(ApiData.Repository());
+        factory.Labels.Exists = false;
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage check = await client.GetResponseAsync("/api/repos/1/opt-in");
+        using HttpResponseMessage omitted = await client.PostJsonAsync("/api/repos/1/opt-in", new { });
+
+        Assert.Equal(HttpStatusCode.Conflict, check.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, omitted.StatusCode);
+        Assert.False(factory.Labels.Exists);
+    }
+
+    [Fact]
+    public async Task label_checks_of_an_unknown_repository_return_not_found_without_creating_a_label()
+    {
+        await using var factory = new ApiFactory();
+        factory.Labels.Exists = false;
+        using HttpClient client = factory.CreateClient();
+
+        using HttpResponseMessage response = await client.PostJsonAsync("/api/repos/99/opt-in", new { approveLabelCreation = true });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.False(factory.Labels.Exists);
+    }
+
     [Fact]
     public async Task repositories_are_listed_and_fetched_by_id()
     {

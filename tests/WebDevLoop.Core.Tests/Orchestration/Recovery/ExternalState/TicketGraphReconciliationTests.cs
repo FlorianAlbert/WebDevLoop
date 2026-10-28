@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Preparation;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.Recovery.ExternalState;
@@ -7,6 +8,7 @@ using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.Integration;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
+using WebDevLoop.Core.Tests.Ports.Fakes;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Recovery.ExternalState;
 
@@ -87,7 +89,7 @@ public sealed class TicketGraphReconciliationTests
         F.Settings.Defaults = F.Settings.Defaults with { WorkspaceRootDirectory = Path.Combine(AppContext.BaseDirectory, "work") };
         var launcher = new TestImplementationLauncher();
         var dispatcher = new TicketDispatcher(F.Settings, new ImplementerCapacity(F.Store), new ImplementerCapacityGate(), launcher, F.Store, F.Store, F.Clock);
-        var frontier = new FrontierService(F.Store, F.Store, F.Issues, dispatcher, F.Store, F.Store, F.Clock);
+        var frontier = new FrontierService(F.Store, F.Store, F.Issues, dispatcher, F.Store, F.Store, F.Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()));
 
         FrontierResult blocked = await frontier.ReconcileAsync(spec.Id, ExternalStateFixture.Token);
 

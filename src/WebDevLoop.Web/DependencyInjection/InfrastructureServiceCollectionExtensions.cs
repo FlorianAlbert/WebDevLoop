@@ -88,6 +88,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.TryAddSingleton<IGitHubIssues>(provider => new GitHubIssues(
             provider.GetRequiredService<GitHubApiConnection>().Client,
             provider.GetRequiredService<ITokenProvider>()));
+        services.TryAddSingleton<IGitHubRepositoryLabels>(provider => new GitHubRepositoryLabels(
+            provider.GetRequiredService<GitHubApiConnection>().Client,
+            provider.GetRequiredService<ITokenProvider>()));
 
         // gh stack is only reached when the stack REST endpoints answer 404 (both modes); the check reports whether it is installed.
         services.TryAddSingleton<IGitHubPullsAndStacks>(provider => new GitHubPullsAndStacks(

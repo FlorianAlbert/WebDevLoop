@@ -1,9 +1,11 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
 using WebDevLoop.Core.Tests.Orchestration.SpecQueue;
+using WebDevLoop.Core.Tests.Ports.Fakes;
 using WebDevLoop.Core.Tests.Settings;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Recovery.Startup;
@@ -58,6 +60,25 @@ public sealed class SpecQueueRecomputationTests
     }
 
     [Fact]
+    public async Task a_label_lookup_failure_is_reported_without_holding_up_another_repository()
+    {
+        RepositoryRecord other = AddRepository("other", OtherRepositoryId, enabled: true);
+        _fixture.SeedSpec(1);
+        SpecRun first = await _fixture.EnqueueAsync(1);
+        SpecRun second = await EnqueueAsync(other, 2);
+        _fixture.Labels.LookupFailures[SpecWorkflowFixture.Repo] = new RepositoryLabelException("Check Issues permissions and retry.");
+
+        QueueRecomputationReport report = await Recomputation().RecomputeAsync(Token);
+
+        QueueRecomputationFault fault = Assert.Single(report.Faults);
+        Assert.Equal(_fixture.Repository.Id, fault.RepositoryId);
+        Assert.Contains("Check Issues permissions and retry.", fault.Error);
+        Assert.Equal(SpecRunStatus.Queued, first.Status);
+        Assert.Equal(SpecRunStatus.Preparing, second.Status);
+        Assert.Equal([OtherRepositoryId], report.Repositories.Select(repository => repository.RepositoryId));
+    }
+
+    [Fact]
     public async Task a_spec_recovery_parked_in_needs_attention_frees_its_slot_for_the_next_queued_spec()
     {
         _fixture.ConfigureQueue(maxActiveSpecs: 1);
@@ -82,7 +103,7 @@ public sealed class SpecQueueRecomputationTests
     private SpecQueueScheduler Scheduler(IRepositoryRecordRepository? repositories = null)
     {
         var settings = new PersistedEffectiveSettingsProvider(_fixture.Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
-        return new SpecQueueScheduler(repositories ?? _fixture.Store, _fixture.Store, _fixture.Issues, settings, _fixture.Store, _fixture.Store, _fixture.Clock);
+        return new SpecQueueScheduler(repositories ?? _fixture.Store, _fixture.Store, _fixture.Issues, settings, _fixture.Store, _fixture.Store, _fixture.Clock, new RepositoryOptIn(_fixture.Labels));
     }
 
     private RepositoryRecord AddRepository(string name, int id, bool enabled)

@@ -28,6 +28,8 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
 
     public FakeRepositoryQueries Repositories { get; } = new();
 
+    public FakeRepositoryLabels Labels { get; } = new();
+
     public FakeSettingsManager Settings { get; } = new();
 
     public FakeSpecEnqueuer Enqueuer { get; } = new();
@@ -85,6 +87,7 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
             services.AddSingleton<IAppInitializer, SkippedInitialization>();
             services.AddSingleton<IRepositoryRegistry>(Registry);
             services.AddSingleton<IRepositoryQueries>(Repositories);
+            services.AddSingleton<IGitHubRepositoryLabels>(Labels);
             services.AddSingleton<ISettingsManager>(Settings);
             services.AddSingleton<ISpecEnqueuer>(Enqueuer);
             services.AddSingleton<IRunQueries>(Runs);

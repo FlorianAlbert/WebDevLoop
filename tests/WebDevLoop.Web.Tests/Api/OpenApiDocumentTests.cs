@@ -18,6 +18,7 @@ public sealed class OpenApiDocumentTests
         string[] paths = document.GetProperty("paths").EnumerateObject().Select(path => path.Name).ToArray();
         Assert.Contains("/api/health", paths);
         Assert.Contains("/api/repos", paths);
+        Assert.Contains("/api/repos/{repoId}/opt-in", paths);
         Assert.Contains("/api/repos/{repoId}/spec-runs", paths);
         Assert.Contains("/api/steps/{id}/logs", paths);
         Assert.Contains("/api/spec-runs/{id}/merge-status", paths);

@@ -15,15 +15,27 @@ public sealed class ParentReviewEventHandler(ParentReviewStarter starter, IParen
         ArgumentNullException.ThrowIfNull(envelope);
         switch (envelope.Event)
         {
+            case FrontierReconciliationRequested requested:
+                await TryStartAsync(requested.SpecRunId, cancellationToken);
+                break;
             case TicketRunStatusChanged { To: TicketRunStatus.Integrated or TicketRunStatus.Skipped or TicketRunStatus.Aborted } changed:
-                await starter.StartIfTicketsCompleteAsync(changed.SpecRunId, cancellationToken);
+                await TryStartAsync(changed.SpecRunId, cancellationToken);
                 break;
             case SpecRunStatusChanged { To: SpecRunStatus.Running } running:
-                await starter.StartIfTicketsCompleteAsync(running.SpecRunId, cancellationToken);
+                await TryStartAsync(running.SpecRunId, cancellationToken);
                 break;
             case SpecRunStatusChanged { To: SpecRunStatus.ParentReviewing } reviewing:
                 launcher.Launch(new ParentReviewAssignment(reviewing.SpecRunId));
                 break;
+        }
+    }
+
+    private async Task TryStartAsync(RunId specRunId, CancellationToken cancellationToken)
+    {
+        ParentReviewStartResult result = await starter.StartIfTicketsCompleteAsync(specRunId, cancellationToken);
+        if (result.LookupError is { } error)
+        {
+            throw error;
         }
     }
 }

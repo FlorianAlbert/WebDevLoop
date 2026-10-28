@@ -28,7 +28,7 @@ public sealed class FrontierEventHandler(FrontierService frontier)
         if (lookupErrors.Length > 0)
         {
             // Report through the event bus's logging boundary only after all unrelated work has been reconciled.
-            throw new AggregateException("Some ticket blocker checks failed; affected tickets were deferred for normal recovery. Other tickets and specs were still reconciled.", lookupErrors);
+            throw new AggregateException("Some GitHub label or blocker checks failed; affected work was deferred for normal recovery. Other tickets and specs were still reconciled.", lookupErrors);
         }
     }
 

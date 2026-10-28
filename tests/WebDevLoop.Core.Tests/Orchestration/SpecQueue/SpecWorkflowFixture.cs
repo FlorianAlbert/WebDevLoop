@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Preparation;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Ports;
@@ -35,7 +36,7 @@ internal sealed class SpecWorkflowFixture
 
         var settingsProvider = new PersistedEffectiveSettingsProvider(Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
         Queue = new SpecQueueService(Store, Store, Issues, settingsProvider, Store, Store, Ids, Clock);
-        Scheduler = new SpecQueueScheduler(Store, Store, Issues, settingsProvider, Store, Store, Clock);
+        Scheduler = new SpecQueueScheduler(Store, Store, Issues, settingsProvider, Store, Store, Clock, new RepositoryOptIn(Labels));
         var options = new SpecPreparationOptions(SkillsRoot, explorationEnabled);
         var explorer = new SpecExplorer(Store, Store, Git, Agents, Directories, new PromptRenderer(), Store, Store, Ids, Clock, options);
         Preparation = new SpecPreparationService(
@@ -56,6 +57,8 @@ internal sealed class SpecWorkflowFixture
     public SequentialIdGenerator Ids { get; } = new();
 
     public InMemoryGitHubIssues Issues { get; } = new();
+
+    public InMemoryRepositoryLabels Labels { get; } = new();
 
     public InMemoryGitWorkspace Git { get; } = new();
 

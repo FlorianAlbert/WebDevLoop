@@ -27,6 +27,27 @@ public sealed class SpecQueueSchedulerTests
     }
 
     [Fact]
+    public async Task a_label_lookup_failure_returns_a_diagnostic_without_claiming_work_and_can_be_retried()
+    {
+        _fixture.SeedSpec(1);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        _fixture.Labels.LookupFailures[SpecWorkflowFixture.Repo] = new RepositoryLabelException("Check Issues permissions and retry.");
+
+        SpecScheduleResult deferred = await _fixture.ScheduleAsync();
+
+        Assert.Contains("Check Issues permissions and retry.", Assert.IsType<GitHubIssuesException>(deferred.LookupError).Message);
+        Assert.Empty(deferred.Activated);
+        Assert.Equal(SpecRunStatus.Queued, run.Status);
+        Assert.Null(run.MaxActiveSpecsSlot);
+        _fixture.Labels.LookupFailures.Clear();
+
+        SpecScheduleResult recovered = await _fixture.ScheduleAsync();
+
+        Assert.Null(recovered.LookupError);
+        Assert.Equal([run.Id], recovered.Activated);
+    }
+
+    [Fact]
     public async Task two_different_specs_cannot_both_become_active_when_max_active_specs_is_1()
     {
         _fixture.ConfigureQueue(maxActiveSpecs: 1);

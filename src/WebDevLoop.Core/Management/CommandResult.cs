@@ -14,4 +14,8 @@ public sealed record CommandResult<T>(CommandStatus Status, T? Value = default, 
         new(CommandStatus.Invalid, Errors: errors, Message: string.Join("; ", errors));
 
     public static CommandResult<T> Conflict(string message) => new(CommandStatus.Conflict, Message: message);
+
+    public static CommandResult<T> ApprovalRequired(string message) => new(CommandStatus.ApprovalRequired, Message: message);
+
+    public static CommandResult<T> Unavailable(string message) => new(CommandStatus.Unavailable, Message: message);
 }

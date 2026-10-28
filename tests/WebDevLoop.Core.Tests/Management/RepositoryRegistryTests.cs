@@ -14,9 +14,10 @@ public sealed class RepositoryRegistryTests
     private readonly InMemoryWorkflowStore _store = new();
     private readonly FakeClock _clock = new(Start);
     private readonly CurrentRepositorySelection _selection = new();
+    private readonly InMemoryRepositoryLabels _labels = new();
     private readonly RepositoryRegistry _registry;
 
-    public RepositoryRegistryTests() => _registry = new RepositoryRegistry(_store, _store, _store, _selection, _clock, new FixedWorkspaceRoot(WorkspaceRoot));
+    public RepositoryRegistryTests() => _registry = new RepositoryRegistry(_store, _store, _store, _selection, _clock, new FixedWorkspaceRoot(WorkspaceRoot), new RepositoryOptIn(_labels));
 
     [Fact]
     public async Task register_persists_an_enabled_repository_with_default_branch_and_clone_url()
@@ -123,6 +124,19 @@ public sealed class RepositoryRegistryTests
         CommandResult<RepositoryView> result = await _registry.RegisterAsync(new RegisterRepositoryCommand("acme", "widgets", "/work/w"), CancellationToken.None);
 
         Assert.Equal(CommandStatus.Conflict, result.Status);
+    }
+
+    [Fact]
+    public async Task a_label_created_with_approval_is_preserved_when_registration_loses_a_race()
+    {
+        _labels.Exists = false;
+        _store.ConflictOnNextSave = true;
+
+        CommandResult<RepositoryView> result = await _registry.RegisterAsync(
+            new RegisterRepositoryCommand("acme", "widgets", ApproveLabelCreation: true), CancellationToken.None);
+
+        Assert.Equal(CommandStatus.Conflict, result.Status);
+        Assert.True(_labels.Exists);
     }
 
     [Fact]

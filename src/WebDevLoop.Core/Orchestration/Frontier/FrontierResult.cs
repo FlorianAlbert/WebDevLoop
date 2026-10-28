@@ -11,7 +11,9 @@ public enum FrontierOutcome
     NotRunning,
     /// <summary>Compare-and-swap kept losing; periodic reconciliation will retry.</summary>
     ConcurrencyConflict,
-    /// <summary>Some tickets could not be checked on GitHub and were deferred; unrelated tickets may have dispatched.</summary>
+    /// <summary>The repository label is missing; new selections wait for explicit creation approval.</summary>
+    RepositoryLabelMissing,
+    /// <summary>A repository label or ticket could not be checked on GitHub; affected work was deferred.</summary>
     GitHubUnavailable,
 }
 

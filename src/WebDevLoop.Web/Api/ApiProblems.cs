@@ -49,6 +49,9 @@ internal static class ApiProblems
         CommandStatus.NotFound => NotFound(result.Message ?? "Not found."),
         CommandStatus.Invalid => Validation(result.Errors ?? []),
         CommandStatus.Conflict => Conflict(result.Message ?? "Conflict."),
+        CommandStatus.ApprovalRequired => TypedResults.Problem(result.Message, statusCode: StatusCodes.Status409Conflict,
+            title: "Label creation approval required", extensions: new Dictionary<string, object?> { ["code"] = "label_creation_approval_required" }),
+        CommandStatus.Unavailable => TypedResults.Problem(result.Message, statusCode: StatusCodes.Status503ServiceUnavailable, title: "Repository label unavailable"),
         _ => throw new ArgumentException("A successful result is not a problem.", nameof(result)),
     };
 }

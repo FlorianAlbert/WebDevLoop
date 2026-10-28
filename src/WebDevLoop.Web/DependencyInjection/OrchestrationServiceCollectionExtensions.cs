@@ -36,6 +36,7 @@ public static class OrchestrationServiceCollectionExtensions
         services.AddLaunchers();
 
         services.TryAddScoped<GlobalSettingsSeeder>();
+        services.TryAddScoped<RepositoryOptIn>();
         services.TryAddScoped<SpecQueueService>();
         services.TryAddScoped<SpecQueueScheduler>();
         services.TryAddScoped<SpecSnapshotter>();

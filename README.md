@@ -197,12 +197,26 @@ The API lives under `/api`; the OpenAPI document is served at `/openapi/v1.json`
 | --- | --- |
 | `GET /api/health`, `GET /api/prerequisites` | Readiness (`503` while diagnostic-only) and every check with its remediation |
 | `GET/POST /api/repos`, `GET/PATCH/DELETE /api/repos/{repoId}`, `POST /api/repos/{repoId}/select` | Register and manage repositories (`cloneUrl` and `localPath` are optional); select the UI context |
+| `GET/POST /api/repos/{repoId}/opt-in` | Check the fixed `webdevloop` repository label; create it only with explicit `{"approveLabelCreation": true}` consent |
 | `GET/PUT /api/settings/global`, `GET/PUT /api/repos/{repoId}/settings`, `GET /api/settings/effective/{repoId}` | Global settings, per-repository overrides (empty = inherit), effective values |
 | `POST /api/repos/{repoId}/spec-runs` with `{"specIssueNumber": 42}`, `GET /api/repos/{repoId}/spec-runs` | Queue an eligible parent spec issue (WebDevLoop Opt-in required); list the repository queue |
 | `GET /api/spec-runs/{id}` and `…/tickets`, `…/events`, `…/stack`, `…/merge-status` | Run state, ticket DAG, audit events, PR stack layers, merge status |
 | `GET /api/ticket-runs/{id}` and `…/steps`, `GET /api/steps/{id}` and `…/logs` | Ticket and agent step details, persisted agent logs |
 | `POST /api/spec-runs/{id}/retry`, `…/abort`; `POST /api/ticket-runs/{id}/retry`, `…/abort` | Run controls (see below) |
 | `GET /api/events/stream`, `GET /api/spec-runs/{id}/events/stream` | Live updates as server-sent events |
+
+### Repository label consent
+
+Repository registration checks the fixed `webdevloop` label. If missing, `POST /api/repos` returns `409` with
+`code: "label_creation_approval_required"`; resubmit with `approveLabelCreation: true` only after user approval.
+Omitted or false approval never creates the label or connects a repository whose label is missing.
+Creating the label does not label existing issues. Label lookup/creation errors return actionable `503` problems,
+not an approval prompt; check GitHub access and Issues read/write permissions and retry.
+
+Connected repositories retain all configuration when the label is missing or deleted. New work pauses at decision
+points while already selected tickets finish. `GET /api/repos/{repoId}/opt-in` checks without changing GitHub;
+`POST` uses the same explicit approval field to create the label and let normal reconciliation resume work.
+The [Repositories user guide](docfx/user-guide/repositories.md#webdevloop-opt-in-label) explains the UI consent and retry flow.
 
 ### Queue eligibility (WebDevLoop Opt-in)
 

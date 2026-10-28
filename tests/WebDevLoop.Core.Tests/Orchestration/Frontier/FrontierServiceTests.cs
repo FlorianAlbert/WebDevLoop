@@ -12,6 +12,48 @@ public sealed class FrontierServiceTests
     private readonly TicketExecutionFixture _fixture = new();
 
     [Fact]
+    public async Task a_repository_label_lookup_failure_defers_only_its_specs_and_recovery_resumes_them()
+    {
+        SeededSpec affected = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        SeededSpec other = await _fixture.SeedRunningSpecAsync("other", (1, []));
+        var repository = new GitHubRepoRef("octo", "app");
+        _fixture.Labels.LookupFailures[repository] = new RepositoryLabelException("Check Issues permissions and retry.");
+
+        IReadOnlyList<FrontierResult> results = await _fixture.Frontier().ReconcileAllRunningAsync(TicketExecutionFixture.Token);
+
+        Assert.Equal(FrontierOutcome.GitHubUnavailable, results[0].Outcome);
+        Assert.Contains("Check Issues permissions and retry.", Assert.Single(results[0].LookupErrors).Message);
+        Assert.Empty(results[0].Dispatched);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(affected[1]).Status);
+        Assert.Equal(FrontierOutcome.Reconciled, results[1].Outcome);
+        Assert.Equal([other[1]], results[1].Dispatched);
+        Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(other[1]).Status);
+        _fixture.Labels.LookupFailures.Remove(repository);
+
+        FrontierResult recovered = await _fixture.ReconcileAsync(affected.Id);
+
+        Assert.Equal([affected[1]], recovered.Dispatched);
+        Assert.Empty(recovered.LookupErrors);
+    }
+
+    [Fact]
+    public async Task event_bus_diagnostics_are_reported_after_other_repositories_have_been_reconciled()
+    {
+        SeededSpec affected = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        SeededSpec other = await _fixture.SeedRunningSpecAsync("other", (1, []));
+        _fixture.Labels.LookupFailures[new GitHubRepoRef("octo", "app")] =
+            new RepositoryLabelException("Check Issues permissions and retry.");
+
+        AggregateException error = await Assert.ThrowsAsync<AggregateException>(() =>
+            _fixture.HandleAsync(new TicketRunStatusChanged(other.Id, other[1], TicketRunStatus.Implementing, TicketRunStatus.Reviewing, TicketExecutionFixture.T0)));
+
+        Assert.Contains("Check Issues permissions and retry.", Assert.Single(error.InnerExceptions).Message);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(affected[1]).Status);
+        Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(other[1]).Status);
+        Assert.Equal([new ImplementationAssignment(other.Id, other[1])], _fixture.Launcher.Launched);
+    }
+
+    [Fact]
     public async Task reconciling_a_running_spec_promotes_unblocked_tickets_and_starts_them()
     {
         SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, [1]));

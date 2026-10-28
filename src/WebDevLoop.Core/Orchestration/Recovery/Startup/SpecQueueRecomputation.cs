@@ -23,7 +23,14 @@ public sealed class SpecQueueRecomputation(IRepositoryRecordRepository repositor
             try
             {
                 SpecScheduleResult schedule = await scheduler.ScheduleRepositoryAsync(repository.Id, cancellationToken);
-                recomputed.Add(new RepositoryQueueRecomputation(repository.Id, schedule));
+                if (schedule.LookupError is { } error)
+                {
+                    faults.Add(new QueueRecomputationFault(repository.Id, error.Message));
+                }
+                else
+                {
+                    recomputed.Add(new RepositoryQueueRecomputation(repository.Id, schedule));
+                }
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {

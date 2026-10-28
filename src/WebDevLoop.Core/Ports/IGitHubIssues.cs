@@ -18,6 +18,11 @@ public interface IGitHubIssues
     /// <summary>Finds an already-created finding sub-issue by its embedded fingerprint (crash recovery / dedupe).</summary>
     Task<IssueSnapshot?> FindFindingIssueAsync(IssueRef specIssue, FindingFingerprint fingerprint, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Creates an opted-in finding and links it to its parent, or reuses the fingerprint's existing issue (including an
+    /// unlinked issue left by an interrupted attempt). Reuse never changes labels or reverses a maintainer's opt-out.
+    /// Failed creation, opt-in, or linking throws; retrying must not duplicate an issue already created.
+    /// </summary>
     Task<IssueSnapshot> CreateFindingIssueAsync(FindingIssueDraft draft, CancellationToken cancellationToken);
 
     /// <summary>Idempotent: linking an existing sub-issue again succeeds.</summary>

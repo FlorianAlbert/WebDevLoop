@@ -63,7 +63,10 @@ internal sealed class FindingIssueTracker : IGitHubIssues
 
         int number = _nextNumber++;
         var issue = new IssueRef(draft.Parent.Owner, draft.Parent.Repo, number, $"node-{number}", DatabaseIdOffset + number);
-        var snapshot = new IssueSnapshot(issue, draft.Title, draft.Body, IssueState.Open, []);
+        var snapshot = new IssueSnapshot(issue, draft.Title, draft.Body, IssueState.Open, [])
+        {
+            Labels = [WebDevLoopOptIn.Label],
+        };
         _issues[number] = snapshot;
         _fingerprints[number] = draft.Fingerprint;
         Link(draft.Parent, number);

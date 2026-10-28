@@ -52,7 +52,8 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
     /// <summary>
     /// Reuses the finding issue for the fingerprint if one exists. A sub-issue is returned as is; an issue carrying the
     /// fingerprint that is not linked yet (a previous attempt created it and crashed before linking) is linked and returned.
-    /// Only a genuinely new finding creates an issue, which is linked to its parent right away.
+    /// Only a genuinely new finding creates an opted-in issue, which is linked to its parent right away.
+    /// Reused issues retain their current labels, including a maintainer's opt-out.
     /// </summary>
     public async Task<IssueSnapshot> CreateFindingIssueAsync(FindingIssueDraft draft, CancellationToken cancellationToken)
     {
@@ -71,9 +72,15 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         }
 
         string body = $"{draft.Body}\n\n{FindingFingerprintMarker.Render(draft.Fingerprint)}";
-        JsonElement created = (await _api.SendAsync(HttpMethod.Post, repo, $"repos/{repo.Owner}/{repo.Name}/issues", new { title = draft.Title, body }, cancellationToken))
+        JsonElement created = (await _api.SendAsync(HttpMethod.Post, repo, $"repos/{repo.Owner}/{repo.Name}/issues", new { title = draft.Title, body, labels = new[] { WebDevLoopOptIn.Label } }, cancellationToken))
             ?? throw new GitHubApiException(GitHubApiErrorKind.Invalid, "GitHub returned no content for the created issue.");
         IssueSnapshot snapshot = IssueJson.ToSnapshot(created, repo, []);
+        if (!snapshot.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new GitHubApiException(
+                GitHubApiErrorKind.Forbidden,
+                $"GitHub created finding issue #{snapshot.Ref.Number} without the required '{WebDevLoopOptIn.Label}' label. Check that the label exists and the app can apply issue labels, then opt the issue in explicitly; recovery will reuse it without changing its labels.");
+        }
 
         await AddSubIssueAsync(draft.Parent, snapshot.Ref, cancellationToken);
         return snapshot;

@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Orchestration.Completion.ParentReview;
@@ -20,40 +21,55 @@ public enum ParentReviewStartOutcome
 
     /// <summary>Another writer changed the spec first (e.g. a duplicate start); it wins.</summary>
     ConcurrencyConflict,
+
+    RepositoryLabelMissing,
+
+    GitHubUnavailable,
 }
+
+public sealed record ParentReviewStartResult(ParentReviewStartOutcome Outcome, GitHubIssuesException? LookupError = null);
 
 /// <summary>
 /// Workflow step 9 trigger: once every ticket of a running spec is complete (<c>Integrated</c>, or <c>Skipped</c>/<c>Aborted</c>
 /// by the user), the spec moves to <c>ParentReviewing</c>, which counts the next parent-review cycle. Idempotent and race-safe
 /// (compare-and-swap on the spec), so duplicate events and recovery may all call it.
 /// </summary>
-public sealed class ParentReviewStarter(ISpecRunRepository specRuns, ITicketRunRepository ticketRuns, IOutbox outbox, IUnitOfWork unitOfWork, IClock clock)
+public sealed class ParentReviewStarter(ISpecRunRepository specRuns, ITicketRunRepository ticketRuns, IOutbox outbox, IUnitOfWork unitOfWork, IClock clock, RepositoryOptIn optIn)
 {
     private readonly SpecRunJournal _journal = new(outbox, clock);
 
-    public async Task<ParentReviewStartOutcome> StartIfTicketsCompleteAsync(RunId specRunId, CancellationToken cancellationToken)
+    public async Task<ParentReviewStartResult> StartIfTicketsCompleteAsync(RunId specRunId, CancellationToken cancellationToken)
     {
         SpecRun? spec = await specRuns.GetAsync(specRunId, cancellationToken);
         if (spec is not { Status: SpecRunStatus.Running })
         {
-            return ParentReviewStartOutcome.NotRunning;
+            return new(ParentReviewStartOutcome.NotRunning);
         }
 
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken);
         if (tickets.Count == 0)
         {
-            return ParentReviewStartOutcome.NoTickets;
+            return new(ParentReviewStartOutcome.NoTickets);
         }
 
         if (!tickets.All(IsComplete))
         {
-            return ParentReviewStartOutcome.TicketsOutstanding;
+            return new(ParentReviewStartOutcome.TicketsOutstanding);
+        }
+
+        var repository = new GitHubRepoRef(spec.ParentIssue.Owner, spec.ParentIssue.Repo);
+        RepositoryLabelCheck label = await optIn.CheckAsync(repository, cancellationToken);
+        if (label.ToDeferredResult(
+            new ParentReviewStartResult(ParentReviewStartOutcome.RepositoryLabelMissing),
+            error => new ParentReviewStartResult(ParentReviewStartOutcome.GitHubUnavailable, error)) is { } deferred)
+        {
+            return deferred;
         }
 
         _journal.Move(spec, SpecRunStatus.ParentReviewing);
-        return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved
+        return new(await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved
             ? ParentReviewStartOutcome.Started
-            : ParentReviewStartOutcome.ConcurrencyConflict;
+            : ParentReviewStartOutcome.ConcurrencyConflict);
     }
 
     private static bool IsComplete(TicketRun ticket) => ticket.IsTerminal;

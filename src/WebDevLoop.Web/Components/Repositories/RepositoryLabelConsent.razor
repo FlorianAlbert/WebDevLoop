@@ -1,0 +1,32 @@
+<div class="alert alert-warning mb-0 mt-2 small" role="alertdialog" aria-label="Approve label creation for @FullName" data-testid="label-consent">
+    <p class="mb-2">
+        <strong>Create the webdevloop label in @FullName?</strong>
+        WebDevLoop Opt-in uses this fixed label to express permission to work on individual issues.
+        This creates only the repository label; existing issues stay unlabeled.
+        Declining leaves the repository unchanged and cancels this connection attempt.
+        Already connected repositories keep their configuration, but new work stays paused.
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-primary btn-sm" data-testid="approve-label" disabled="@Busy" @onclick="OnApprove">
+            @(Busy ? "Creating..." : "Approve label creation")
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" @ref="_declineButton" data-testid="decline-label" disabled="@Busy" @onclick="OnDecline">Decline</button>
+    </div>
+</div>
+
+@code {
+    private ElementReference _declineButton;
+
+    [Parameter, EditorRequired] public string FullName { get; set; } = string.Empty;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnApprove { get; set; }
+    [Parameter] public EventCallback OnDecline { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await _declineButton.FocusAsync();
+        }
+    }
+}

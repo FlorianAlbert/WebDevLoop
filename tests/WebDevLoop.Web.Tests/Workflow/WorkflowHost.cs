@@ -51,6 +51,7 @@ internal sealed class WorkflowHost(WorkflowScenario scenario, AgentScript? scrip
         builder.ConfigureTestServices(services =>
         {
             services.Replace(ServiceDescriptor.Singleton<IGitHubIssues>(scenario.Issues));
+            services.AddSingleton<IGitHubRepositoryLabels>(scenario.Labels);
             services.Replace(ServiceDescriptor.Singleton<IGitHubPullsAndStacks>(scenario.Pulls));
             services.Replace(ServiceDescriptor.Singleton<IModelCatalog>(Models.Catalog));
             services.Replace(ServiceDescriptor.Singleton<IGitHubSignInState>(SignIn));
@@ -90,6 +91,8 @@ internal sealed class WorkflowScenario : IDisposable
     public WorkflowSandbox Sandbox { get; } = new();
 
     public FakeGitHubIssues Issues { get; }
+
+    public FakeRepositoryLabels Labels { get; } = new();
 
     public FakeGitHubPulls Pulls { get; }
 

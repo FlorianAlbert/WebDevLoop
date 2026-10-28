@@ -36,7 +36,7 @@ internal sealed partial class GitHubRestClient(HttpClient http, ITokenProvider t
             }
             else
             {
-                throw new GitHubApiException(GitHubApiErrorKind.Invalid, $"GitHub returned no issue list for GET {path}.");
+                throw new GitHubApiException(GitHubApiErrorKind.Invalid, $"GitHub returned no valid list for GET {path}.");
             }
         }
 

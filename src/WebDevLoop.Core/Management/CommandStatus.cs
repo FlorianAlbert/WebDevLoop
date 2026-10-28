@@ -10,4 +10,8 @@ public enum CommandStatus
 
     /// <summary>The request is valid but collides with current state (duplicate, in use, or a lost concurrency race).</summary>
     Conflict,
+
+    ApprovalRequired,
+
+    Unavailable,
 }

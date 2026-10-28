@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Orchestration.Findings;
 using WebDevLoop.Core.Orchestration.Frontier;
@@ -11,6 +12,7 @@ using WebDevLoop.Core.Settings;
 using WebDevLoop.Core.Tests.Orchestration.Findings;
 using WebDevLoop.Core.Tests.Orchestration.ReviewLoop;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
+using WebDevLoop.Core.Tests.Ports.Fakes;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Completion.ParentReview;
 
@@ -60,7 +62,7 @@ internal sealed class ParentReviewFixture
     public ParentReviewStarter Starter()
     {
         CasWorkflowScope scope = Db.OpenScope();
-        return new ParentReviewStarter(scope, scope, scope, scope, Execution.Clock);
+        return new ParentReviewStarter(scope, scope, scope, scope, Execution.Clock, new RepositoryOptIn(Execution.Labels));
     }
 
     public ParentReviewEventHandler Handler() => new(Starter(), Launcher);

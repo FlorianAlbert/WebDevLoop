@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Control;
 using WebDevLoop.Core.Orchestration.Integration;
 using WebDevLoop.Core.Orchestration.SpecQueue;
@@ -63,7 +64,7 @@ internal sealed class RunControlFixture : IDisposable
     public (SpecRunControl Specs, TicketRunControl Tickets) Controls()
     {
         var settings = new PersistedEffectiveSettingsProvider(Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
-        var scheduler = new SpecQueueScheduler(Store, Store, new InMemoryGitHubIssues(), settings, Store, Store, Clock);
+        var scheduler = new SpecQueueScheduler(Store, Store, new InMemoryGitHubIssues(), settings, Store, Store, Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()));
         var journal = new RunControlJournal(Store, Store, Clock);
         var stopper = new ActiveWorkStopper(Agents, Targets);
         return (

@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Ports;
 
@@ -17,7 +18,8 @@ public sealed class FrontierService(
     TicketDispatcher dispatcher,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
-    IClock clock)
+    IClock clock,
+    RepositoryOptIn optIn)
 {
     /// <summary>A lost race is recomputed from fresh state right away instead of waiting for periodic reconciliation.</summary>
     private const int MaxAttempts = 3;
@@ -72,6 +74,15 @@ public sealed class FrontierService(
         if (specRun is not { Status: SpecRunStatus.Running })
         {
             return FrontierResult.NotRunning;
+        }
+
+        var repository = new GitHubRepoRef(specRun.ParentIssue.Owner, specRun.ParentIssue.Repo);
+        RepositoryLabelCheck label = await optIn.CheckAsync(repository, cancellationToken);
+        if (label.ToDeferredResult(
+            new FrontierResult(FrontierOutcome.RepositoryLabelMissing, [], []),
+            error => new FrontierResult(FrontierOutcome.GitHubUnavailable, [], []) { LookupErrors = [error] }) is { } deferred)
+        {
+            return deferred;
         }
 
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken);

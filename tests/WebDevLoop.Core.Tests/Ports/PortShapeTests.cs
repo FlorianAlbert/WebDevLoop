@@ -12,6 +12,7 @@ public sealed class PortShapeTests
     public static TheoryData<string> AsyncPorts =>
     [
         "WebDevLoop.Core.Ports.IGitHubIssues",
+        "WebDevLoop.Core.Ports.IGitHubRepositoryLabels",
         "WebDevLoop.Core.Ports.IGitHubPullsAndStacks",
         "WebDevLoop.Core.Ports.IGitWorkspace",
         "WebDevLoop.Core.Ports.IAgentRunner",

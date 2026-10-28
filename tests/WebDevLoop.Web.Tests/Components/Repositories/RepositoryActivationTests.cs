@@ -85,6 +85,54 @@ public sealed class RepositoryActivationTests : UiTestContext
     }
 
     [Fact]
+    public void missing_label_explains_the_change_and_declining_aborts_connection()
+    {
+        Registry.RegisterResult = CommandResult<RepositoryView>.ApprovalRequired("Explicit approval required.");
+        IRenderedComponent<RepositoriesPage> cut = OpenPicker(signedIn: true);
+
+        cut.Find("[data-repo='acme/tools'] [data-testid=activate]").Click();
+
+        AngleSharp.Dom.IElement dialog = cut.Find("[data-testid=label-consent]");
+        Assert.Equal("alertdialog", dialog.GetAttribute("role"));
+        Assert.Contains("webdevloop", dialog.TextContent);
+        Assert.Contains("existing issues", dialog.TextContent);
+        cut.Find("[data-testid=decline-label]").Click();
+
+        Assert.Empty(cut.FindAll("[data-testid=label-consent]"));
+        Assert.Single(Registry.Registered);
+        Assert.False(Registry.Registered[0].ApproveLabelCreation);
+        Assert.Equal("false", cut.Find("[data-repo='acme/tools']").GetAttribute("data-active"));
+    }
+
+    [Fact]
+    public void approving_label_creation_completes_connection_with_explicit_consent()
+    {
+        Registry.RegisterResult = CommandResult<RepositoryView>.ApprovalRequired("Explicit approval required.");
+        IRenderedComponent<RepositoriesPage> cut = OpenPicker(signedIn: true);
+        cut.Find("[data-repo='acme/tools'] [data-testid=activate]").Click();
+        Registry.RegisterResult = CommandResult<RepositoryView>.Succeeded(ApiData.Repository(3, "tools"));
+
+        cut.Find("[data-testid=approve-label]").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal(3, Selection.CurrentRepositoryId));
+        Assert.True(Registry.Registered[^1].ApproveLabelCreation);
+        Assert.Equal("true", cut.Find("[data-repo='acme/tools']").GetAttribute("data-active"));
+    }
+
+    [Fact]
+    public void lookup_errors_are_not_presented_as_permission_to_create_a_label()
+    {
+        Registry.RegisterResult = CommandResult<RepositoryView>.Unavailable("Could not check the label; check permissions and retry.");
+        IRenderedComponent<RepositoriesPage> cut = OpenPicker(signedIn: true);
+
+        cut.Find("[data-repo='acme/tools'] [data-testid=activate]").Click();
+
+        Assert.Contains("permissions and retry", cut.Find("[data-testid=register-errors]").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid=label-consent]"));
+        Assert.Equal("false", cut.Find("[data-repo='acme/tools']").GetAttribute("data-active"));
+    }
+
+    [Fact]
     public void removing_needs_confirmation_and_clears_the_selection_when_the_current_repository_goes()
     {
         Selection.Select(1);

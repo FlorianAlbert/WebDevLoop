@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Integration;
 using WebDevLoop.Core.Orchestration.Recovery.ExternalState;
@@ -67,7 +68,7 @@ public sealed class AwaitingMergeRecoveryTests
             new IntegrationSagaReconciler(store, store, f.Pulls, saga, new RecordingIntegrationLauncher(), store, store, f.Clock, new ExternalReconciliationOptions()),
             new StackBaseReconciler(store, f.Pulls, store, store, f.Clock),
             f.Tracking());
-        var scheduler = new SpecQueueScheduler(store, store, f.Issues, f.Settings, store, store, f.Clock);
+        var scheduler = new SpecQueueScheduler(store, store, f.Issues, f.Settings, store, store, f.Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()));
         var noAgentWork = new RecoveryStageFakes();
         return new RecoveryCoordinator(
             external,

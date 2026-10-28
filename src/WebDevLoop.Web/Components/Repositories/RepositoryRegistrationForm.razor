@@ -59,9 +59,15 @@
                             <span class="me-auto">@fullName</span>
                             @if (registered is null)
                             {
-                                <button type="button" class="btn btn-outline-primary btn-sm" data-testid="activate" aria-label="Add @fullName" disabled="@(_busy)" @onclick="() => ActivateAsync(fullName)">
+                                <button type="button" class="btn btn-outline-primary btn-sm" data-testid="activate" aria-label="Add @fullName" disabled="@(_busy || _confirmLabel is not null)" @onclick="() => ActivateAsync(fullName)">
                                     @(_pendingName == fullName ? "Adding…" : "Add")
                                 </button>
+                                @if (_confirmLabel == fullName)
+                                {
+                                    <div class="w-100">
+                                        <RepositoryLabelConsent FullName="@fullName" Busy="_busy" OnApprove="() => ActivateAsync(fullName, true)" OnDecline="() => _confirmLabel = null" />
+                                    </div>
+                                }
                             }
                             else
                             {
@@ -81,7 +87,7 @@
         }
     }
     <div class="mt-3">
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="register-close" @onclick="OnCancel">Close</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="register-close" disabled="@_busy" @onclick="OnCancel">Close</button>
     </div>
 </SectionCard>
 
@@ -89,6 +95,7 @@
     private IReadOnlyList<string>? _candidates;
     private List<RepositoryView> _registered = [];
     private string? _confirmRemove;
+    private string? _confirmLabel;
     private string? _error;
     private string? _accessError;
     private bool _loading;
@@ -147,18 +154,19 @@
     private RepositoryView? FindRegistered(string fullName) =>
         _registered.FirstOrDefault(repository => string.Equals($"{repository.Owner}/{repository.Name}", fullName, StringComparison.OrdinalIgnoreCase));
 
-    private async Task ActivateAsync(string fullName)
+    private async Task ActivateAsync(string fullName, bool approveLabelCreation = false)
     {
         _pendingName = fullName;
         int separator = fullName.IndexOf('/');
-        var command = new RegisterRepositoryCommand(fullName[..separator], fullName[(separator + 1)..]);
+        var command = new RegisterRepositoryCommand(fullName[..separator], fullName[(separator + 1)..], ApproveLabelCreation: approveLabelCreation);
         await RunAsync(async () =>
         {
             CommandResult<RepositoryView> result = await InScopeAsync(services =>
                 services.GetRequiredService<IRepositoryRegistry>().RegisterAsync(command, CancellationToken.None));
+            _confirmLabel = result.Status == CommandStatus.ApprovalRequired ? fullName : null;
             if (!result.IsSuccess)
             {
-                _error = result.Message;
+                _error = result.Status == CommandStatus.ApprovalRequired ? null : result.Message;
                 return;
             }
 

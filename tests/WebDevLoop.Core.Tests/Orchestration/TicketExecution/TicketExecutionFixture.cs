@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Orchestration.Results;
@@ -36,6 +37,8 @@ internal sealed class TicketExecutionFixture
 
     public InMemoryGitHubIssues Issues { get; set; } = new();
 
+    public InMemoryRepositoryLabels Labels { get; } = new();
+
     public FakeClock Clock { get; } = new(T0);
 
     public SequentialIdGenerator Ids { get; } = new();
@@ -64,7 +67,7 @@ internal sealed class TicketExecutionFixture
             scope,
             scope,
             Clock);
-        return new FrontierService(scope, scope, Issues, dispatcher, scope, scope, Clock);
+        return new FrontierService(scope, scope, Issues, dispatcher, scope, scope, Clock, new RepositoryOptIn(Labels));
     }
 
     public TicketImplementationRunner Runner(CasWorkflowScope? scope = null)

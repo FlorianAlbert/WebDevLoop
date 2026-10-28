@@ -15,14 +15,15 @@ public sealed class SpecQueueEventHandler(SpecQueueScheduler scheduler)
     public async Task HandleAsync(EventEnvelope envelope, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(envelope);
-        switch (envelope.Event)
+        SpecScheduleResult result = envelope.Event switch
         {
-            case SpecRunQueued queued:
-                await scheduler.ScheduleRepositoryAsync(queued.RepositoryId, cancellationToken);
-                break;
-            case SpecRunStatusChanged changed when MayStartQueuedSpecs(changed.To):
-                await scheduler.ScheduleRepositoryAsync(changed.RepositoryId, cancellationToken);
-                break;
+            SpecRunQueued queued => await scheduler.ScheduleRepositoryAsync(queued.RepositoryId, cancellationToken),
+            SpecRunStatusChanged changed when MayStartQueuedSpecs(changed.To) => await scheduler.ScheduleRepositoryAsync(changed.RepositoryId, cancellationToken),
+            _ => SpecScheduleResult.Nothing,
+        };
+        if (result.LookupError is { } error)
+        {
+            throw error;
         }
     }
 

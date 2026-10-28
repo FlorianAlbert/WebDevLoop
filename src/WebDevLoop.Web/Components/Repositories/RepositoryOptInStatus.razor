@@ -1,0 +1,63 @@
+@inherits ScopedComponentBase
+@using WebDevLoop.Core.Domain
+
+<div class="mt-2 small" data-testid="label-status" role="status">
+    @if (_result is null)
+    {
+        <span>Checking WebDevLoop Opt-in label...</span>
+    }
+    else if (_result.IsSuccess)
+    {
+        <span>WebDevLoop Opt-in label available.</span>
+    }
+    else
+    {
+        <span class="@(_result.Status == CommandStatus.ApprovalRequired ? "text-warning-emphasis" : "text-danger")">@_result.Message</span>
+    }
+    <div class="d-flex flex-wrap gap-2 mt-1">
+        <button type="button" class="btn btn-link btn-sm p-0" data-testid="check-label" aria-label="Recheck label for @FullName" disabled="@_busy" @onclick="() => CheckAsync()">Recheck label</button>
+        @if (_result?.Status == CommandStatus.ApprovalRequired)
+        {
+            <button type="button" class="btn btn-outline-primary btn-sm" data-testid="review-label" disabled="@(_busy || _confirm)" @onclick="() => _confirm = true">Review label creation</button>
+        }
+    </div>
+</div>
+@if (_confirm)
+{
+    <RepositoryLabelConsent FullName="@FullName" Busy="_busy" OnApprove="() => CheckAsync(true)" OnDecline="() => _confirm = false" />
+}
+
+@code {
+    private CommandResult<bool>? _result;
+    private int? _repositoryId;
+    private bool _busy;
+    private bool _confirm;
+
+    [Parameter, EditorRequired] public RepositoryView Repository { get; set; } = default!;
+
+    private string FullName => $"{Repository.Owner}/{Repository.Name}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_repositoryId != Repository.Id)
+        {
+            _repositoryId = Repository.Id;
+            await CheckAsync();
+        }
+    }
+
+    private async Task CheckAsync(bool approval = false)
+    {
+        _busy = true;
+        try
+        {
+            _result = await InScopeAsync(services => services.GetRequiredService<RepositoryOptIn>().EnsureAsync(
+                new GitHubRepoRef(Repository.Owner, Repository.Name), approval, CancellationToken.None));
+            _confirm = false;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

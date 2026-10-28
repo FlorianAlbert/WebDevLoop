@@ -12,7 +12,8 @@ public sealed class RepositoryRegistry(
     IUnitOfWork unitOfWork,
     ICurrentRepositorySelection selection,
     IClock clock,
-    IWorkspaceRootProvider workspaceRoot) : IRepositoryRegistry
+    IWorkspaceRootProvider workspaceRoot,
+    RepositoryOptIn optIn) : IRepositoryRegistry
 {
     public async Task<CommandResult<RepositoryView>> RegisterAsync(RegisterRepositoryCommand command, CancellationToken cancellationToken)
     {
@@ -27,6 +28,12 @@ public sealed class RepositoryRegistry(
         if (await repositories.FindAsync(repo!.Value, cancellationToken) is not null)
         {
             return CommandResult<RepositoryView>.Conflict($"Repository '{repo}' is already registered.");
+        }
+
+        CommandResult<bool> label = await optIn.EnsureAsync(repo.Value, command.ApproveLabelCreation, cancellationToken);
+        if (!label.IsSuccess)
+        {
+            return new CommandResult<RepositoryView>(label.Status, Message: label.Message);
         }
 
         string localPath = string.IsNullOrWhiteSpace(command.LocalPath)

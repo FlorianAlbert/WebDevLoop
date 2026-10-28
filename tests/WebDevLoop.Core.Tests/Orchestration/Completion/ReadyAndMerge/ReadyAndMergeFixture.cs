@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
 using WebDevLoop.Core.Orchestration.Findings;
@@ -126,7 +127,7 @@ internal sealed class ReadyAndMergeFixture
     }
 
     public Task<SpecScheduleResult> ScheduleAsync() =>
-        new SpecQueueScheduler(Store, Store, Issues, Settings, Store, Store, Clock).ScheduleRepositoryAsync(Repository.Id, Token);
+        new SpecQueueScheduler(Store, Store, Issues, Settings, Store, Store, Clock, new RepositoryOptIn(new InMemoryRepositoryLabels())).ScheduleRepositoryAsync(Repository.Id, Token);
 
     public async Task PrepareAsync(SpecRun spec)
     {

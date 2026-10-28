@@ -1,4 +1,5 @@
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Orchestration.SpecQueue;
 
@@ -10,4 +11,7 @@ namespace WebDevLoop.Core.Orchestration.SpecQueue;
 public sealed record SpecScheduleResult(IReadOnlyList<RunId> Activated, IReadOnlyList<RunId> Waiting, bool ConcurrencyConflict)
 {
     public static SpecScheduleResult Nothing { get; } = new([], [], false);
+
+    /// <summary>A label lookup failed; no work was activated. The caller reports the diagnostic and retries normally.</summary>
+    public GitHubIssuesException? LookupError { get; init; }
 }

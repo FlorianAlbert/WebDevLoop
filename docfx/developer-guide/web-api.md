@@ -53,11 +53,19 @@ flowchart LR
 | Method | Route | Purpose | Notes |
 | --- | --- | --- | --- |
 | GET | `/api/repos` | List registered repositories. | |
-| POST | `/api/repos` | Register a repository. | `201` + `Location`; `400` validation; `409` conflict. |
+| POST | `/api/repos` | Register a repository after checking its fixed `webdevloop` label. | `201` + `Location`; `400` validation; `409` conflict or approval required; `503` label lookup/creation failure. |
+| GET | `/api/repos/{repoId:int}/opt-in` | Check the fixed repository label without creating it. | `200` `true`; `404`; `409` approval required; `503` lookup failure. |
+| POST | `/api/repos/{repoId:int}/opt-in` | Create the missing label only with explicit `{ "approveLabelCreation": true }`. | `200` `true`; `404`; `409` approval required; `503` lookup/creation failure. |
 | GET | `/api/repos/{repoId:int}` | One repository. | `404`. |
 | PATCH | `/api/repos/{repoId:int}` | Update base branch, clone URL, local path, enabled flag. | `400`, `404`. |
 | DELETE | `/api/repos/{repoId:int}` | Remove a repository. | `204`; `404`; `409` when it cannot be removed. |
 | POST | `/api/repos/{repoId:int}/select` | Set the repository the UI views. | View context only; never changes scheduling. |
+
+Both registration and the connected-repository opt-in endpoint use `approveLabelCreation` (default `false`).
+If the label is absent, `409` carries `code: "label_creation_approval_required"`; only resubmit `true` after explicit
+user approval. A declined or omitted approval never creates the label. Provisioning never labels existing issues.
+Connected repositories retain all configuration while new work waits for a successful check or approved creation.
+Lookup/creation failures return permission/retry diagnostics rather than pretending the label is absent or created.
 
 ### Settings (`Api/SettingsEndpoints.cs`)
 
@@ -151,7 +159,7 @@ Mapping from Core results:
 
 | Core result | Mapped by | To |
 | --- | --- | --- |
-| `CommandResult<T>` (`NotFound`, `Invalid`, `Conflict`) | `ApiProblems.ForFailure` | `404`, `400` validation problem, `409` |
+| `CommandResult<T>` (`NotFound`, `Invalid`, `Conflict`, `ApprovalRequired`, `Unavailable`) | `ApiProblems.ForFailure` | `404`, `400` validation problem, `409`, `409` with consent code, `503` with label diagnostics |
 | `ControlResult` (`NotFound`, `NotAllowed`, `NoActiveSlot`, `ConcurrencyConflict`) | `ApiProblems.ForControl` | `404`, `409`, `409`, `409` |
 | `EnqueueResult` (`Queued`, `AlreadyQueued`, `RepositoryNotFound`, `Ineligible`, `GitHubUnavailable`, `ConcurrencyConflict`) | `SpecRunEndpoints.QueueSpecAsync` | `202`, `200`, `404`, `409`, `503`, `409`; failures include a reason |
 

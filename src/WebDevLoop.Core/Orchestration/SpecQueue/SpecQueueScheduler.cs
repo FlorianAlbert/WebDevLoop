@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
 
@@ -20,7 +21,8 @@ public sealed class SpecQueueScheduler(
     IEffectiveSettingsProvider settings,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
-    IClock clock)
+    IClock clock,
+    RepositoryOptIn optIn)
 {
     private readonly SpecDependencyGate _gate = new(specRuns, issues);
 
@@ -30,6 +32,14 @@ public sealed class SpecQueueScheduler(
         if (repository is not { IsEnabled: true })
         {
             return SpecScheduleResult.Nothing;
+        }
+
+        RepositoryLabelCheck label = await optIn.CheckAsync(repository.Ref, cancellationToken);
+        if (label.ToDeferredResult(
+            SpecScheduleResult.Nothing,
+            error => SpecScheduleResult.Nothing with { LookupError = error }) is { } deferred)
+        {
+            return deferred;
         }
 
         EffectiveSettings effective = await settings.GetAsync(repositoryId, cancellationToken);

@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
+using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Completion.ParentReview;
@@ -20,6 +21,43 @@ public sealed class ParentReviewTriggerTests
         {
             await DeliverAsync(workflowEvent);
         }
+    }
+
+    [Fact]
+    public async Task A_label_lookup_failure_defers_parent_review_with_diagnostics_until_a_successful_retry()
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        _fixture.Execution.Labels.LookupFailures[new GitHubRepoRef("octo", "app")] =
+            new RepositoryLabelException("Check Issues permissions and retry.");
+
+        ParentReviewStartResult deferred = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(ParentReviewStartOutcome.GitHubUnavailable, deferred.Outcome);
+        Assert.Contains("Check Issues permissions and retry.", Assert.IsType<GitHubIssuesException>(deferred.LookupError).Message);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Empty(_fixture.Launcher.Launched);
+        _fixture.Execution.Labels.LookupFailures.Clear();
+
+        ParentReviewStartResult recovered = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(ParentReviewStartOutcome.Started, recovered.Outcome);
+        Assert.Null(recovered.LookupError);
+        Assert.Equal(SpecRunStatus.ParentReviewing, _fixture.Spec(spec.Id).Status);
+    }
+
+    [Fact]
+    public async Task A_deferred_parent_review_reports_label_errors_through_the_event_bus_boundary()
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        _fixture.Execution.Labels.LookupFailures[new GitHubRepoRef("octo", "app")] =
+            new RepositoryLabelException("Check Issues permissions and retry.");
+
+        GitHubIssuesException error = await Assert.ThrowsAsync<GitHubIssuesException>(() =>
+            DeliverAsync(new FrontierReconciliationRequested(spec.Id, TicketExecutionFixture.T0)));
+
+        Assert.Contains("Check Issues permissions and retry.", error.Message);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Empty(_fixture.Launcher.Launched);
     }
 
     [Fact]
@@ -47,9 +85,9 @@ public sealed class ParentReviewTriggerTests
         SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []), (3, [2]));
         await _fixture.WorkTicketAsync(spec, spec[2]);
 
-        ParentReviewStartOutcome outcome = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        ParentReviewStartResult result = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.TicketsOutstanding, outcome);
+        Assert.Equal(ParentReviewStartOutcome.TicketsOutstanding, result.Outcome);
         Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
         await DeliverCommittedAsync();
         Assert.Empty(_fixture.Launcher.Launched);
@@ -60,9 +98,9 @@ public sealed class ParentReviewTriggerTests
     {
         SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app");
 
-        ParentReviewStartOutcome outcome = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        ParentReviewStartResult result = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.NoTickets, outcome);
+        Assert.Equal(ParentReviewStartOutcome.NoTickets, result.Outcome);
         Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
         await DeliverCommittedAsync();
         Assert.Empty(_fixture.Launcher.Launched);
@@ -111,11 +149,11 @@ public sealed class ParentReviewTriggerTests
         SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
         _fixture.Db.HoldSavesUntil(2);
 
-        ParentReviewStartOutcome[] outcomes = await Task.WhenAll(
+        ParentReviewStartResult[] results = await Task.WhenAll(
             _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token),
             _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token));
 
-        Assert.Equal([ParentReviewStartOutcome.Started, ParentReviewStartOutcome.ConcurrencyConflict], outcomes.Order());
+        Assert.Equal([ParentReviewStartOutcome.Started, ParentReviewStartOutcome.ConcurrencyConflict], results.Select(result => result.Outcome).Order());
         Assert.Equal(1, _fixture.Spec(spec.Id).ReviewCycle);
     }
 
@@ -124,9 +162,9 @@ public sealed class ParentReviewTriggerTests
     {
         SeededSpec spec = await _fixture.SeedParentReviewingAsync();
 
-        ParentReviewStartOutcome outcome = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        ParentReviewStartResult result = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.NotRunning, outcome);
+        Assert.Equal(ParentReviewStartOutcome.NotRunning, result.Outcome);
         Assert.Equal(1, _fixture.Spec(spec.Id).ReviewCycle);
     }
 }

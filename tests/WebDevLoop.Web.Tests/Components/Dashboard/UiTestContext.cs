@@ -8,6 +8,7 @@ using WebDevLoop.Core.Queries;
 using WebDevLoop.Infrastructure.Prerequisites;
 using WebDevLoop.Web.Components.Repositories;
 using WebDevLoop.Web.Tests.Api;
+using WebDevLoop.Web.Tests.Workflow;
 
 namespace WebDevLoop.Web.Tests.Components.Dashboard;
 
@@ -17,6 +18,8 @@ public abstract class UiTestContext : BunitContext
     internal FakeRepositoryRegistry Registry { get; } = new();
 
     internal FakeRepositoryQueries Repositories { get; } = new();
+
+    internal FakeRepositoryLabels Labels { get; } = new();
 
     internal FakeRunQueries Runs { get; } = new();
 
@@ -39,6 +42,8 @@ public abstract class UiTestContext : BunitContext
         Readiness.RefreshAsync(CancellationToken.None).GetAwaiter().GetResult();
         Services.AddSingleton<IRepositoryRegistry>(Registry);
         Services.AddSingleton<IRepositoryQueries>(Repositories);
+        Services.AddSingleton<IGitHubRepositoryLabels>(Labels);
+        Services.AddScoped<RepositoryOptIn>();
         Services.AddSingleton<IRunQueries>(Runs);
         Services.AddSingleton<ISettingsManager>(Settings);
         Services.AddSingleton<ISpecEnqueuer>(Enqueuer);

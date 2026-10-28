@@ -198,11 +198,23 @@ The API lives under `/api`; the OpenAPI document is served at `/openapi/v1.json`
 | `GET /api/health`, `GET /api/prerequisites` | Readiness (`503` while diagnostic-only) and every check with its remediation |
 | `GET/POST /api/repos`, `GET/PATCH/DELETE /api/repos/{repoId}`, `POST /api/repos/{repoId}/select` | Register and manage repositories (`cloneUrl` and `localPath` are optional); select the UI context |
 | `GET/PUT /api/settings/global`, `GET/PUT /api/repos/{repoId}/settings`, `GET /api/settings/effective/{repoId}` | Global settings, per-repository overrides (empty = inherit), effective values |
-| `POST /api/repos/{repoId}/spec-runs` with `{"specIssueNumber": 42}`, `GET /api/repos/{repoId}/spec-runs` | Queue a parent spec issue; list the repository queue |
+| `POST /api/repos/{repoId}/spec-runs` with `{"specIssueNumber": 42}`, `GET /api/repos/{repoId}/spec-runs` | Queue an eligible parent spec issue (WebDevLoop Opt-in required); list the repository queue |
 | `GET /api/spec-runs/{id}` and `…/tickets`, `…/events`, `…/stack`, `…/merge-status` | Run state, ticket DAG, audit events, PR stack layers, merge status |
 | `GET /api/ticket-runs/{id}` and `…/steps`, `GET /api/steps/{id}` and `…/logs` | Ticket and agent step details, persisted agent logs |
 | `POST /api/spec-runs/{id}/retry`, `…/abort`; `POST /api/ticket-runs/{id}/retry`, `…/skip`, `…/abort` | Run controls (see below) |
 | `GET /api/events/stream`, `GET /api/spec-runs/{id}/events/stream` | Live updates as server-sent events |
+
+### Queue eligibility (WebDevLoop Opt-in)
+
+The parent spec must be **open** and labeled **`webdevloop`**, with at least one **open sub-issue independently
+labeled `webdevloop`**. Opting in a parent does not opt in its children, and triage labels such as `ready-for-agent`
+are not runtime permission. Eligible tickets may all be blocked; that does not prevent queueing.
+
+The API and the typed issue-number or URL form share the same enqueue path, which fetches current GitHub state and
+labels at submission. An ineligible spec is rejected before creating a run (`409` with a reason). A failed GitHub
+lookup, including authorization or transient failures, fails closed (`503` with access/retry guidance); stale data
+never authorizes queueing. New runs return `202`; duplicate unfinished runs return `200 AlreadyQueued` and the existing
+run id without creating another run. Diagnostic-only safeguards still apply.
 
 ## Copilot runtime and bundled skills
 

@@ -73,7 +73,7 @@ flowchart LR
 
 | Method | Route | Purpose | Notes |
 | --- | --- | --- | --- |
-| POST | `/api/repos/{repoId:int}/spec-runs` | Queue a parent spec issue. Body: `{ "specIssueNumber": 123 }`. | Gated. `202` `Queued`, or `200` `AlreadyQueued`; `400`, `404`, `409`, `503`. |
+| POST | `/api/repos/{repoId:int}/spec-runs` | Queue an open parent spec labeled `webdevloop` with at least one independently labeled open sub-issue. Body: `{ "specIssueNumber": 123 }`. | Gated. `202` `Queued`, or `200` `AlreadyQueued`; `400`, `404`, `409` (ineligible or concurrent change), `503` (GitHub lookup failure or diagnostic-only). |
 | GET | `/api/repos/{repoId:int}/spec-runs` | The repository's queue. | `404`. |
 | GET | `/api/spec-runs/{id}` | One spec run. | `404`. |
 | GET | `/api/spec-runs/{id}/tickets` | Ticket runs of the spec. | `404`. |
@@ -81,6 +81,12 @@ flowchart LR
 | GET | `/api/spec-runs/{id}/stack` | Stack layers (draft PRs). | `404`. |
 | GET | `/api/spec-runs/{id}/merge-status` | Awaiting merge, merged, or closed unmerged, as last tracked. | `404`. |
 | GET | `/api/spec-runs/{id}/events/stream` | Live events of one run (SSE). | `404`. See [Event stream](#event-stream-sse). |
+
+Queue eligibility is enforced by the shared `SpecQueueService` for API calls and typed input. It fetches current
+GitHub state and labels at each submission; stale selections do not bypass WebDevLoop Opt-in. Triage labels never
+authorize work, and eligible children can all be blocked. Failure problem `detail` explains an ineligible parent,
+missing eligible children, or a failed GitHub lookup (including permission and transient failures). Nothing is queued
+on failure. An unfinished duplicate is returned without creating another run.
 
 ### Ticket runs and steps (`Api/TicketRunEndpoints.cs`, `Api/StepEndpoints.cs`)
 
@@ -143,7 +149,7 @@ Mapping from Core results:
 | --- | --- | --- |
 | `CommandResult<T>` (`NotFound`, `Invalid`, `Conflict`) | `ApiProblems.ForFailure` | `404`, `400` validation problem, `409` |
 | `ControlResult` (`NotFound`, `NotAllowed`, `NoActiveSlot`, `ConcurrencyConflict`) | `ApiProblems.ForControl` | `404`, `409`, `409`, `409` |
-| `EnqueueResult` (`Queued`, `AlreadyQueued`, `RepositoryNotFound`, else) | `SpecRunEndpoints.QueueSpecAsync` | `202`, `200`, `404`, `409` |
+| `EnqueueResult` (`Queued`, `AlreadyQueued`, `RepositoryNotFound`, `Ineligible`, `GitHubUnavailable`, `ConcurrencyConflict`) | `SpecRunEndpoints.QueueSpecAsync` | `202`, `200`, `404`, `409`, `503`, `409`; failures include a reason |
 
 Core services return result objects for expected failures. They do not throw for them. Keep it that way: add a status to the result type and map it in `ApiProblems`.
 

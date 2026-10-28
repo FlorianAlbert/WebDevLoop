@@ -27,10 +27,16 @@ internal sealed class FakeIssuesApiHandler : HttpMessageHandler
     public void Get(string pattern, object body, params (string Name, string Value)[] headers) =>
         Respond(HttpMethod.Get, pattern, HttpStatusCode.OK, body, headers);
 
+    public void GetRaw(string pattern, string json) =>
+        _routes.Add((HttpMethod.Get, pattern, () => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json"),
+        }));
+
     public IEnumerable<IssuesApiRequest> RequestsTo(HttpMethod method, string path) =>
         Requests.Where(request => request.Method == method && request.Path == path);
 
-    public static object Issue(int number, long id, string title = "Title", string body = "", string state = "open", string repo = "widgets") => new
+    public static object Issue(int number, long id, string title = "Title", string body = "", string state = "open", string repo = "widgets", string[]? labels = null) => new
     {
         number,
         id,
@@ -38,6 +44,7 @@ internal sealed class FakeIssuesApiHandler : HttpMessageHandler
         title,
         body,
         state,
+        labels = (labels ?? []).Select(name => new { name }).ToArray(),
         repository_url = $"https://api.github.com/repos/acme/{repo}",
     };
 

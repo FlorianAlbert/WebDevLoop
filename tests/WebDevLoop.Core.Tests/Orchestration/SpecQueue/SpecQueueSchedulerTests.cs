@@ -18,6 +18,14 @@ public sealed class SpecQueueSchedulerTests
 
     private readonly SpecWorkflowFixture _fixture = new();
 
+    public SpecQueueSchedulerTests()
+    {
+        foreach (int spec in new[] { 1, 2, 3, 7 })
+        {
+            _fixture.SeedTicket(100 + spec, spec);
+        }
+    }
+
     [Fact]
     public async Task two_different_specs_cannot_both_become_active_when_max_active_specs_is_1()
     {

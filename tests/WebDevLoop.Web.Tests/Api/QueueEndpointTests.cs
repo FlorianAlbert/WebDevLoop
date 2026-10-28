@@ -70,15 +70,22 @@ public sealed class QueueEndpointTests
     [Theory]
     [InlineData(EnqueueOutcome.RepositoryNotFound, HttpStatusCode.NotFound)]
     [InlineData(EnqueueOutcome.ConcurrencyConflict, HttpStatusCode.Conflict)]
+    [InlineData(EnqueueOutcome.Ineligible, HttpStatusCode.Conflict)]
+    [InlineData(EnqueueOutcome.GitHubUnavailable, HttpStatusCode.ServiceUnavailable)]
     public async Task queueing_failures_map_to_status_codes(EnqueueOutcome outcome, HttpStatusCode expected)
     {
         await using ApiFactory factory = await new ApiFactory().EvaluateAsync();
-        factory.Enqueuer.Result = new EnqueueResult(outcome);
+        factory.Enqueuer.Result = new EnqueueResult(outcome, Reason: "Current GitHub eligibility could not be established.");
         using HttpClient client = factory.CreateClient();
 
         using HttpResponseMessage response = await client.PostJsonAsync("/api/repos/7/spec-runs", new { specIssueNumber = 10 });
 
         Assert.Equal(expected, response.StatusCode);
+        if (outcome is EnqueueOutcome.Ineligible or EnqueueOutcome.GitHubUnavailable)
+        {
+            JsonElement problem = await response.ReadJsonAsync();
+            Assert.Equal("Current GitHub eligibility could not be established.", problem.GetProperty("detail").GetString());
+        }
     }
 
     [Theory]

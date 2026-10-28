@@ -88,6 +88,10 @@ If your repository is missing from the list, add it to the App installation on t
 
 A spec is a GitHub issue that has open sub-issues. Each sub-issue is one ticket. Tickets can block each other with "blocked by" links.
 
+On GitHub, ensure the parent is open and labeled `webdevloop` (WebDevLoop Opt-in), and independently apply that label
+to at least one open sub-issue. Triage labels do not grant permission. Queueing checks current eligibility again;
+blocked tickets still count as eligible.
+
 1. Open [Queue](queue.md).
 2. Type the issue number (`123`, `#123`) or the issue URL into **Queue parent spec issue**.
 3. Click **Queue**.

@@ -14,6 +14,12 @@ public sealed class SpecQueueRecomputationTests
 
     private readonly SpecWorkflowFixture _fixture = new();
 
+    public SpecQueueRecomputationTests()
+    {
+        _fixture.SeedTicket(11, spec: 1);
+        _fixture.SeedTicket(12, spec: 2);
+    }
+
     private static CancellationToken Token => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -91,7 +97,9 @@ public sealed class SpecQueueRecomputationTests
 
     private async Task<SpecRun> EnqueueAsync(RepositoryRecord repository, int specNumber)
     {
-        _fixture.Issues.Seed(new IssueRef(repository.Owner, repository.Name, specNumber), $"Spec {specNumber}");
+        var parent = new IssueRef(repository.Owner, repository.Name, specNumber);
+        _fixture.Issues.Seed(parent, $"Spec {specNumber}");
+        _fixture.Issues.Seed(new IssueRef(repository.Owner, repository.Name, 100 + specNumber), "Eligible ticket", parent);
         EnqueueResult result = await _fixture.Queue.EnqueueAsync(repository.Id, specNumber, Token);
         Assert.Equal(EnqueueOutcome.Queued, result.Outcome);
         return await _fixture.RunAsync(result.SpecRunId!.Value);

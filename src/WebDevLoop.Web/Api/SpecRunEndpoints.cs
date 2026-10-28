@@ -16,7 +16,8 @@ internal static class SpecRunEndpoints
         group.MapPost("repos/{repoId:int}/spec-runs", QueueSpecAsync)
             .AddEndpointFilter<OperationalOnlyFilter>()
             .WithName("QueueSpecRun")
-            .WithSummary("Enqueues a parent spec issue. 202 with the run id; 503 with the prerequisite status in diagnostic-only mode.")
+            .WithSummary("Enqueues an open parent spec with WebDevLoop Opt-in and at least one independently opted-in open sub-issue.")
+            .WithDescription("Checks current GitHub state and the fixed 'webdevloop' label at submission, including typed input. Triage labels do not authorize work; eligible tickets may all be blocked. Returns 202 with the new run id, 200 AlreadyQueued with the existing unfinished run, 409 for ineligibility or a concurrent change, and 503 when GitHub eligibility cannot be verified or prerequisites fail. Failure problem details explain the reason; no run is created.")
             .Produces<QueueSpecResponse>(StatusCodes.Status202Accepted)
             .Produces<QueueSpecResponse>()
             .ProducesValidationProblem()
@@ -83,6 +84,8 @@ internal static class SpecRunEndpoints
             EnqueueOutcome.Queued => TypedResults.Accepted($"/api/spec-runs/{result.SpecRunId!.Value.Value}", new QueueSpecResponse(result.SpecRunId.Value.Value, nameof(EnqueueOutcome.Queued))),
             EnqueueOutcome.AlreadyQueued => TypedResults.Ok(new QueueSpecResponse(result.SpecRunId!.Value.Value, nameof(EnqueueOutcome.AlreadyQueued))),
             EnqueueOutcome.RepositoryNotFound => ApiProblems.NotFound($"Repository {repoId} does not exist."),
+            EnqueueOutcome.Ineligible => ApiProblems.Conflict(result.Reason!),
+            EnqueueOutcome.GitHubUnavailable => ApiProblems.GitHubEligibilityFailed(result.Reason!),
             _ => ApiProblems.Conflict("The queue was changed concurrently; retry."),
         };
     }

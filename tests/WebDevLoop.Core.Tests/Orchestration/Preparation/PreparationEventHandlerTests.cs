@@ -62,6 +62,7 @@ public sealed class PreparationEventHandlerTests
     private async Task<SpecRun> PreparingSpecAsync()
     {
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(2, spec: 1);
         SpecRun run = await _fixture.EnqueueAsync(1);
         await _fixture.ScheduleAsync();
         Assert.Equal(SpecRunStatus.Preparing, run.Status);

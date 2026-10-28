@@ -16,6 +16,8 @@ public sealed class SpecQueueServiceTests
     {
         _fixture.SeedSpec(1);
         _fixture.SeedSpec(2);
+        _fixture.SeedTicket(11, spec: 1);
+        _fixture.SeedTicket(12, spec: 2);
 
         SpecRun first = await _fixture.EnqueueAsync(1);
         SpecRun second = await _fixture.EnqueueAsync(2);
@@ -36,6 +38,8 @@ public sealed class SpecQueueServiceTests
         _fixture.SeedSpec(1);
         _fixture.SeedSpec(5);
         _fixture.SeedSpec(2, 1, 5);
+        _fixture.SeedTicket(11, spec: 1);
+        _fixture.SeedTicket(12, spec: 2);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
 
         SpecRun dependent = await _fixture.EnqueueAsync(2);
@@ -51,6 +55,7 @@ public sealed class SpecQueueServiceTests
     public async Task enqueueing_a_spec_that_already_has_an_unfinished_run_returns_that_run()
     {
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(11, spec: 1);
         SpecRun existing = await _fixture.EnqueueAsync(1);
 
         EnqueueResult again = await _fixture.Queue.EnqueueAsync(_fixture.Repository.Id, 1, TestContext.Current.CancellationToken);

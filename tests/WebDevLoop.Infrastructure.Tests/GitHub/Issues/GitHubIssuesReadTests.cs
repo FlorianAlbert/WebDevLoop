@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Infrastructure.GitHub.Issues;
@@ -7,6 +8,72 @@ namespace WebDevLoop.Infrastructure.Tests.GitHub.Issues;
 
 public sealed class GitHubIssuesReadTests : GitHubIssuesTestBase
 {
+    [Fact]
+    public async Task later_queries_observe_parent_and_child_opt_out_and_closure_instead_of_cached_snapshots()
+    {
+        var parent = new JsonObject
+        {
+            ["number"] = 1, ["title"] = "Spec", ["state"] = "open",
+            ["labels"] = new JsonArray(new JsonObject { ["name"] = "webdevloop" }),
+        };
+        var child = new JsonObject
+        {
+            ["number"] = 2, ["title"] = "Ticket", ["state"] = "open",
+            ["labels"] = new JsonArray(new JsonObject { ["name"] = "webdevloop" }),
+        };
+        Api.Get(IssuePath(1), parent);
+        Api.Get(SubIssuesPath(1), new JsonArray(child));
+        Api.Get(BlockedByPath(1), Array.Empty<object>());
+        Api.Get(BlockedByPath(2), Array.Empty<object>());
+        GitHubIssues github = CreateSut();
+        IssueSnapshot initialParent = await github.GetIssueAsync(Ref(1), CancellationToken.None);
+        IssueSnapshot initialChild = Assert.Single(await github.GetSubIssuesAsync(Ref(1), CancellationToken.None));
+
+        parent["labels"] = new JsonArray();
+        parent["state"] = "closed";
+        child["labels"] = new JsonArray();
+        child["state"] = "closed";
+        IssueSnapshot currentParent = await github.GetIssueAsync(Ref(1), CancellationToken.None);
+        IssueSnapshot currentChild = Assert.Single(await github.GetSubIssuesAsync(Ref(1), CancellationToken.None));
+
+        Assert.Equal(["webdevloop"], initialParent.Labels);
+        Assert.Equal(["webdevloop"], initialChild.Labels);
+        Assert.Equal(IssueState.Closed, currentParent.State);
+        Assert.Equal(IssueState.Closed, currentChild.State);
+        Assert.Empty(currentParent.Labels);
+        Assert.Empty(currentChild.Labels);
+    }
+
+    [Fact]
+    public async Task parent_and_paginated_sub_issues_retain_their_own_current_labels_and_state()
+    {
+        Api.Get(IssuePath(1), Issue(1, 100, labels: ["webdevloop"]));
+        Api.Get(BlockedByPath(1), Array.Empty<object>());
+        Api.Get(SubIssuesPath(1) + "?per_page=100", new[] { Issue(2, 200, labels: ["ready-for-agent"]) },
+            ("Link", $"<https://api.github.com{SubIssuesPath(1)}?per_page=100&page=2>; rel=\"next\""));
+        Api.Get(SubIssuesPath(1) + "?per_page=100&page=2", new[]
+        {
+            Issue(3, 300, state: "closed", labels: ["webdevloop"]),
+            Issue(4, 400, labels: ["webdevloop", "ready-for-human"]),
+        });
+        foreach (int child in new[] { 2, 3, 4 })
+        {
+            Api.Get(BlockedByPath(child), Array.Empty<object>());
+        }
+
+        GitHubIssues github = CreateSut();
+        IssueSnapshot parent = await github.GetIssueAsync(Ref(1), CancellationToken.None);
+        IReadOnlyList<IssueSnapshot> children = await github.GetSubIssuesAsync(Ref(1), CancellationToken.None);
+
+        Assert.Equal(["webdevloop"], parent.Labels);
+        Assert.Equal([2, 3, 4], children.Select(child => child.Ref.Number));
+        Assert.Equal(["ready-for-agent"], children[0].Labels);
+        Assert.Equal(IssueState.Closed, children[1].State);
+        Assert.Equal(["webdevloop"], children[1].Labels);
+        Assert.Equal(IssueState.Open, children[2].State);
+        Assert.Equal(["webdevloop", "ready-for-human"], children[2].Labels);
+    }
+
     private void ScriptIssue(int number, long id, string title = "Title", string body = "", string state = "open", params (int Number, long Id)[] blockedBy)
     {
         Api.Get(IssuePath(number), Issue(number, id, title, body, state));

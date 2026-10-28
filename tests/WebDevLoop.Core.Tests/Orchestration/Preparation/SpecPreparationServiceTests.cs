@@ -85,7 +85,9 @@ public sealed class SpecPreparationServiceTests
     public async Task spec_without_open_ticket_sub_issues_needs_attention_instead_of_reaching_review()
     {
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(2, spec: 1);
         SpecRun run = await ActivateAsync(1);
+        _fixture.Issues.RemoveSubIssue(SpecWorkflowFixture.Issue(1), SpecWorkflowFixture.Issue(2));
 
         PreparationOutcome outcome = await _fixture.PrepareAsync(run);
 
@@ -104,8 +106,8 @@ public sealed class SpecPreparationServiceTests
     {
         _fixture.SeedSpec(1);
         _fixture.SeedTicket(2, spec: 1);
-        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(2), IssueCloseReason.Completed, Ct);
         SpecRun run = await ActivateAsync(1);
+        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(2), IssueCloseReason.Completed, Ct);
 
         PreparationOutcome outcome = await _fixture.PrepareAsync(run);
 
@@ -151,6 +153,7 @@ public sealed class SpecPreparationServiceTests
     public async Task run_that_is_not_preparing_is_left_untouched()
     {
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(2, spec: 1);
         SpecRun queued = await _fixture.EnqueueAsync(1);
 
         PreparationOutcome outcome = await _fixture.PrepareAsync(queued);
@@ -183,6 +186,7 @@ public sealed class SpecPreparationServiceTests
     public async Task losing_the_preparation_save_race_reports_a_conflict_before_touching_branches()
     {
         _fixture.SeedSpec(1);
+        _fixture.SeedTicket(2, spec: 1);
         SpecRun run = await ActivateAsync(1);
         _fixture.Store.ConflictOnNextSave = true;
 

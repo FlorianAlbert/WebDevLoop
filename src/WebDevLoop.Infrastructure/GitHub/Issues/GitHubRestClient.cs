@@ -34,6 +34,10 @@ internal sealed partial class GitHubRestClient(HttpClient http, ITokenProvider t
             {
                 items.AddRange(array.EnumerateArray());
             }
+            else
+            {
+                throw new GitHubApiException(GitHubApiErrorKind.Invalid, $"GitHub returned no issue list for GET {path}.");
+            }
         }
 
         return items;
@@ -71,8 +75,15 @@ internal sealed partial class GitHubRestClient(HttpClient http, ITokenProvider t
             throw MapError(response, content, $"{method} {uri.AbsolutePath}");
         }
 
-        JsonElement? json = string.IsNullOrWhiteSpace(content) ? null : JsonDocument.Parse(content).RootElement.Clone();
-        return (json, FindNextPage(response));
+        try
+        {
+            using JsonDocument? document = string.IsNullOrWhiteSpace(content) ? null : JsonDocument.Parse(content);
+            return (document?.RootElement.Clone(), FindNextPage(response));
+        }
+        catch (JsonException exception)
+        {
+            throw new GitHubApiException(GitHubApiErrorKind.Invalid, $"GitHub returned invalid JSON for {method} {uri.AbsolutePath}. Retry the lookup.", innerException: exception);
+        }
     }
 
     private async Task<HttpResponseMessage> SendMappingNetworkFailuresAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -95,10 +106,16 @@ internal sealed partial class GitHubRestClient(HttpClient http, ITokenProvider t
         }
 
         Match match = NextLink().Match(string.Join(',', links));
+        if (!match.Success)
+        {
+            return null;
+        }
+
         // Never forward the token to a host other than the configured API.
-        return match.Success && Uri.TryCreate(match.Groups[1].Value, UriKind.Absolute, out Uri? next) && next.Authority == _baseAddress.Authority
+        return Uri.TryCreate(match.Groups[1].Value, UriKind.Absolute, out Uri? next)
+            && next.Authority == _baseAddress.Authority && next.Scheme == _baseAddress.Scheme
             ? next
-            : null;
+            : throw new GitHubApiException(GitHubApiErrorKind.Invalid, "GitHub returned an unsafe or invalid next-page URL; the issue list could not be verified.");
     }
 
     private static GitHubApiException MapError(HttpResponseMessage response, string content, string operation)

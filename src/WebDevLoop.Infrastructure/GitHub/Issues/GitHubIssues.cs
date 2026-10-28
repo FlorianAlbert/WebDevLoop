@@ -183,7 +183,7 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         return json.GetProperty("id").GetInt64();
     }
 
-    private async Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken)
     {
         GitHubRepoRef repo = RepoOf(parent);
         IReadOnlyList<JsonElement> subIssues = await _api.GetAllAsync(repo, SubIssuesPath(parent), cancellationToken);

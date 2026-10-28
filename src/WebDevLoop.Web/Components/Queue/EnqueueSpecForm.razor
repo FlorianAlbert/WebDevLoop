@@ -16,7 +16,10 @@
         {
             <div id="enqueue-error" class="invalid-feedback d-block" data-testid="enqueue-validation">@_validation</div>
         }
-        <div id="enqueue-help" class="form-text">Issue number, <code>#123</code> or a GitHub issue URL.</div>
+        <div id="enqueue-help" class="form-text">
+            Issue number, <code>#123</code> or a GitHub issue URL. The parent and at least one sub-issue must be open
+            and independently labeled <code>webdevloop</code> (WebDevLoop Opt-in).
+        </div>
     </div>
     <div class="col-auto">
         <button type="submit" class="btn btn-primary btn-sm" data-testid="enqueue-submit" disabled="@(IsDisabled || _submitting)" aria-busy="@(_submitting ? "true" : null)">
@@ -128,6 +131,8 @@
         EnqueueOutcome.Queued => new("success", $"Queued #{issueNumber}.", result.SpecRunId?.Value),
         EnqueueOutcome.AlreadyQueued => new("info", $"#{issueNumber} is already queued.", result.SpecRunId?.Value),
         EnqueueOutcome.RepositoryNotFound => new("danger", "This repository no longer exists."),
+        EnqueueOutcome.Ineligible => new("warning", result.Reason!),
+        EnqueueOutcome.GitHubUnavailable => new("danger", result.Reason!),
         _ => new("warning", $"The queue changed at the same time; please try again."),
     };
 }

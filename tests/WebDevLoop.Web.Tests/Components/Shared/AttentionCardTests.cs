@@ -52,7 +52,7 @@ public sealed class AttentionCardTests
         AttentionReason diagnosed = AttentionData.Full().WithDiagnosis(
             new AttentionDiagnosis("Troubleshooter", "The database is not installed on this machine.", ["Ran dotnet test"]),
             ["Install PostgreSQL 16."],
-            [AttentionActionKind.Skip]);
+            [AttentionActionKind.Abort]);
 
         var cut = Render(harness, diagnosed, withControls: true);
 
@@ -60,7 +60,7 @@ public sealed class AttentionCardTests
         Assert.Contains("What the Troubleshooter found", cut.Markup);
         Assert.Contains("Troubleshooter: Ran dotnet test", cut.Find("[data-testid=attention-tried]").TextContent);
         Assert.Equal("Install PostgreSQL 16.", cut.FindAll("[data-testid=attention-step]")[0].TextContent.Trim());
-        Assert.Equal("control-skip", cut.FindAll("[data-testid=attention-actions] button")[0].GetAttribute("data-testid"));
+        Assert.Equal("control-abort", cut.FindAll("[data-testid=attention-actions] button")[0].GetAttribute("data-testid"));
         Assert.True(cut.Markup.IndexOf("attention-diagnosis", StringComparison.Ordinal) < cut.Markup.IndexOf("attention-tried", StringComparison.Ordinal));
     }
 
@@ -211,7 +211,7 @@ public sealed class AttentionCardTests
 
         var cut = Render(harness, AttentionData.Full(), withControls: true);
 
-        foreach (string key in new[] { "retry", "skip", "skip-dependents", "abort" })
+        foreach (string key in new[] { "retry", "abort" })
         {
             var button = cut.Find($"[data-testid=attention-actions] [data-testid=control-{key}]");
             var line = cut.Find($"[data-testid=consequence-{key}]");

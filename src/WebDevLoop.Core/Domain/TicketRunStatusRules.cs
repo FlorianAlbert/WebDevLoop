@@ -6,13 +6,13 @@ public static class TicketRunStatusRules
         new Dictionary<TicketRunStatus, TicketRunStatus[]>
         {
             [TicketRunStatus.Blocked] = [TicketRunStatus.Ready, TicketRunStatus.Skipped],
-            [TicketRunStatus.Ready] = [TicketRunStatus.Implementing, TicketRunStatus.Skipped],
+            [TicketRunStatus.Ready] = [TicketRunStatus.Blocked, TicketRunStatus.Implementing, TicketRunStatus.Skipped],
             [TicketRunStatus.Implementing] = [TicketRunStatus.Reviewing],
             [TicketRunStatus.Reviewing] = [TicketRunStatus.FixingReviewFindings, TicketRunStatus.Integrating],
             [TicketRunStatus.FixingReviewFindings] = [TicketRunStatus.Reviewing],
             [TicketRunStatus.Integrating] = [TicketRunStatus.Integrated],
             // Retrying resumes the failed phase (see TicketRun.Retry); reconciliation also resumes a parked integration saga whose
-            // commit already moved the integration branch (Integrating); skipping gives the ticket up.
+            // commit already moved the integration branch (Integrating).
             [TicketRunStatus.NeedsAttention] =
             [
                 TicketRunStatus.Ready,
@@ -29,11 +29,9 @@ public static class TicketRunStatusRules
         status is TicketRunStatus.Integrated or TicketRunStatus.Skipped or TicketRunStatus.Aborted;
 
     /// <summary>
-    /// Skip policy: a blocker the user skipped counts as done, so its dependents may start (on an integration branch without
-    /// the skipped change). To hold dependents back instead, skip them too (cascade) or abort. An aborted blocker never
-    /// satisfies its dependents.
+    /// The ticket completed integration or was retired by reconciliation after external closure or detachment.
     /// </summary>
-    public static bool SatisfiesDependents(this TicketRunStatus status) =>
+    public static bool IsLocallyComplete(this TicketRunStatus status) =>
         status is TicketRunStatus.Integrated or TicketRunStatus.Skipped;
 
     /// <summary>An implementer works on the ticket: its initial implementation or a review fix turn.</summary>

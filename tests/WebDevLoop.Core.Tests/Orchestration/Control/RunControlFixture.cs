@@ -19,6 +19,7 @@ internal sealed class RunControlFixture : IDisposable
     public static readonly GitHubRepoRef Repo = new("octo", "app");
     public static readonly CommitSha Head = new("1111111111111111111111111111111111111111");
     public static readonly CommitSha Tip = new("2222222222222222222222222222222222222222");
+    public static readonly string WorkspaceRoot = Path.GetFullPath("/work");
 
     private int _nextTicket;
     private int _nextStep;
@@ -27,7 +28,7 @@ internal sealed class RunControlFixture : IDisposable
     public RunControlFixture(int maxActiveSpecs = 1)
     {
         GlobalSettings = SettingsProfile.ForGlobal();
-        GlobalSettings.WorkspaceRootDirectory = "/work";
+        GlobalSettings.WorkspaceRootDirectory = WorkspaceRoot;
         GlobalSettings.MaxActiveSpecsPerRepo = maxActiveSpecs;
         Store.Add(GlobalSettings);
         Repository = RepositoryRecord.Register(Repo, new BranchName("main"), "https://github.com/octo/app.git", "/work/repos/octo/app", T0);

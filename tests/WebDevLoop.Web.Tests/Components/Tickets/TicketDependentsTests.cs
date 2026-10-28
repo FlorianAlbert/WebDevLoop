@@ -31,33 +31,6 @@ public sealed class TicketDependentsTests
     }
 
     [Fact]
-    public void Skip_releases_only_direct_dependents_that_are_blocked()
-    {
-        Assert.Equal(["t2"], Ids(TicketDependents.Released(T1, All)));
-    }
-
-    [Fact]
-    public void Skip_with_dependents_follows_the_chain_but_not_past_tickets_that_are_being_worked_on()
-    {
-        Assert.Equal(["t2", "t3", "t7"], Ids(TicketDependents.ToSkip(T1, All)));
-    }
-
-    [Theory]
-    [InlineData(TicketRunStatus.Blocked, true)]
-    [InlineData(TicketRunStatus.Ready, true)]
-    [InlineData(TicketRunStatus.NeedsAttention, true)]
-    [InlineData(TicketRunStatus.Implementing, false)]
-    [InlineData(TicketRunStatus.Integrated, false)]
-    [InlineData(TicketRunStatus.Skipped, false)]
-    [InlineData(TicketRunStatus.Aborted, false)]
-    public void Only_tickets_that_are_not_being_worked_on_are_skipped_with_their_blocker(TicketRunStatus status, bool skipped)
-    {
-        TicketRunView[] all = [T1, Views.Ticket("d", 20, status, blockedBy: "t1")];
-
-        Assert.Equal(skipped, TicketDependents.ToSkip(T1, all).Count == 1);
-    }
-
-    [Fact]
     public void Aborting_leaves_blocked_dependents_waiting_through_chains_of_blocked_tickets()
     {
         Assert.Equal(["t2", "t3", "t7"], Ids(TicketDependents.StayBlocked(T1, All)));
@@ -69,7 +42,6 @@ public sealed class TicketDependentsTests
         TicketRunView a = Views.Ticket("a", 1, TicketRunStatus.Blocked, blockedBy: "b");
         TicketRunView b = Views.Ticket("b", 2, TicketRunStatus.Blocked, blockedBy: "a");
 
-        Assert.Equal(["b"], Ids(TicketDependents.ToSkip(a, [a, b])));
         Assert.Equal(["b"], Ids(TicketDependents.StayBlocked(a, [a, b])));
     }
 
@@ -78,8 +50,6 @@ public sealed class TicketDependentsTests
     {
         TicketRunView lonely = All[5];
 
-        Assert.Empty(TicketDependents.ToSkip(lonely, All));
-        Assert.Empty(TicketDependents.Released(lonely, All));
         Assert.Empty(TicketDependents.StayBlocked(lonely, All));
     }
 
@@ -97,13 +67,8 @@ public sealed class TicketDependentsTests
     {
         var commands = TicketRunCommands.Build(T1, All).ToDictionary(command => command.Key);
 
-        Assert.Equal(["retry", "skip", "skip-dependents", "abort"], commands.Keys);
+        Assert.Equal(["retry", "abort"], commands.Keys);
         Assert.Null(commands["retry"].Confirmation);
-        Assert.Equal("Unblocks #11 Ticket 11.", commands["skip"].Impact);
-        Assert.Contains("#11 Ticket 11", commands["skip"].Confirmation);
-        Assert.Equal("Also skips #11 Ticket 11, #12 Ticket 12, #16 Ticket 16.", commands["skip-dependents"].Impact);
-        Assert.Contains("#16 Ticket 16", commands["skip-dependents"].Confirmation);
-        Assert.Contains("3 tickets", commands["skip-dependents"].Confirmation);
         Assert.Equal("Stay blocked: #11 Ticket 11, #12 Ticket 12, #16 Ticket 16.", commands["abort"].Impact);
         Assert.Contains("#10 Ticket 10", commands["abort"].Confirmation);
         Assert.All(commands.Values, command => Assert.False(string.IsNullOrWhiteSpace(command.Consequence)));
@@ -114,8 +79,6 @@ public sealed class TicketDependentsTests
     {
         var commands = TicketRunCommands.Build(All[5], All).ToDictionary(command => command.Key);
 
-        Assert.Equal("No other tickets depend on this one.", commands["skip-dependents"].Impact);
-        Assert.Equal("No other ticket is waiting for this one.", commands["skip"].Impact);
         Assert.Equal("No other ticket is waiting for this one.", commands["abort"].Impact);
     }
 

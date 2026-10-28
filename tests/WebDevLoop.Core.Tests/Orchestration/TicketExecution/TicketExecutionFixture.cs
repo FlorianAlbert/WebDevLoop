@@ -16,7 +16,7 @@ namespace WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 /// </summary>
 internal sealed class TicketExecutionFixture
 {
-    public const string WorkspaceRoot = "/work";
+    public static readonly string WorkspaceRoot = Path.GetFullPath("/work");
     public const string SkillsRoot = "/app/skills";
 
     public static readonly DateTimeOffset T0 = new(2026, 1, 1, 10, 0, 0, TimeSpan.Zero);
@@ -33,6 +33,8 @@ internal sealed class TicketExecutionFixture
     public CasWorkflowDatabase Db { get; } = new();
 
     public InMemoryGitWorkspace Git { get; } = new();
+
+    public InMemoryGitHubIssues Issues { get; set; } = new();
 
     public FakeClock Clock { get; } = new(T0);
 
@@ -62,7 +64,7 @@ internal sealed class TicketExecutionFixture
             scope,
             scope,
             Clock);
-        return new FrontierService(scope, scope, dispatcher, scope, scope, Clock);
+        return new FrontierService(scope, scope, Issues, dispatcher, scope, scope, Clock);
     }
 
     public TicketImplementationRunner Runner(CasWorkflowScope? scope = null)
@@ -149,12 +151,14 @@ internal sealed class TicketExecutionFixture
         foreach ((int number, _) in tickets)
         {
             TicketRun ticket = TicketRun.Create(Ids.NewTicketRunId(), spec.Id, new IssueRef("octo", repositoryName, number), $"Ticket {number}", $"Implement {number}.", T0);
+            Issues.Seed(ticket.Issue, ticket.Title);
             scope.Add(ticket);
             ticketIds[number] = ticket.Id;
         }
 
         foreach ((int number, int[] blockedBy) in tickets)
         {
+            Issues.SetBlockedBy(new IssueRef("octo", repositoryName, number), [.. blockedBy.Select(blocker => new IssueRef("octo", repositoryName, blocker))]);
             foreach (int blocker in blockedBy)
             {
                 scope.AddDependency(TicketDependency.Create(spec.Id, ticketIds[number], ticketIds[blocker], DependencySource.GitHub));
@@ -191,6 +195,7 @@ internal sealed class TicketExecutionFixture
         run.IntegrationTipSha = squash;
         await SaveAsync(scope);
 
+        await Issues.CloseAsync(Ticket(ticketId).Issue, IssueCloseReason.Completed, Token);
         TicketRunStatus status = Ticket(ticketId).Status;
         TicketRunStatus[] remaining = status == TicketRunStatus.Implementing
             ? [TicketRunStatus.Reviewing, TicketRunStatus.Integrating, TicketRunStatus.Integrated]

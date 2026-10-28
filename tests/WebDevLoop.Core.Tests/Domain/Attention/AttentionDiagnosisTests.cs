@@ -11,13 +11,13 @@ public sealed class AttentionDiagnosisTests
     {
         AttentionReason reason = AttentionReasons.ImplementerBlocked("no database");
 
-        AttentionReason diagnosed = reason.WithDiagnosis(Diagnosis, ["Install PostgreSQL."], [AttentionActionKind.Skip]);
+        AttentionReason diagnosed = reason.WithDiagnosis(Diagnosis, ["Install PostgreSQL."], [AttentionActionKind.Abort]);
 
         Assert.Equal(Diagnosis, diagnosed.Diagnosis);
         Assert.Contains("Troubleshooter: Checked the service", diagnosed.TriedSoFar);
         Assert.Equal("Install PostgreSQL.", diagnosed.UserSteps[0].Text);
         Assert.Equal(reason.UserSteps.Count + 1, diagnosed.UserSteps.Count);
-        Assert.Equal(AttentionActionKind.Skip, diagnosed.PrimaryAction.Kind);
+        Assert.Equal(AttentionActionKind.Abort, diagnosed.PrimaryAction.Kind);
         Assert.Equal(reason.Actions.Count, diagnosed.Actions.Count);
         Assert.Equal(reason.Summary, diagnosed.Summary);
     }

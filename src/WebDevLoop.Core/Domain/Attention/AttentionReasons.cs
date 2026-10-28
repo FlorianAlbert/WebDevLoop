@@ -17,20 +17,10 @@ public static class AttentionReasons
 
     private static AttentionAction Retry(string consequence, string label = "Retry") => new(AttentionActionKind.Retry, label, consequence);
 
-    private static readonly AttentionAction SkipTicket = new(
-        AttentionActionKind.Skip,
-        "Skip",
-        "Gives up on this ticket without its change. Tickets that depend on it are released and continue without it.");
-
-    private static readonly AttentionAction SkipTicketAndDependents = new(
-        AttentionActionKind.SkipWithDependents,
-        "Skip with dependents",
-        "Gives up on this ticket and on every ticket that depends on it. The rest of the spec carries on.");
-
     private static readonly AttentionAction AbortTicket = new(
         AttentionActionKind.Abort,
         "Abort ticket",
-        "Stops this ticket for good. Tickets that depend on it stay blocked, so the spec cannot finish unless you skip or recreate them.");
+        "Stops this ticket for good. Dependents still require every native GitHub blocker to close.");
 
     private static readonly AttentionAction AbortRun = new(
         AttentionActionKind.Abort,
@@ -38,7 +28,7 @@ public static class AttentionReasons
         "Cancels the whole run and all of its unfinished tickets. Anything already pushed to GitHub stays there; nothing is deleted.");
 
     private static AttentionAction[] TicketButtons(string retry, string retryLabel = "Retry") =>
-        [Retry(retry, retryLabel), SkipTicket, SkipTicketAndDependents, AbortTicket];
+        [Retry(retry, retryLabel), AbortTicket];
 
     private static AttentionAction[] RunButtons(string retry, string retryLabel = "Retry") => [Retry(retry, retryLabel), AbortRun];
 
@@ -258,7 +248,7 @@ public static class AttentionReasons
         TicketButtons("WebDevLoop starts a new review round on the current commit with a full round budget, so the fixer gets another try."),
         [
             Step("Open the latest review step and read the open findings."),
-            Step("If they are acceptable, merge the ticket yourself later and press Skip (its change stays on its branch)."),
+            Step("Abort the run if you want to handle the remaining findings manually; its branches stay intact."),
             SettingsStep("To give the fixer more rounds from now on, raise the review iteration limit in Settings, then press Retry.", "#section-limits"),
         ]);
 
@@ -299,10 +289,9 @@ public static class AttentionReasons
         $"Ticket branch '{branch}' at {source} has no changes relative to the integration tip {tip}.",
         TicketButtons("WebDevLoop implements the ticket again from the current integration branch."),
         [
-            Step("Check whether another ticket already delivered this work; if so, press Skip."),
-            Step("Otherwise press Retry so the agent produces the change."),
-        ],
-        autoFix: "Mark the ticket as skipped (\"no changes needed\"): both reviewers approved a branch that adds nothing to the integration branch.");
+            Step("Check whether another ticket already delivered this work and update the GitHub issue accordingly."),
+            Step("Press Retry after clarifying the required change, or abort the run to handle it manually."),
+        ]);
 
     public static AttentionReason MergeConflictUnresolved(string details, string? worktreePath = null) => Build(
         AttentionCode.MergeConflictUnresolved,
@@ -367,7 +356,7 @@ public static class AttentionReasons
         [
             GitHubStep("Look at the pull request to see what happened.", $"Open #{number}", $"{Url(repository)}/pull/{number}"),
             Step($"If it was closed by mistake, reopen it:", $"gh pr reopen {number} -R {repository}"),
-            Step("Otherwise press Skip, or abort the run and queue the spec again."),
+            Step("Otherwise abort the run and queue the spec again when its GitHub issues are ready."),
         ]);
 
     public static AttentionReason PullRequestStackChanged(string details, string repository) => Build(

@@ -3,26 +3,19 @@ using WebDevLoop.Core.Domain;
 namespace WebDevLoop.Core.Orchestration.Frontier;
 
 /// <summary>
-/// Pure frontier calculation over a spec's ticket DAG: a ticket may be implemented once every ticket blocking it is
-/// <see cref="TicketRunStatus.Integrated"/> or <see cref="TicketRunStatus.Skipped"/> by the user (see
-/// <see cref="TicketRunStatusRules.SatisfiesDependents"/>). Blockers outside the snapshot never count as satisfied.
+/// Orders unstarted tickets authorized by the current GitHub blocker check. Local ticket status and saved DAG edges
+/// cannot authorize dispatch; missing authorization keeps a ticket out of the frontier.
 /// </summary>
 public static class TicketFrontier
 {
-    public static FrontierSnapshot Compute(IReadOnlyCollection<TicketRun> tickets, IReadOnlyCollection<TicketDependency> dependencies)
+    public static FrontierSnapshot Compute(IReadOnlyCollection<TicketRun> tickets, IReadOnlySet<TicketRunId> unblockedTickets)
     {
         ArgumentNullException.ThrowIfNull(tickets);
-        ArgumentNullException.ThrowIfNull(dependencies);
-
-        HashSet<TicketRunId> satisfied = tickets
-            .Where(ticket => ticket.Status.SatisfiesDependents())
-            .Select(ticket => ticket.Id)
-            .ToHashSet();
-        ILookup<TicketRunId, TicketRunId> blockers = dependencies.ToLookup(edge => edge.BlockedTicketRunId, edge => edge.BlockingTicketRunId);
+        ArgumentNullException.ThrowIfNull(unblockedTickets);
 
         TicketRun[] free = tickets
             .Where(ticket => ticket.Status is TicketRunStatus.Blocked or TicketRunStatus.Ready)
-            .Where(ticket => blockers[ticket.Id].All(satisfied.Contains))
+            .Where(ticket => unblockedTickets.Contains(ticket.Id))
             .OrderBy(ticket => ticket.Issue.Number)
             .ToArray();
 

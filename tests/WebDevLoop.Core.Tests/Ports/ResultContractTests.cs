@@ -235,12 +235,12 @@ public sealed class ResultContractTests
         Assert.Throws<InvalidAgentReportException>(() => new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, " ", [], "", [], []));
 
         var resolved = new TroubleshooterReport(TroubleshooterOutcome.Resolved, " fixed ", ["git reset --hard"], "git status is clean", [], [AttentionActionKind.Retry]);
-        var needsUser = new TroubleshooterReport(TroubleshooterOutcome.NeedsUser, "token expired", [], "", ["Sign in again"], [AttentionActionKind.Retry, AttentionActionKind.Skip]);
+        var needsUser = new TroubleshooterReport(TroubleshooterOutcome.NeedsUser, "token expired", [], "", ["Sign in again"], [AttentionActionKind.Retry, AttentionActionKind.Abort]);
         var cannotResolve = new TroubleshooterReport(TroubleshooterOutcome.CannotResolve, "unknown failure", [], "", [], []);
 
         Assert.Equal("git status is clean", resolved.Verification);
         Assert.Equal(["Sign in again"], needsUser.UserSteps);
-        Assert.Equal([AttentionActionKind.Retry, AttentionActionKind.Skip], needsUser.SuggestedButtons);
+        Assert.Equal([AttentionActionKind.Retry, AttentionActionKind.Abort], needsUser.SuggestedButtons);
         Assert.Empty(cannotResolve.SuggestedButtons);
     }
 

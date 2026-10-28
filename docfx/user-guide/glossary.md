@@ -19,7 +19,7 @@
 | DAG | The ticket graph: tickets are nodes and "blocked by" links are arrows. It has no circles. |
 | Blocked by | A GitHub link that says a ticket (or spec) must be done first. |
 | Layer (ticket table) | The depth of a ticket in the DAG. `0` has no blockers. |
-| Frontier | The tickets that may start now, because all their blockers are integrated or skipped. |
+| Frontier | Unstarted tickets whose current native GitHub blockers are all closed. |
 | Base branch | The trunk branch of the repository, usually `main`. Runs start from it and the stack is merged into it. Also called trunk. |
 | Integration branch | A branch per run (`webdevloop/<run id>/integration`) that collects the squash commits of all finished tickets. |
 | Ticket branch | A branch per ticket where the agent writes the change. |
@@ -40,7 +40,7 @@
 | Needs attention | A run, ticket or step stopped and needs you. It shows a reason and the steps to continue. |
 | Action needed | The card that explains a Needs attention state and has the buttons. |
 | Retry | Resume the phase that stopped. |
-| Skip | Give up on a ticket without its change. Tickets that depend on it continue. |
+| Skipped | Reconciliation retired an unstarted ticket closed or detached on GitHub. Not a manual command and never permission to bypass an open blocker. |
 | Abort | Stop a ticket or run for good. |
 | Override | A repository setting that replaces the global value. |
 | Inherited | A repository setting that uses the global value. |

@@ -23,7 +23,7 @@ public enum AttentionTriageOutcome
 /// The resolution order for a run or ticket that entered <c>NeedsAttention</c>: every registered <see cref="IAttentionStage"/> in
 /// order (known remediation first; a troubleshooter agent session is another stage registered after it), and only when none
 /// resolves the situation does it stay with the user, now with everything the stages tried on the "Action needed" card.
-/// A stage that resolves the situation ends the pipeline and the work resumes exactly as if the user had pressed Retry (or Skip);
+/// A stage that resolves the situation ends the pipeline and the work resumes exactly as if the user had pressed Retry;
 /// the run history records what was done and why.
 /// </summary>
 public sealed class AttentionTriageService(
@@ -87,7 +87,6 @@ public sealed class AttentionTriageService(
         // The remediation may have changed the ticket (e.g. a merged commit); the control command saves it with its own transition.
         ControlResult control = (attentionCase.TicketRunId, result.Resume!.Kind) switch
         {
-            ({ } ticketId, AttentionResumeKind.SkipTicket) => await ticketControl.SkipAsync(ticketId, SkipDependents.Unblock, cancellationToken, automatic: true),
             ({ } ticketId, _) => await ticketControl.RetryAsync(ticketId, cancellationToken, automatic: true, result.Resume.RetryAt),
             _ => await specControl.RetryAsync(attentionCase.SpecRunId, cancellationToken, automatic: true),
         };

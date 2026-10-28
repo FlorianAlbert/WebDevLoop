@@ -25,7 +25,7 @@ public sealed class TicketImplementationRunnerTests
         await _fixture.ReconcileAsync(spec.Id);
 
         TicketRun ticket = _fixture.Ticket(spec[1]);
-        string worktree = $"/work/runs/{spec.Id}/tickets/{ticket.Id}";
+        string worktree = Path.Combine(TicketExecutionFixture.WorkspaceRoot, "runs", spec.Id.Value, "tickets", ticket.Id.Value);
         AgentRunRequest request = Assert.Single(_fixture.Agents.Started);
         Assert.Equal(AgentRole.Implementer, request.Role);
         Assert.Equal(worktree, request.Policy.Paths.WorkingDirectory);

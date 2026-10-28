@@ -125,9 +125,9 @@ public sealed class LiveEventViewMapperTests
     [Fact]
     public void run_control_applied_exposes_the_run_ticket_and_action()
     {
-        var envelope = new EventEnvelope(12, new RunControlApplied(Run, new TicketRunId("t-1"), ControlAction.Skip, At));
+        var envelope = new EventEnvelope(12, new RunControlApplied(Run, new TicketRunId("t-1"), ControlAction.Abort, At));
 
-        Assert.Equal(new LiveEventView(12, nameof(RunControlApplied), "run-1", "t-1", null, nameof(ControlAction.Skip), At), envelope.ToView());
+        Assert.Equal(new LiveEventView(12, nameof(RunControlApplied), "run-1", "t-1", null, nameof(ControlAction.Abort), At), envelope.ToView());
     }
 
     [Fact]

@@ -121,7 +121,7 @@ public sealed class TicketRunDetailTests
     }
 
     [Fact]
-    public void Attention_card_hosts_retry_skip_and_abort_for_a_ticket_that_needs_attention()
+    public void Attention_card_hosts_retry_and_abort_for_a_ticket_that_needs_attention()
     {
         using var harness = HarnessWithTicket(TicketRunStatus.NeedsAttention);
 
@@ -130,7 +130,7 @@ public sealed class TicketRunDetailTests
         Assert.Empty(cut.FindAll("[data-testid=controls-placeholder]"));
         Assert.Empty(cut.FindAll("[data-testid=run-controls]"));
         Assert.Equal(
-            ["control-retry", "control-skip", "control-skip-dependents", "control-abort"],
+            ["control-retry", "control-abort"],
             cut.FindAll("[data-testid=attention-card] button[data-testid^=control-]").Select(button => button.GetAttribute("data-testid")));
     }
 
@@ -189,16 +189,15 @@ public sealed class TicketRunDetailTests
     }
 
     [Fact]
-    public void Skip_with_dependents_names_the_tickets_it_also_skips_and_confirms_with_them()
+    public void Abort_names_the_tickets_that_still_require_their_github_blockers_to_close()
     {
         using var harness = HarnessWithDependents();
         var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
 
-        Assert.Equal("Also skips #11 Add login, #12 Add logout.", cut.Find("[data-testid=impact-skip-dependents]").TextContent.Trim());
-        Assert.Equal("Unblocks #11 Add login.", cut.Find("[data-testid=impact-skip]").TextContent.Trim());
+        Assert.Empty(cut.FindAll("[data-testid=control-skip], [data-testid=control-skip-dependents]"));
         Assert.Equal("Stay blocked: #11 Add login, #12 Add logout.", cut.Find("[data-testid=impact-abort]").TextContent.Trim());
 
-        cut.Find("[data-testid=control-skip-dependents]").Click();
+        cut.Find("[data-testid=control-abort]").Click();
 
         string confirmation = cut.Find("[data-testid=control-confirm]").TextContent;
         Assert.Contains("#10 Ticket 10", confirmation);
@@ -208,18 +207,14 @@ public sealed class TicketRunDetailTests
         Assert.Empty(harness.Control.Calls);
 
         cut.Find("[data-testid=control-confirm-yes]").Click();
-        Assert.Equal(("skip-ticket", "t1", (SkipDependents?)SkipDependents.Skip), Assert.Single(harness.Control.Calls));
+        Assert.Equal(("abort-ticket", "t1"), Assert.Single(harness.Control.Calls));
     }
 
     [Fact]
-    public void Skip_and_abort_confirmations_name_the_affected_tickets()
+    public void Abort_confirmations_name_the_affected_tickets()
     {
         using var harness = HarnessWithDependents();
         var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t1"));
-
-        cut.Find("[data-testid=control-skip]").Click();
-        Assert.Contains("#11 Add login", cut.Find("[data-testid=control-confirm]").TextContent);
-        cut.Find("[data-testid=control-confirm-no]").Click();
 
         cut.Find("[data-testid=control-abort]").Click();
         Assert.Contains("#12 Add logout", cut.Find("[data-testid=control-confirm]").TextContent);
@@ -233,7 +228,7 @@ public sealed class TicketRunDetailTests
 
         var cut = harness.Render<TicketRunDetail>(p => p.Add(c => c.Id, "t4"));
 
-        Assert.Equal("No other tickets depend on this one.", cut.Find("[data-testid=impact-skip-dependents]").TextContent.Trim());
+        Assert.Equal("No other ticket is waiting for this one.", cut.Find("[data-testid=impact-abort]").TextContent.Trim());
     }
 
     [Fact]
@@ -257,7 +252,7 @@ public sealed class TicketRunDetailTests
 
         Assert.Empty(cut.FindAll("[data-testid=attention-card]"));
         Assert.NotNull(cut.Find("[data-testid=run-controls] [data-testid=control-abort]"));
-        Assert.Equal(4, cut.FindAll("[data-testid=run-controls] .run-controls__consequence").Count);
+        Assert.Equal(2, cut.FindAll("[data-testid=run-controls] .run-controls__consequence").Count);
     }
 
     [Fact]

@@ -13,7 +13,7 @@ Open a ticket from the **Tickets** table on the [run page](runs.md#tickets-and-t
 - See the ticket status and its pull request.
 - See which tickets block it.
 - Open its steps, findings and agent logs.
-- Retry, skip or abort the ticket.
+- Retry or abort the ticket.
 
 ### Header and details
 
@@ -27,7 +27,7 @@ The header shows the status, a link to the spec run, and the pull request with i
 | Review iteration | The current review round. |
 | Last implemented | The short hash of the last commit the implementer made. |
 | Integrated commit | The short hash of the squash commit on the integration branch. |
-| Blocked by | The tickets that must be done first. Green means done. |
+| Blocked by | Saved relationships between this spec's tickets. Green means locally complete, not permission to bypass an open GitHub blocker. |
 
 The statuses are explained in [Spec runs](runs.md#ticket-statuses).
 
@@ -38,11 +38,14 @@ A ticket that needs attention shows an **Action needed** card with the right but
 | Button | What it does | When |
 | --- | --- | --- |
 | Retry | Resumes the phase that stopped. Nothing already integrated is lost. | Only when the ticket needs attention. |
-| Skip | Gives up on this ticket. It counts as done without its change, so tickets that depend on it are released and continue without it. | While the ticket is blocked, ready or needs attention. |
-| Skip with dependents | Skips this ticket and every ticket that depends on it. The rest of the spec carries on. | Same as Skip. |
-| Abort ticket | Stops this ticket for good. Tickets that depend on it stay blocked until you skip them. | Until the ticket has finished. |
+| Abort ticket | Stops this ticket for good without closing its GitHub issue or bypassing blockers. | Until the ticket has finished. |
 
-Skip, Skip with dependents and Abort ticket ask for confirmation and name the tickets they affect. If the ticket's commit is already on the integration branch, you cannot skip it. Retry it instead.
+Abort ticket asks for confirmation and names affected tickets. A ticket whose commit is already on the integration branch must be retried so its stack layer can finish publishing.
+
+There are no manual Skip or Skip with dependents controls. Before dispatch, WebDevLoop re-reads every native GitHub blocker,
+including unlabeled issues, issues outside the spec, and issues in other repositories. Every blocker must be closed; its
+pull request need not be merged. Unknown or unavailable information defers only the affected ticket, logs a recoverable error,
+and is retried during normal recovery. Unrelated work continues. Changes to blocker relationships are honored at the next frontier decision.
 
 ### Steps
 

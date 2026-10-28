@@ -17,7 +17,7 @@ namespace WebDevLoop.Core.Tests.Orchestration.Integration;
 /// </summary>
 internal sealed class IntegrationFixture
 {
-    public const string WorkspaceRoot = "/work";
+    public static readonly string WorkspaceRoot = Path.GetFullPath("/work");
     public const string SkillsRoot = "/app/skills";
 
     public static readonly DateTimeOffset T0 = new(2026, 1, 1, 10, 0, 0, TimeSpan.Zero);

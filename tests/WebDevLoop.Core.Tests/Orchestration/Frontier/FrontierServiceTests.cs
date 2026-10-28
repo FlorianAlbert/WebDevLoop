@@ -2,6 +2,7 @@ using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.TicketExecution;
+using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Frontier;
@@ -112,7 +113,7 @@ public sealed class FrontierServiceTests
     }
 
     [Fact]
-    public async Task skipping_a_blocker_starts_its_dependent_right_away()
+    public async Task a_locally_skipped_blocker_still_blocks_until_its_github_issue_is_closed()
     {
         SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, [1]));
         await _fixture.ReconcileAsync(spec.Id);
@@ -122,7 +123,126 @@ public sealed class FrontierServiceTests
         await _fixture.MoveAsync(spec[1], TicketRunStatus.Skipped);
         await _fixture.PumpEventsAsync();
 
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(spec[2]).Status);
+        Assert.Equal([spec[1]], _fixture.Launcher.Launched.Select(assignment => assignment.TicketRunId));
+    }
+
+    [Fact]
+    public async Task removing_a_native_relationship_releases_a_ticket_even_when_the_saved_edge_and_open_issue_remain()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, [2]), (2, []));
+        await _fixture.MoveAsync(spec[2], TicketRunStatus.NeedsAttention);
+        _fixture.Issues.SetBlockedBy(_fixture.Ticket(spec[1]).Issue);
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal([spec[1]], result.Dispatched);
+        Assert.Equal(TicketRunStatus.NeedsAttention, _fixture.Ticket(spec[2]).Status);
+    }
+
+    [Fact]
+    public async Task a_closed_native_blocker_releases_work_without_local_integration_or_a_merged_pull_request()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, [2]), (2, []));
+        await _fixture.MoveAsync(spec[2], TicketRunStatus.NeedsAttention);
+        await _fixture.Issues.CloseAsync(_fixture.Ticket(spec[2]).Issue, IssueCloseReason.Completed, TicketExecutionFixture.Token);
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal([spec[1]], result.Dispatched);
+        Assert.Null(_fixture.Ticket(spec[2]).IntegratedCommitSha);
+    }
+
+    [Fact]
+    public async Task a_ready_ticket_observes_new_cross_repository_blockers_on_every_decision()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        TicketRun ticket = _fixture.Ticket(spec[1]);
+        var blocker = new IssueRef("elsewhere", "library", 1);
+        _fixture.Issues.Seed(blocker, "Same number, different repository");
+        await _fixture.MoveAsync(ticket.Id, TicketRunStatus.Ready);
+        _fixture.Issues.SetBlockedBy(ticket.Issue, blocker);
+
+        FrontierResult blocked = await _fixture.ReconcileAsync(spec.Id);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(ticket.Id).Status);
+        await _fixture.Issues.CloseAsync(blocker, IssueCloseReason.Completed, TicketExecutionFixture.Token);
+        FrontierResult released = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Empty(blocked.Dispatched);
+        Assert.Equal([ticket.Id], released.Dispatched);
+    }
+
+    [Fact]
+    public async Task reopening_an_integrated_blockers_issue_blocks_new_implementation()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, [1]));
+        await _fixture.ReconcileAsync(spec.Id);
+        await _fixture.IntegrateAsync(spec, spec[1]);
+        _fixture.Issues.Reopen(_fixture.Ticket(spec[1]).Issue);
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Empty(result.Dispatched);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(spec[2]).Status);
+    }
+
+    [Fact]
+    public async Task missing_blocker_information_only_defers_the_affected_ticket_not_other_tickets_or_specs()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
+        SeededSpec other = await _fixture.SeedRunningSpecAsync("other", (1, []));
+        var missing = new IssueRef("another-owner", "library", 900);
+        _fixture.Issues.SetBlockedBy(_fixture.Ticket(spec[1]).Issue, missing);
+        await _fixture.MoveAsync(spec[1], TicketRunStatus.Ready);
+
+        IReadOnlyList<FrontierResult> results = await _fixture.Frontier().ReconcileAllRunningAsync(TicketExecutionFixture.Token);
+
+        Assert.Equal(FrontierOutcome.GitHubUnavailable, results[0].Outcome);
+        Assert.Contains("unavailable", Assert.Single(results[0].LookupErrors).Message);
+        Assert.Equal(FrontierOutcome.Reconciled, results[1].Outcome);
+        Assert.Empty(results[1].LookupErrors);
+        Assert.Equal([spec[2]], results[0].Dispatched);
+        Assert.Equal([other[1]], results[1].Dispatched);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(spec[1]).Status);
         Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(spec[2]).Status);
-        Assert.Equal([spec[1], spec[2]], _fixture.Launcher.Launched.Select(assignment => assignment.TicketRunId));
+        Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(other[1]).Status);
+        _fixture.Issues.Seed(missing, "Now available");
+        await _fixture.Issues.CloseAsync(missing, IssueCloseReason.Completed, TicketExecutionFixture.Token);
+
+        FrontierResult recovered = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal([spec[1]], recovered.Dispatched);
+        Assert.Empty(recovered.LookupErrors);
+    }
+
+    [Fact]
+    public async Task an_open_blocker_defers_work_without_reading_further_blockers_until_it_closes()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
+        var open = new IssueRef("another-owner", "library", 900);
+        var missing = new IssueRef("another-owner", "library", 901);
+        _fixture.Issues.Seed(open, "Open blocker");
+        _fixture.Issues.SetBlockedBy(_fixture.Ticket(spec[1]).Issue, open, missing);
+
+        FrontierResult blocked = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(FrontierOutcome.Reconciled, blocked.Outcome);
+        Assert.Empty(blocked.LookupErrors);
+        Assert.Equal([spec[2]], blocked.Dispatched);
+        await _fixture.Issues.CloseAsync(open, IssueCloseReason.Completed, TicketExecutionFixture.Token);
+
+        FrontierResult deferred = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(FrontierOutcome.GitHubUnavailable, deferred.Outcome);
+        Assert.Single(deferred.LookupErrors);
+        Assert.Empty(deferred.Dispatched);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(spec[1]).Status);
+        _fixture.Issues.Seed(missing, "Second blocker");
+        await _fixture.Issues.CloseAsync(missing, IssueCloseReason.Completed, TicketExecutionFixture.Token);
+
+        FrontierResult recovered = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal([spec[1]], recovered.Dispatched);
+        Assert.Empty(recovered.LookupErrors);
     }
 }

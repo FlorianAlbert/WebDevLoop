@@ -201,7 +201,7 @@ The API lives under `/api`; the OpenAPI document is served at `/openapi/v1.json`
 | `POST /api/repos/{repoId}/spec-runs` with `{"specIssueNumber": 42}`, `GET /api/repos/{repoId}/spec-runs` | Queue an eligible parent spec issue (WebDevLoop Opt-in required); list the repository queue |
 | `GET /api/spec-runs/{id}` and `…/tickets`, `…/events`, `…/stack`, `…/merge-status` | Run state, ticket DAG, audit events, PR stack layers, merge status |
 | `GET /api/ticket-runs/{id}` and `…/steps`, `GET /api/steps/{id}` and `…/logs` | Ticket and agent step details, persisted agent logs |
-| `POST /api/spec-runs/{id}/retry`, `…/abort`; `POST /api/ticket-runs/{id}/retry`, `…/skip`, `…/abort` | Run controls (see below) |
+| `POST /api/spec-runs/{id}/retry`, `…/abort`; `POST /api/ticket-runs/{id}/retry`, `…/abort` | Run controls (see below) |
 | `GET /api/events/stream`, `GET /api/spec-runs/{id}/events/stream` | Live updates as server-sent events |
 
 ### Queue eligibility (WebDevLoop Opt-in)
@@ -236,12 +236,20 @@ Agent skills (mattpocock/skills and playwright-cli) are source-controlled under
 `src/WebDevLoop.Infrastructure/Skills/Bundled` with `skills-manifest.json` (origin, license, expected files) and their
 license texts, and are copied to `skills/` in the app output.
 
-## Run controls (Retry / Skip / Abort)
+## Ticket blockers and run controls (Retry / Abort)
+
+Before each ticket-frontier decision, WebDevLoop re-reads the ticket's current native GitHub blockers and their issue
+states. Every blocker must be **closed**, even if it is not opted in, is outside the parent spec, or belongs to another
+repository. Local integration or skipped status cannot release an open blocker; a closed issue releases dependents
+regardless of its pull request's merge state. Relationship changes take effect at the next decision, without continuous
+monitoring. A missing or unavailable issue or blocker defers only the affected ticket, reports an error in the application log,
+and is retried by normal periodic recovery. Unrelated tickets and running specs continue. The saved ticket DAG is for display,
+not dispatch authorization.
 
 Runs and tickets that need attention are resumed by the user from the run/ticket pages or the API
-(`POST /api/spec-runs/{id}/retry|abort`, `POST /api/ticket-runs/{id}/retry|skip|abort`). The commands are rejected with
+(`POST /api/spec-runs/{id}/retry|abort`, `POST /api/ticket-runs/{id}/retry|abort`). The commands are rejected with
 `503` and the failing prerequisites in diagnostic-only mode, are compare-and-swap safe (`409` on a lost race), and are
-audited as `Control<Action>` run events (`ControlAutoRetry`/`ControlAutoSkip` when WebDevLoop resumed the work itself after a remediation).
+audited as `Control<Action>` run events (`ControlAutoRetry` when WebDevLoop resumed the work itself after a remediation).
 
 - **Retry a spec** resumes the phase that failed: preparation, parent review, testing, or merge tracking (restarted
   from `ReadyForReview`, which gives trunk a fresh containment window). If the last
@@ -250,11 +258,12 @@ audited as `Control<Action>` run events (`ControlAutoRetry`/`ControlAutoSkip` wh
 - **Retry a ticket** implements it again, starts a fresh review round (full `MaxReviewIterations` budget), or resumes its
   integration saga, depending on where it failed. A ticket whose saga is already past the squash (its commit may be on
   the integration branch) always resumes the saga.
-- **Skip a ticket** (only while `Blocked`, `Ready`, or `NeedsAttention`): a skipped blocker counts as done, so its
-  dependents start on an integration branch without the skipped change. Send `{"dependents":"Skip"}` to skip every
-  not-yet-started dependent as well. A ticket whose squash commit is already on the integration branch must be retried.
 - **Abort** stops agent sessions, cancels active steps, and (for a spec) aborts its open tickets, kills the tester app,
-  releases its test lease and active slot, and cleans up its worktrees. An aborted ticket never unblocks its dependents.
+  releases its test lease and active slot, and cleans up its worktrees. Aborting does not close GitHub blockers.
+
+Manual **Skip** and **Skip with dependents**, their API operation (`POST /api/ticket-runs/{id}/skip`), and automatic
+attention skips are removed. Retry, step cancellation, and abort remain available. Externally closed or detached unstarted
+tickets may still appear as `Skipped` in reconciliation history, but this never overrides an open native GitHub blocker.
 
 `GET /api/spec-runs/{id}/merge-status` reports the PR stack as `Awaiting`, `Merged`, `Closed` (closed unmerged or never
 reached trunk), `NotReady`, `CompletedWithoutPullRequests`, or `Aborted`.
@@ -275,14 +284,14 @@ with a free-form string or a reason code has no factory.
 Before the user is asked, every item that enters `NeedsAttention` goes through the resolution order
 (`AttentionTriageService`), which records what it did as run events (`AttentionRaised`, `AttentionRemediationAttempted`,
 `AttentionTroubleshooterStarted`, `AttentionTroubleshooterFinished`, `AttentionAutoResolved`, `AttentionNeedsYou`,
-`ControlAutoRetry`, `ControlAutoSkip`):
+`ControlAutoRetry`):
 
 1. **Known automatic remediation** (`IKnownRemediation`, one per code, deterministic, bounded per item until the user's next
    Retry): a dirty ticket worktree is cleaned (tracked changes are saved as a patch in the run folder first) and verified;
    a ticket branch that does not contain the integration branch gets the integration tip merged (conflicts go to the user);
    a temporary GitHub or network failure while publishing is retried with a growing pause (30 s, 2 min, 5 min); a leftover
-   integration branch of the same run is reset while nothing was integrated; a failed exploration is run once more; a
-   reviewed ticket that adds nothing to the integration branch is skipped as "no changes needed". Interrupted steps are
+   integration branch of the same run is reset while nothing was integrated; a failed exploration is run once more.
+   A reviewed ticket that adds nothing to the integration branch requires a user decision, not an automatic skip. Interrupted steps are
    restarted after a restart by the agent-step recovery and recorded the same way; merge conflicts first go to the
    conflict-resolver agent. A remediation resumes the work exactly like the user's Retry would.
 2. **Troubleshooter agent session** (`TroubleshooterStage`, an `IAttentionStage` registered after the known remediation):
@@ -309,7 +318,7 @@ with a per-repository override) and **Troubleshooter attempts per problem** (def
   which have no ticket worktree to repair and no check to verify a repair with.
 - **Bounds.** One session per attempt with the role's timeout; at most *max attempts* sessions per ticket and reason code since
   the user's last Retry; and a **state fingerprint** (reason code plus the git state of the ticket worktree and branches): a
-  problem in an unchanged state is never escalated twice, the earlier diagnosis is shown again instead. Pressing Retry, Skip or
+  problem in an unchanged state is never escalated twice, the earlier diagnosis is shown again instead. Pressing Retry or
   Abort while a session runs cancels it (its Copilot session is aborted), so it cannot keep changing a worktree that resumed work
   uses.
 - **Input.** The prompt carries the reason code, summary and technical details, the failed phase, the ticket and spec text, the

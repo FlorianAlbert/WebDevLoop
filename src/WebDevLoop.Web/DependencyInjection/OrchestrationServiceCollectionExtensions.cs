@@ -154,7 +154,6 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, TransientFailureRemediation>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, StaleIntegrationBranchRemediation>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, ExplorationRetryRemediation>());
-        services.TryAddEnumerable(ServiceDescriptor.Scoped<IKnownRemediation, NoChangesTicketRemediation>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IAttentionStage, KnownRemediationStage>());
         services.TryAddScoped<TroubleshootingStateReader>();
         services.TryAddScoped<TroubleshooterWorkspace>();

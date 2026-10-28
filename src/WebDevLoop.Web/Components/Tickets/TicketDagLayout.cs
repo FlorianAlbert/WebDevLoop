@@ -3,7 +3,7 @@ using WebDevLoop.Core.Queries;
 
 namespace WebDevLoop.Web.Components.Tickets;
 
-/// <summary>Layers a spec's ticket DAG and flags the frontier, mirroring the orchestrator's rule that only integrated or skipped blockers count.</summary>
+/// <summary>Layers the saved display DAG. Only the orchestrator's Ready status indicates a verified frontier candidate.</summary>
 public static class TicketDagLayout
 {
     public static IReadOnlyList<TicketDagRow> Build(IReadOnlyList<TicketRunView> tickets)
@@ -21,8 +21,7 @@ public static class TicketDagLayout
                         ? new TicketBlocker(id, blocker.IssueNumber, blocker.Status)
                         : new TicketBlocker(id, null, null))
                     .ToArray();
-                bool awaitingStart = ticket.Status is TicketRunStatus.Blocked or TicketRunStatus.Ready;
-                return new TicketDagRow(ticket, LayerOf(ticket.Id, byId, layers, []), awaitingStart && blockers.All(blocker => blocker.IsSatisfied), blockers);
+                return new TicketDagRow(ticket, LayerOf(ticket.Id, byId, layers, []), ticket.Status == TicketRunStatus.Ready, blockers);
             })
             .OrderBy(row => row.Layer)
             .ThenBy(row => row.Ticket.IssueNumber)

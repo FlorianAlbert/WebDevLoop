@@ -39,7 +39,7 @@ The card has these parts:
 
 Every stuck item goes through this order:
 
-1. **Known automatic fix.** WebDevLoop repairs common problems itself. For example, it cleans a dirty ticket folder, brings a ticket branch up to date, retries a short GitHub outage with growing pauses, or skips a ticket that needs no change. If it worked, the work goes on. The timeline records it, for example "WebDevLoop fixed it by itself".
+1. **Known automatic fix.** WebDevLoop repairs common problems itself. For example, it cleans a dirty ticket folder, brings a ticket branch up to date, or retries a short GitHub outage with growing pauses. Tickets that need no change require a user decision, not an automatic skip. If a repair worked, the work goes on. The timeline records it, for example "WebDevLoop fixed it by itself".
 2. **Troubleshooter agent.** For problems that need judgement, one agent session looks into it. See [The Troubleshooter](#the-troubleshooter).
 3. **You.** The card now shows what was tried.
 
@@ -90,7 +90,7 @@ Saving valid settings resumes other eligible work automatically, but does not au
 
 | Summary on the card | What to do |
 | --- | --- |
-| The reviewers still find N issue(s) after N round(s) of fixes. | Read the open findings. If they are fine, **Skip** the ticket. Or raise **Max review iterations per ticket** in [Settings](settings.md#concurrency-review-and-retries) and **Retry**. |
+| The reviewers still find N issue(s) after N round(s) of fixes. | Read the open findings. Raise **Max review iterations per ticket** in [Settings](settings.md#concurrency-review-and-retries) and **Retry**, or abort the run to handle them manually. |
 | The final review still finds N issue(s) after N cycle(s). | Decide if the findings matter. Raise **Parent review cycle limit**, or close the finding tickets on GitHub, then **Retry**. |
 | The tester still finds problems after N test cycle(s). | Same idea with **Tester cycle limit**. |
 | The final review or the test only repeated findings whose tickets are already done. | Check if the problem is really fixed, or describe it better in the ticket, then **Retry**. |
@@ -112,7 +112,7 @@ Saving valid settings resumes other eligible work automatically, but does not au
 | The integration branch was changed outside WebDevLoop. | You | Find out who pushed. Reset the branch or abort the run and queue the spec again. |
 | GitHub refused the push of the branch '...'. | You | Remove the unexpected commits on the remote branch, or abort and queue again. |
 | A branch named '...' already exists on GitHub with different content. | You | If nobody needs it, delete it (the card has the command), then **Retry**. |
-| Pull request #N was closed outside WebDevLoop. | Your decision | Reopen it and **Retry**, or **Skip** the ticket, or abort the run. |
+| Pull request #N was closed outside WebDevLoop. | Your decision | Reopen it and **Retry**, or abort the run. |
 | The pull request stack on GitHub was changed by hand... | You | Put the pull requests back in the order shown, then **Retry**. |
 | The pull requests of this run were closed without being merged. | Your decision | Reopen them and **Retry**, or abort the run. |
 | All pull requests are merged, but 'main' does not contain the final change yet. | You | Check that the last PR was merged into the base branch, then **Retry**. |
@@ -141,13 +141,12 @@ Every attempt costs Model usage. In [Settings](settings.md#troubleshooter) you c
 | Button | Use it when | Effect |
 | --- | --- | --- |
 | **Retry** | You fixed the cause, or the cause was temporary. This is the normal choice. | Resumes the phase that stopped. Nothing is lost. A ticket that failed after its squash commit always resumes its integration. |
-| **Skip** (ticket) | You accept the spec without this ticket's change. | The ticket counts as done. Tickets that depend on it start without its change. |
-| **Skip with dependents** (ticket) | The ticket and everything that needs it should be dropped. | Skips the ticket and all tickets that depend on it. |
-| **Abort ticket** | The ticket is wrong and you will not do it. | Stops the ticket for good. Dependents stay blocked until you skip them. |
+| **Abort ticket** | The ticket is wrong and you will not do it. | Stops the ticket for good. Native GitHub blockers still have to close before dependents start. |
 | **Abort run** | The whole run is wrong, for example the spec changed a lot. | Cancels the run and all unfinished tickets, stops agents and the tester app, cleans up worktrees. Pushed branches and pull requests stay on GitHub. You can queue the spec again. |
 
 Rules of thumb:
 
+- Manual and automatic attention skips are unavailable; neither can bypass an open GitHub blocker.
 - Not sure? Press **Retry**. It is safe.
 - Retry does not help until the cause is fixed. The steps on the card tell you what to fix.
 - Abort cannot be undone. It asks for confirmation first.

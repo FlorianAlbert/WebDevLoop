@@ -86,7 +86,6 @@ public sealed class AttentionReasonTests
             AttentionCode.IntegrationTemporaryFailure,
             AttentionCode.IntegrationBranchExists,
             AttentionCode.ExplorationFailed,
-            AttentionCode.TicketHasNoChanges,
         ];
 
         Assert.All(auto, code => Assert.NotNull(AttentionSamples.For(code).AutoFix));

@@ -8,6 +8,19 @@ internal static class IssueJson
 {
     private const string RepositoriesSegment = "/repos/";
 
+    public static IssueRef ToBlockerRef(JsonElement issue)
+    {
+        if (issue.ValueKind != JsonValueKind.Object
+            || !issue.TryGetProperty("repository_url", out JsonElement url)
+            || url.ValueKind != JsonValueKind.String
+            || !TryParseRepo(url.GetString(), out GitHubRepoRef repo))
+        {
+            throw new GitHubApiException(GitHubApiErrorKind.Invalid, "GitHub returned a blocker without a usable repository identity.");
+        }
+
+        return ToRef(issue, repo);
+    }
+
     public static IssueRef ToRef(JsonElement issue, GitHubRepoRef fallbackRepo)
     {
         try

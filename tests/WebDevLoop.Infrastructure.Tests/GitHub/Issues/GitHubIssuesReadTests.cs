@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Ports;
@@ -8,6 +9,42 @@ namespace WebDevLoop.Infrastructure.Tests.GitHub.Issues;
 
 public sealed class GitHubIssuesReadTests : GitHubIssuesTestBase
 {
+    [Fact]
+    public async Task paginated_native_blockers_keep_external_repository_identity_and_current_state_without_a_local_graph()
+    {
+        var firstPage = new JsonArray(JsonSerializer.SerializeToNode(Issue(3, 300)));
+        var external = new JsonObject
+        {
+            ["number"] = 3, ["id"] = 900, ["title"] = "Outside this repository",
+            ["repository_url"] = "https://api.github.com/repos/another-owner/library",
+            ["state"] = "open", ["labels"] = new JsonArray(),
+        };
+        Api.Get(IssuePath(7), Issue(7, 700));
+        Api.Get(BlockedByPath(7) + "?per_page=100", firstPage,
+            ("Link", $"<https://api.github.com{BlockedByPath(7)}?per_page=100&page=2>; rel=\"next\""));
+        Api.Get(BlockedByPath(7) + "?per_page=100&page=2", new JsonArray(external.DeepClone()));
+        Api.Get(IssuePath(3), Issue(3, 300, state: "closed"));
+        Api.Get(BlockedByPath(3), Array.Empty<object>());
+        Api.Get("/repos/another-owner/library/issues/3", external);
+        Api.Get("/repos/another-owner/library/issues/3/dependencies/blocked_by", Array.Empty<object>());
+        GitHubIssues github = CreateSut();
+
+        IssueSnapshot ticket = await github.GetIssueAsync(Ref(7), CancellationToken.None);
+        IssueSnapshot local = await github.GetIssueAsync(ticket.BlockedBy[0], CancellationToken.None);
+        IssueSnapshot crossRepository = await github.GetIssueAsync(ticket.BlockedBy[1], CancellationToken.None);
+        external["state"] = "closed";
+        IssueSnapshot closed = await github.GetIssueAsync(ticket.BlockedBy[1], CancellationToken.None);
+        firstPage.Clear();
+
+        Assert.Equal(2, ticket.BlockedBy.Count);
+        Assert.Equal(IssueState.Closed, local.State);
+        Assert.Equal(("another-owner", "library", 3), (crossRepository.Ref.Owner, crossRepository.Ref.Repo, crossRepository.Ref.Number));
+        Assert.Empty(crossRepository.Labels);
+        Assert.Equal(IssueState.Open, crossRepository.State);
+        Assert.Equal(IssueState.Closed, closed.State);
+        Assert.Single((await github.GetIssueAsync(Ref(7), CancellationToken.None)).BlockedBy);
+    }
+
     [Fact]
     public async Task later_queries_observe_parent_and_child_opt_out_and_closure_instead_of_cached_snapshots()
     {

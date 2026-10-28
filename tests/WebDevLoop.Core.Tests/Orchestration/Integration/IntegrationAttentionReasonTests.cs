@@ -50,7 +50,7 @@ public sealed class IntegrationAttentionReasonTests
 
         Assert.Equal(IntegrationOutcome.NeedsAttention, result.Outcome);
         Assert.Equal(AttentionCode.TicketHasNoChanges, ticket.Attention!.Code);
-        Assert.True(ticket.Attention.AutoFixPending);
+        Assert.False(ticket.Attention.AutoFixPending);
         Assert.Contains("no changes relative to the integration tip", ticket.FailureReason, StringComparison.Ordinal);
     }
 

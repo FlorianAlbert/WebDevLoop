@@ -62,7 +62,7 @@ else if (_ticket is not null)
                 }
                 @foreach (TicketBlocker blocker in _blockers)
                 {
-                    <span class="me-3 d-inline-block @(blocker.IsSatisfied ? "text-success" : "")">
+                    <span class="me-3 d-inline-block @(blocker.IsLocallyComplete ? "text-success" : "")">
                         <a href="/tickets/@blocker.TicketRunId">@(blocker.Issue is { } issue ? $"#{issue}" : blocker.TicketRunId)</a> (@(blocker.Status is { } status ? DisplayNames.Humanize(status.ToString()) : "unknown"))
                     </span>
                 }

@@ -7,14 +7,14 @@ namespace WebDevLoop.Web.Tests.Api;
 internal sealed class FakeRunControl : IRunControl
 {
     private readonly Lock _gate = new();
-    private readonly List<(string Command, string Id, SkipDependents? Dependents)> _calls = [];
+    private readonly List<(string Command, string Id)> _calls = [];
 
     public ControlResult Result { get; set; } = ControlResult.Applied();
 
     /// <summary>Invoked with (command, id) when <see cref="Result"/> is applied, e.g. to change the run the endpoint reads back.</summary>
     public Action<string, string>? OnApplied { get; set; }
 
-    public IReadOnlyList<(string Command, string Id, SkipDependents? Dependents)> Calls
+    public IReadOnlyList<(string Command, string Id)> Calls
     {
         get
         {
@@ -31,16 +31,13 @@ internal sealed class FakeRunControl : IRunControl
 
     public Task<ControlResult> RetryTicketAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) => Record("retry-ticket", ticketRunId.Value);
 
-    public Task<ControlResult> SkipTicketAsync(TicketRunId ticketRunId, SkipDependents dependents, CancellationToken cancellationToken) =>
-        Record("skip-ticket", ticketRunId.Value, dependents);
-
     public Task<ControlResult> AbortTicketAsync(TicketRunId ticketRunId, CancellationToken cancellationToken) => Record("abort-ticket", ticketRunId.Value);
 
-    private Task<ControlResult> Record(string command, string id, SkipDependents? dependents = null)
+    private Task<ControlResult> Record(string command, string id)
     {
         lock (_gate)
         {
-            _calls.Add((command, id, dependents));
+            _calls.Add((command, id));
         }
 
         if (Result.IsApplied)

@@ -30,7 +30,7 @@ In this mode the app still starts, so you can see what is wrong. You can still:
 You cannot:
 
 - queue a spec (the form is disabled),
-- use Retry, Skip or Abort (the buttons are disabled),
+- use Retry or Abort (the buttons are disabled),
 - start new work. Workflow workers wait and new agent launches pause; in-flight steps can finish.
 
 A yellow banner on every page says "Diagnostic-only mode" and links here. The Health page itself says "Mutating workflow is disabled".

@@ -7,7 +7,8 @@ namespace WebDevLoop.Web.Tests.Workflow;
 internal sealed class FakeGitHubIssues : IGitHubIssues
 {
     private readonly object _gate = new();
-    private readonly Dictionary<int, IssueSnapshot> _issues = [];
+    private readonly Dictionary<(string Owner, string Repo, int Number), IssueSnapshot> _issues = [];
+    private readonly Dictionary<(string Owner, string Repo, int Number), Exception> _readFailures = [];
     private readonly Dictionary<int, List<int>> _subIssues = [];
     private readonly Dictionary<int, FindingFingerprint> _fingerprints = [];
     private readonly List<(int Issue, string Body)> _comments = [];
@@ -35,7 +36,7 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            _issues[number] = new IssueSnapshot(Ref(number), title, $"Implement {title}.", IssueState.Open, [.. blockedBy.Select(Ref)])
+            _issues[Key(Ref(number))] = new IssueSnapshot(Ref(number), title, $"Implement {title}.", IssueState.Open, [.. blockedBy.Select(Ref)])
             {
                 Labels = [WebDevLoopOptIn.Label],
             };
@@ -50,7 +51,7 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            return _issues[number].State;
+            return _issues[Key(Ref(number))].State;
         }
     }
 
@@ -58,7 +59,39 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            _issues[number] = _issues[number] with { Labels = labels };
+            _issues[Key(Ref(number))] = _issues[Key(Ref(number))] with { Labels = labels };
+        }
+    }
+
+    public void Seed(IssueRef issue, IssueState state)
+    {
+        lock (_gate)
+        {
+            _issues[Key(issue)] = new IssueSnapshot(issue, "External blocker", "", state, []);
+        }
+    }
+
+    public void SetBlockedBy(int number, params IssueRef[] blockers)
+    {
+        lock (_gate)
+        {
+            var key = Key(Ref(number));
+            _issues[key] = _issues[key] with { BlockedBy = blockers };
+        }
+    }
+
+    public void FailReads(IssueRef issue, Exception? failure)
+    {
+        lock (_gate)
+        {
+            if (failure is null)
+            {
+                _readFailures.Remove(Key(issue));
+            }
+            else
+            {
+                _readFailures[Key(issue)] = failure;
+            }
         }
     }
 
@@ -79,7 +112,12 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
         lock (_gate)
         {
-            return Task.FromResult(_issues[issue.Number]);
+            if (_readFailures.TryGetValue(Key(issue), out Exception? error))
+            {
+                throw error;
+            }
+
+            return Task.FromResult(_issues[Key(issue)]);
         }
     }
 
@@ -87,9 +125,9 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            IssueSnapshot[] tickets = [.. SubIssuesOf(specIssue.Number).Select(child => _issues[child])];
+            IssueSnapshot[] tickets = [.. SubIssuesOf(specIssue.Number).Select(child => _issues[Key(Ref(child))])];
             DependencyEdge<IssueRef>[] edges = [.. tickets.SelectMany(ticket => ticket.BlockedBy.Select(blocker => new DependencyEdge<IssueRef>(ticket.Ref, blocker)))];
-            return Task.FromResult(new SpecIssueGraph(_issues[specIssue.Number], tickets, edges));
+            return Task.FromResult(new SpecIssueGraph(_issues[Key(specIssue)], tickets, edges));
         }
     }
 
@@ -109,7 +147,7 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
         {
             return Task.FromResult(SubIssuesOf(specIssue.Number)
                 .Where(child => _fingerprints.TryGetValue(child, out FindingFingerprint known) && known == fingerprint)
-                .Select(child => _issues[child])
+                .Select(child => _issues[Key(Ref(child))])
                 .FirstOrDefault());
         }
     }
@@ -122,18 +160,18 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
             if (existing is { } known)
             {
                 LinkFinding(draft.Parent.Number, known);
-                return Task.FromResult(_issues[known]);
+                return Task.FromResult(_issues[Key(Ref(known))]);
             }
 
             ThrowFindingFailure(FindingCreationFailure);
-            int number = _issues.Keys.Max() + 1;
+            int number = _issues.Values.Where(issue => issue.Ref.Owner == Repository.Owner && issue.Ref.Repo == Repository.Name).Max(issue => issue.Ref.Number) + 1;
             var snapshot = new IssueSnapshot(
                 new IssueRef(Repository.Owner, Repository.Name, number, databaseId: 9000L + number),
                 draft.Title, draft.Body, IssueState.Open, [])
             {
                 Labels = [WebDevLoopOptIn.Label],
             };
-            _issues[number] = snapshot;
+            _issues[Key(Ref(number))] = snapshot;
             _fingerprints[number] = draft.Fingerprint;
             LinkFinding(draft.Parent.Number, number);
             ThrowFindingFailure(FindingResponseFailure);
@@ -155,10 +193,10 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            IssueSnapshot snapshot = _issues[blocked.Number];
-            if (!snapshot.BlockedBy.Any(existing => existing.Number == blocking.Number))
+            IssueSnapshot snapshot = _issues[Key(blocked)];
+            if (!snapshot.BlockedBy.Any(existing => Key(existing) == Key(blocking)))
             {
-                _issues[blocked.Number] = snapshot with { BlockedBy = [.. snapshot.BlockedBy, Ref(blocking.Number)] };
+                _issues[Key(blocked)] = snapshot with { BlockedBy = [.. snapshot.BlockedBy, blocking] };
             }
         }
 
@@ -182,7 +220,7 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            _issues[issue.Number] = _issues[issue.Number] with { State = IssueState.Closed };
+            _issues[Key(issue)] = _issues[Key(issue)] with { State = IssueState.Closed };
         }
 
         return Task.CompletedTask;
@@ -190,6 +228,9 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     private List<int> SubIssuesOf(int parent) =>
         _subIssues.TryGetValue(parent, out List<int>? children) ? children : _subIssues[parent] = [];
+
+    private static (string Owner, string Repo, int Number) Key(IssueRef issue) =>
+        (issue.Owner.ToUpperInvariant(), issue.Repo.ToUpperInvariant(), issue.Number);
 
     private void LinkFinding(int parent, int child)
     {

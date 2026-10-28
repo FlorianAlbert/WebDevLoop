@@ -19,22 +19,19 @@ public sealed class TicketRunControlsTests
 
         cut.Find("[data-testid=control-retry]").Click();
 
-        Assert.Equal([("retry-ticket", "t1", (SkipDependents?)null)], harness.Control.Calls);
+        Assert.Equal([("retry-ticket", "t1")], harness.Control.Calls);
     }
 
     [Theory]
-    [InlineData("control-skip", SkipDependents.Unblock)]
-    [InlineData("control-skip-dependents", SkipDependents.Skip)]
-    public void Skipping_is_confirmed_and_passes_the_chosen_dependents_policy(string button, SkipDependents expected)
+    [InlineData(TicketRunStatus.Blocked)]
+    [InlineData(TicketRunStatus.Ready)]
+    [InlineData(TicketRunStatus.NeedsAttention)]
+    public void Manual_skip_controls_are_absent(TicketRunStatus status)
     {
         using var harness = new RunDetailHarness();
-        var cut = Render(harness, TicketRunStatus.NeedsAttention);
+        var cut = Render(harness, status);
 
-        cut.Find($"[data-testid={button}]").Click();
-        Assert.Empty(harness.Control.Calls);
-        cut.Find("[data-testid=control-confirm-yes]").Click();
-
-        Assert.Equal(("skip-ticket", "t1", (SkipDependents?)expected), Assert.Single(harness.Control.Calls));
+        Assert.Empty(cut.FindAll("[data-testid=control-skip], [data-testid=control-skip-dependents]"));
     }
 
     [Fact]
@@ -57,20 +54,20 @@ public sealed class TicketRunControlsTests
         var cut = Render(harness, TicketRunStatus.Implementing);
 
         Assert.Equal(
-            [true, true, true, false],
-            new[] { "retry", "skip", "skip-dependents", "abort" }.Select(key => cut.Find($"[data-testid=control-{key}]").HasAttribute("disabled")));
+            [true, false],
+            new[] { "retry", "abort" }.Select(key => cut.Find($"[data-testid=control-{key}]").HasAttribute("disabled")));
     }
 
     [Fact]
-    public void A_blocked_ticket_can_be_skipped_or_aborted_but_not_retried()
+    public void A_blocked_ticket_can_be_aborted_but_not_retried()
     {
         using var harness = new RunDetailHarness();
 
         var cut = Render(harness, TicketRunStatus.Blocked);
 
         Assert.Equal(
-            [true, false, false, false],
-            new[] { "retry", "skip", "skip-dependents", "abort" }.Select(key => cut.Find($"[data-testid=control-{key}]").HasAttribute("disabled")));
+            [true, false],
+            new[] { "retry", "abort" }.Select(key => cut.Find($"[data-testid=control-{key}]").HasAttribute("disabled")));
     }
 
     [Fact]
@@ -81,6 +78,6 @@ public sealed class TicketRunControlsTests
 
         var cut = Render(harness, TicketRunStatus.NeedsAttention);
 
-        Assert.Equal([true, true, true, true], cut.FindAll("button[data-testid^=control-]").Select(button => button.HasAttribute("disabled")));
+        Assert.Equal([true, true], cut.FindAll("button[data-testid^=control-]").Select(button => button.HasAttribute("disabled")));
     }
 }

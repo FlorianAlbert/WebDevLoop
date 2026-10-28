@@ -29,7 +29,7 @@ flowchart LR
     Api --> Spec["Spec runs<br/>repos/id/spec-runs,<br/>spec-runs/id/..."]
     Api --> Ticket["Ticket runs<br/>ticket-runs/id/..."]
     Api --> Step["Steps<br/>steps/id, steps/id/logs"]
-    Api --> Control["Run control<br/>retry, skip, abort"]
+    Api --> Control["Run control<br/>retry, abort"]
     Api --> Events["Events<br/>events/stream (SSE)"]
     Root["/"] --> OA["openapi/v1.json"]
     Root --> Auth["auth/github/login,<br/>auth/github/callback<br/>(browser flow, not in OpenAPI)"]
@@ -106,8 +106,12 @@ All routes in this group are gated. Success returns `200` with <xref:WebDevLoop.
 | POST | `/api/spec-runs/{id}/retry` | Resume a spec run that needs attention at its failed phase. | `404`, `409`, `503` |
 | POST | `/api/spec-runs/{id}/abort` | Abort a spec run: stop agent sessions and tester app, cancel steps, abort open tickets, free the slot. | `404`, `409`, `503` |
 | POST | `/api/ticket-runs/{id}/retry` | Resume a ticket run that needs attention. | `404`, `409`, `503` |
-| POST | `/api/ticket-runs/{id}/skip` | Skip a ticket run that is not being worked on. Optional body `{ "dependents": "Unblock" \| "Skip" }`, default `Unblock`. | `400`, `404`, `409`, `503` |
-| POST | `/api/ticket-runs/{id}/abort` | Abort a ticket run. Dependents stay blocked. | `404`, `409`, `503` |
+| POST | `/api/ticket-runs/{id}/abort` | Abort a ticket run without closing its GitHub issue or bypassing blockers. | `404`, `409`, `503` |
+
+Manual skip and skip-with-dependents operations are removed, including `POST /api/ticket-runs/{id}/skip`.
+Retry, step cancellation, and abort remain supported. New implementation requires every current native GitHub blocker
+to be closed, regardless of opt-in, parent membership, repository, or PR merge state. Required read failures defer the affected
+ticket and are logged for periodic recovery without preventing unrelated dispatch; the saved local DAG never authorizes work on its own.
 
 ### Events and OpenAPI
 
@@ -161,7 +165,7 @@ At startup and on demand, <xref:WebDevLoop.Infrastructure.Prerequisites.Diagnost
 flowchart TD
     Req["Request"] --> Route{"Route group"}
     Route -->|"read endpoints, settings,<br/>repos, health, SSE, OpenAPI"| Handler["Handler"]
-    Route -->|"queue spec, retry, skip, abort"| Filter["OperationalOnlyFilter"]
+    Route -->|"queue spec, retry, abort"| Filter["OperationalOnlyFilter"]
     Filter --> Mode{"Readiness mode"}
     Mode -->|Operational| Handler
     Mode -->|DiagnosticOnly| P503["503 problem details<br/>mode + failedChecks"]
@@ -253,7 +257,7 @@ Rules for clients and for changes to this endpoint:
 | Type | File | Used by |
 | --- | --- | --- |
 | `QueueSpecRequest`, `QueueSpecResponse`, `AgentLogsResponse` | `Api/Contracts/RunContracts.cs` | Queue spec, step logs. |
-| `SkipTicketRequest`, `RunControlResponse<TRun>` | `Api/Contracts/ControlContracts.cs` | Run control. |
+| `RunControlResponse<TRun>` | `Api/Contracts/ControlContracts.cs` | Run control; manual skip operations are removed. |
 | `HealthResponse`, `PrerequisitesResponse`, `PrerequisiteCheckResponse` | `Api/Contracts/HealthContracts.cs` | Health. `ReadinessResponses.cs` maps from the readiness snapshot. |
 | `RepositoryView`, `SpecRunView`, `TicketRunView`, `StepRunView`, `StackLayerView`, `RunEventView`, `MergeStatusView`, `AgentLogView`, `LiveEventView` | `src/WebDevLoop.Core/Queries/` | Read endpoints and SSE. |
 | `RegisterRepositoryCommand`, `UpdateRepositoryCommand`, `SettingsProfileData`, `EffectiveSettingsView` | `src/WebDevLoop.Core/Management/` | Repository and settings endpoints. |

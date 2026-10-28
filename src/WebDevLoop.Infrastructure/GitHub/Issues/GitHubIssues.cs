@@ -214,7 +214,7 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
     {
         GitHubRepoRef repo = RepoOf(issue);
         IReadOnlyList<JsonElement> blockers = await _api.GetAllAsync(repo, BlockedByPath(issue), cancellationToken);
-        return blockers.Select(blocker => IssueJson.ToRef(blocker, repo)).ToList();
+        return blockers.Select(IssueJson.ToBlockerRef).ToList();
     }
 
     private static GitHubRepoRef RepoOf(IssueRef issue) => new(issue.Owner, issue.Repo);

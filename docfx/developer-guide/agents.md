@@ -159,7 +159,7 @@ A bounded last stage before the user is asked (see [run lifecycle](run-lifecycle
 
 - **When.** Only for ticket problems whose code is escalated by <xref:WebDevLoop.Core.Orchestration.Attention.TroubleshooterEscalation> (every code has an explicit rule; a test fails if one is missing), after the known remediation failed. Settings: `TroubleshooterEnabled`, `TroubleshooterMaxAttempts` (per ticket and code since the user's last Retry).
 - **Never loops.** A state fingerprint (code plus git state of the worktree and branches) prevents a second escalation for an unchanged state.
-- **Safety net.** Before the session the app saves uncommitted changes as a patch, the untracked file list and branch tips under `<run folder>/troubleshooter/backups/<ticket>/`. Retry, Skip or Abort while it runs cancels the session.
+- **Safety net.** Before the session the app saves uncommitted changes as a patch, the untracked file list and branch tips under `<run folder>/troubleshooter/backups/<ticket>/`. Retry or Abort while it runs cancels the session.
 - **Input.** The prompt carries the reason, summary and details, failed phase, ticket and spec text, worktree paths, the tail of the last agent log, git state, known PR state and what was already tried. The same material is a read-only context folder.
 - **Verification.** `resolved` is checked by <xref:WebDevLoop.Core.Orchestration.Attention.TroubleshooterVerifier> before the phase resumes.
 

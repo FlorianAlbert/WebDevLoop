@@ -21,7 +21,7 @@ public sealed class TicketDagLayoutTests
     }
 
     [Fact]
-    public void Ticket_is_frontier_only_when_all_blockers_are_integrated()
+    public void Only_tickets_marked_ready_by_the_frontier_are_highlighted_not_local_completion_guesses()
     {
         var rows = TicketDagLayout.Build(
         [
@@ -32,11 +32,11 @@ public sealed class TicketDagLayoutTests
             Views.Ticket("e", 5, TicketRunStatus.Ready),
         ]);
 
-        Assert.Equal(["e", "c"], rows.Where(row => row.IsFrontier).Select(row => row.Ticket.Id));
+        Assert.Equal(["e"], rows.Where(row => row.IsFrontier).Select(row => row.Ticket.Id));
     }
 
     [Fact]
-    public void A_skipped_blocker_is_satisfied_like_an_integrated_one_but_an_aborted_one_is_not()
+    public void Locally_skipped_blockers_do_not_authorize_the_frontier()
     {
         var rows = TicketDagLayout.Build(
         [
@@ -46,8 +46,8 @@ public sealed class TicketDagLayoutTests
             Views.Ticket("d", 4, TicketRunStatus.Blocked, blockedBy: ["b"]),
         ]);
 
-        Assert.Equal(["c"], rows.Where(row => row.IsFrontier).Select(row => row.Ticket.Id));
-        Assert.True(rows.Single(row => row.Ticket.Id == "c").Blockers.Single().IsSatisfied);
+        Assert.DoesNotContain(rows, row => row.IsFrontier);
+        Assert.True(rows.Single(row => row.Ticket.Id == "c").Blockers.Single().IsLocallyComplete);
     }
 
     [Fact]
@@ -62,11 +62,11 @@ public sealed class TicketDagLayoutTests
         TicketBlocker blocker = Assert.Single(rows.Single(row => row.Ticket.Id == "b").Blockers);
         Assert.Equal(7, blocker.Issue);
         Assert.Equal(TicketRunStatus.Reviewing, blocker.Status);
-        Assert.False(blocker.IsSatisfied);
+        Assert.False(blocker.IsLocallyComplete);
     }
 
     [Fact]
-    public void Unknown_blocker_never_satisfies_and_does_not_add_a_layer()
+    public void Unknown_blocker_is_not_locally_complete_and_does_not_add_a_layer()
     {
         var rows = TicketDagLayout.Build([Views.Ticket("b", 2, TicketRunStatus.Blocked, blockedBy: ["missing"])]);
 
@@ -74,6 +74,7 @@ public sealed class TicketDagLayoutTests
         Assert.Equal(0, row.Layer);
         Assert.False(row.IsFrontier);
         Assert.Null(row.Blockers.Single().Status);
+        Assert.False(row.Blockers.Single().IsLocallyComplete);
     }
 
     [Fact]

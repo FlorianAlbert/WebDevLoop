@@ -1,9 +1,12 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Preparation;
+using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.Recovery.ExternalState;
+using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.Integration;
+using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Recovery.ExternalState;
 
@@ -71,6 +74,33 @@ public sealed class TicketGraphReconciliationTests
         Assert.Empty(_x.Dependencies(spec));
         Assert.Single(_x.RunEvents(spec), runEvent => runEvent.Type == ExternalStateRunEvents.TicketRemovedFromSpec && runEvent.TicketRunId == removed.Id);
         Assert.Equal(TicketRunStatus.Blocked, Ticket(spec, 2).Status);
+    }
+
+    [Fact]
+    public async Task reconciliation_cannot_release_an_open_native_blocker_by_removing_its_local_ticket()
+    {
+        SpecRun spec = await SnapshotSpecAsync((1, []), (2, [1]));
+        TicketRun removed = Ticket(spec, 1);
+        TicketRun dependent = Ticket(spec, 2);
+        F.Issues.RemoveSubIssue(spec.ParentIssue, removed.Issue);
+        await _x.ReconcileAsync();
+        F.Settings.Defaults = F.Settings.Defaults with { WorkspaceRootDirectory = Path.Combine(AppContext.BaseDirectory, "work") };
+        var launcher = new TestImplementationLauncher();
+        var dispatcher = new TicketDispatcher(F.Settings, new ImplementerCapacity(F.Store), new ImplementerCapacityGate(), launcher, F.Store, F.Store, F.Clock);
+        var frontier = new FrontierService(F.Store, F.Store, F.Issues, dispatcher, F.Store, F.Store, F.Clock);
+
+        FrontierResult blocked = await frontier.ReconcileAsync(spec.Id, ExternalStateFixture.Token);
+
+        Assert.Equal(TicketRunStatus.Skipped, removed.Status);
+        Assert.Empty(_x.Dependencies(spec));
+        Assert.Empty(blocked.Dispatched);
+        Assert.Equal(TicketRunStatus.Blocked, dependent.Status);
+
+        await F.Issues.CloseAsync(removed.Issue, IssueCloseReason.Completed, ExternalStateFixture.Token);
+        FrontierResult released = await frontier.ReconcileAsync(spec.Id, ExternalStateFixture.Token);
+
+        Assert.Equal([dependent.Id], released.Dispatched);
+        Assert.Single(launcher.Launched);
     }
 
     [Fact]

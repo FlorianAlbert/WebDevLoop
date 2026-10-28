@@ -19,8 +19,9 @@ public sealed class TicketDispatcherTests
         TicketRun ticket = _fixture.Ticket(spec[7]);
         Assert.Equal(TicketRunStatus.Implementing, ticket.Status);
         Assert.Equal(1, ticket.Attempt);
-        Assert.Equal($"/work/runs/{spec.Id}/tickets/{ticket.Id}", ticket.WorktreePath);
-        Assert.Equal($"/work/runs/{spec.Id}/tickets/{ticket.Id}", TicketWorktreeLayout.PathFor("/work", spec.Id, ticket.Id));
+        string expected = Path.Combine(TicketExecutionFixture.WorkspaceRoot, "runs", spec.Id.Value, "tickets", ticket.Id.Value);
+        Assert.Equal(expected, ticket.WorktreePath);
+        Assert.Equal(expected, TicketWorktreeLayout.PathFor(TicketExecutionFixture.WorkspaceRoot, spec.Id, ticket.Id));
     }
 
     [Fact]

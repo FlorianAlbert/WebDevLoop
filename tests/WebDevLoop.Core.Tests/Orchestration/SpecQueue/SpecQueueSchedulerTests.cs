@@ -27,6 +27,79 @@ public sealed class SpecQueueSchedulerTests
     }
 
     [Theory]
+    [InlineData("parent unlabeled", false, "requires the 'webdevloop' label")]
+    [InlineData("parent closed", false, "must be open")]
+    [InlineData("tickets unlabeled", false, "at least one open sub-issue")]
+    [InlineData("parent unlabeled", true, "requires the 'webdevloop' label")]
+    [InlineData("parent closed", true, "must be open")]
+    [InlineData("tickets unlabeled", true, "at least one open sub-issue")]
+    public async Task current_eligibility_defers_queued_and_dependency_waiting_specs_without_holding_a_slot(
+        string change, bool waitingForDependency, string expectedReason)
+    {
+        IssueSnapshot parent = _fixture.SeedSpec(1);
+        IssueSnapshot child = await _fixture.Issues.GetIssueAsync(SpecWorkflowFixture.Issue(101), TestContext.Current.CancellationToken);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        if (waitingForDependency)
+        {
+            _fixture.SeedSpec(7);
+            _fixture.Issues.SetBlockedBy(parent.Ref, SpecWorkflowFixture.Issue(7));
+            await _fixture.ScheduleAsync();
+            await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(7), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+        }
+
+        _fixture.SeedSpec(2);
+        SpecRun independent = await _fixture.EnqueueAsync(2);
+        _fixture.Issues.Seed(change switch
+        {
+            "parent unlabeled" => parent with { Labels = ["ready-for-agent"] },
+            "parent closed" => parent with { State = IssueState.Closed },
+            _ => child with { Labels = ["ready-for-agent"] },
+        });
+
+        SpecScheduleResult deferred = await _fixture.ScheduleAsync();
+
+        Assert.Equal([independent.Id], deferred.Activated);
+        Assert.Contains(run.Id, deferred.Waiting);
+        Assert.Equal(waitingForDependency ? SpecRunStatus.WaitingForDependency : SpecRunStatus.Queued, run.Status);
+        Assert.Null(run.MaxActiveSpecsSlot);
+        Assert.Null(run.StartedAt);
+        Assert.Contains(expectedReason, run.WorkDecisionReason);
+        Assert.DoesNotContain(_fixture.Store.PendingEvents.OfType<SpecRunStatusChanged>(),
+            changed => changed.SpecRunId == run.Id && changed.To == SpecRunStatus.Preparing);
+
+        _fixture.Issues.Seed(parent);
+        _fixture.Issues.Seed(child);
+        _fixture.ConfigureQueue(maxActiveSpecs: 2);
+
+        Assert.Equal([run.Id], (await _fixture.ScheduleAsync()).Activated);
+        Assert.Null(run.WorkDecisionReason);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task restored_eligibility_clears_the_opt_out_reason_even_when_the_run_cannot_start(bool stillBlocked)
+    {
+        IssueSnapshot parent = _fixture.SeedSpec(1);
+        _fixture.SeedSpec(7);
+        _fixture.Issues.SetBlockedBy(parent.Ref, SpecWorkflowFixture.Issue(7));
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        _fixture.Issues.Seed(parent with { Labels = [] });
+        _fixture.SeedSpec(2);
+        await _fixture.EnqueueAsync(2);
+        await _fixture.ScheduleAsync();
+        Assert.Contains("requires the 'webdevloop' label", run.WorkDecisionReason);
+        _fixture.Issues.Seed(parent with { BlockedBy = stillBlocked ? [SpecWorkflowFixture.Issue(7)] : [] });
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+
+        Assert.Empty(result.Activated);
+        Assert.Null(run.MaxActiveSpecsSlot);
+        Assert.Null(run.WorkDecisionReason);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task unavailable_parent_or_blocker_defers_only_its_spec_and_an_independent_spec_behind_it_starts(bool parentUnavailable)

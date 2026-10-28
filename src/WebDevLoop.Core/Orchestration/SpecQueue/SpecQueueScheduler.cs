@@ -10,7 +10,8 @@ namespace WebDevLoop.Core.Orchestration.SpecQueue;
 /// <summary>
 /// One scheduling pass over a repository queue (entry point for the queue worker; call on <see cref="SpecRunQueued"/>,
 /// on <see cref="SpecRunStatusChanged"/> of the repository, and periodically). Queued specs are visited in queue order:
-/// dependency-blocked specs move to <see cref="SpecRunStatus.WaitingForDependency"/> without holding up independent specs
+/// current eligibility is rechecked before starting work, and ineligible specs wait with a reason without claiming a slot.
+/// Dependency-blocked specs move to <see cref="SpecRunStatus.WaitingForDependency"/> without holding up independent specs
 /// behind them, and startable specs claim a free active slot (1..<c>MaxActiveSpecsPerRepo</c>) and move to
 /// <see cref="SpecRunStatus.Preparing"/>. Each claim is saved separately with compare-and-swap; the persisted unique
 /// (repository, slot) index makes a concurrent claim of the same slot lose with <see cref="SaveOutcome.ConcurrencyConflict"/>.
@@ -77,11 +78,29 @@ public sealed class SpecQueueScheduler(
         SpecStartDecision decision;
         try
         {
+            (_, string? rejection) = await SpecEligibility.ReadAsync(issues, run.ParentIssue, cancellationToken);
+            if (rejection is not null)
+            {
+                bool saved = await TrySaveReasonAsync(run, $"Start deferred. {rejection} Restore eligibility to let scheduling retry.", cancellationToken);
+                return new SpecScheduleResult([], [run.Id], ConcurrencyConflict: !saved);
+            }
+
             decision = await _gate.EvaluateAsync(run, cancellationToken);
         }
         catch (GitHubIssuesException exception)
         {
-            return SpecScheduleResult.Nothing with { Faults = [new SpecScheduleFault(run.Id, exception.Message)] };
+            string reason = $"Cannot verify current GitHub eligibility or blockers for {run.ParentIssue}. "
+                + $"Check issue access and GitHub availability, then refresh or retry queue recovery. {exception.Message}";
+            bool saved = await TrySaveReasonAsync(run, reason, cancellationToken);
+            return new SpecScheduleResult([], [run.Id], ConcurrencyConflict: !saved)
+            {
+                Faults = [new SpecScheduleFault(run.Id, reason)],
+            };
+        }
+
+        if (!await TrySaveReasonAsync(run, null, cancellationToken))
+        {
+            return new SpecScheduleResult([], [], ConcurrencyConflict: true);
         }
 
         if (decision.Kind == SpecStartKind.Wait)
@@ -150,7 +169,7 @@ public sealed class SpecQueueScheduler(
     private static bool IsWaitingToStart(SpecRun run) =>
         run.Status is SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency or SpecRunStatus.WaitingForTickets;
 
-    private async Task<bool> TrySaveReasonAsync(SpecRun run, string reason, CancellationToken cancellationToken)
+    private async Task<bool> TrySaveReasonAsync(SpecRun run, string? reason, CancellationToken cancellationToken)
     {
         if (run.WorkDecisionReason == reason)
         {

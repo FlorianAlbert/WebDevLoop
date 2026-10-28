@@ -85,6 +85,12 @@ The picker, typed form and direct API calls recheck current GitHub state and lab
 when you first saw it. An ineligible spec or failed lookup creates no run. WebDevLoop reads the ticket graph again
 when the run starts; this enqueue check does not reserve a snapshot of the tickets.
 
+Scheduling rechecks the same eligibility before starting preparation, including after waiting for parent blockers.
+If the parent closes or loses its `webdevloop` label, or every child becomes closed or opts out, the run stays
+queued or waiting for dependency with an explanatory note. It holds no active slot and starts no preparation or
+agents. Restore the parent's and children's eligibility on GitHub to let normal scheduling retry the same run.
+An unavailable eligibility lookup also defers the start and shows access/retry guidance.
+
 ## Slots and parent blockers
 
 Above the form you see:
@@ -129,8 +135,8 @@ Runs are grouped into lanes. A lane only shows when it has runs. Within a lane, 
 
 | Status | What it means |
 | --- | --- |
-| Queued | Waiting for a free active slot. |
-| Waiting for dependency | At least one current native GitHub blocker of the parent is open. The row names the blocking issues. |
+| Queued | Waiting for a free active slot, restored eligibility or a fresh GitHub check. The note explains the current wait. |
+| Waiting for dependency | A native parent blocker held this run. Scheduling rechecks blockers and eligibility before starting; the note explains the current wait. |
 | Waiting for tickets | Remaining eligible tickets have open native blockers, or resumed work awaits a free slot or a fresh GitHub check. No active slot is held; the note explains the current wait. |
 | Preparing | WebDevLoop reads the tickets, creates the integration branch and explores the repository. |
 | Running | Tickets are implemented, reviewed and integrated. |

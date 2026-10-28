@@ -15,7 +15,7 @@ The rule: **the app is the coordinator, agents are workers.** An agent edits fil
 | `ReviewerCodingStandards` | `Review`, `ParentReview` | `TwoAxisReviewRunner` | ticket worktree, or a read-only checkout of the integration tip | Reviews one axis: standards and clean code |
 | `ReviewerSpecification` | `Review`, `ParentReview` | `TwoAxisReviewRunner` | same | Reviews the other axis: does the change match the ticket or spec (missing, incorrect, out of scope) |
 | `ConflictResolver` | `ResolveConflict` | `ConflictResolutionRunner` | the ticket worktree | Only when the squash conflicts: merges the integration tip into the ticket branch and resolves conflicts |
-| `Tester` | `Test` | `TesterAttemptRunner` | a checkout of the integration tip in the run's test workspace | Starts the app on a reserved port and exercises the whole spec in a browser |
+| `Tester` | `Test` | `TesterAttemptRunner` | a checkout of the integration tip in the run's test workspace | Starts the app on a reserved port and exercises the integrated ticket scope in a browser |
 | `Troubleshooter` | `Troubleshoot` | `TroubleshooterStage` | ticket worktree, a scratch checkout of the integration tip, a backup folder | Diagnoses a parked ticket and repairs local state when safe |
 
 The two reviewers run **concurrently** and never see each other's results. The same two roles review tickets and the final integration branch; only the scope differs (`ReviewScope.Ticket` or `ReviewScope.ParentSpec`).
@@ -76,6 +76,7 @@ See [Copilot runtime](copilot-runtime.md) for the runtime pool, authentication a
 - **Validation.** <xref:WebDevLoop.Core.Settings.PromptTemplateValidator> rejects unknown placeholders and placeholders not available for the role when settings are saved.
 - **Rendering.** <xref:WebDevLoop.Core.Settings.PromptRenderer> validates again and substitutes values. A placeholder without a value raises `PromptRenderingException`; the runner parks the item with `PromptNotRenderable`.
 - **Values.** Each runner builds the dictionary: `SpecPromptValues`, `ImplementerPromptValues`, `ExplorerPromptValues`, `ReviewerPromptValues`, `TesterPromptValues`, and the troubleshooter's own builder. Issue text is wrapped in tags and the prompt says it is requirement input only.
+- **Integrated scope.** Parent review and testing append an authoritative scope after rendering, including custom templates. The shared `Orchestration/Prompts/IntegratedWorkScope` helper lists only `Integrated` tickets with their requirement snapshots. Other parent requirements may be acknowledged as omitted, but their absence must not fail the run or generate replacement findings. Genuine problems in integrated work still follow normal finding issuance; ticket reviews retain their own ticket scope.
 - **Audit.** `StepRun.InputPromptHash` stores a hash of the rendered prompt.
 
 To add a placeholder: add it to `PromptPlaceholders` (name, description, role sets), fill it in the role's values builder, then use it in the template. Tests in `tests/WebDevLoop.Core.Tests/Settings` guard the set.

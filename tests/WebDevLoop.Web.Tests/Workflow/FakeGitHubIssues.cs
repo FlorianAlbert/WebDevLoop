@@ -95,6 +95,15 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
         }
     }
 
+    public void SetBody(int number, string body)
+    {
+        lock (_gate)
+        {
+            var key = Key(Ref(number));
+            _issues[key] = _issues[key] with { Body = body };
+        }
+    }
+
     public IReadOnlyList<string> CommentsOn(int number)
     {
         lock (_gate)

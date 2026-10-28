@@ -10,7 +10,7 @@ It runs on your own machine and works on GitHub as you.
 2. WebDevLoop reads the spec's open sub-issues (the tickets) and their "blocked by" links. This forms a graph of tickets (a DAG).
 3. Copilot agents implement the tickets that are free to start. Every ticket is reviewed twice (coding standards and specification) and fixed until the reviews are clean.
 4. Each finished ticket is squash-merged into an integration branch and shows up as one layer of a stacked draft PR.
-5. When all tickets are done, an agent reviews the whole spec and a tester agent runs the app. Problems they find become new finding tickets, and the loop repeats.
+5. Parent reviewers and a tester assess only the tickets integrated into the spec branch. They may note omitted work without failing for it or recreating it as findings. Genuine problems in integrated work become new finding tickets, and the loop repeats.
 6. The stack is marked ready for review. You merge it on GitHub. WebDevLoop notices and completes the run.
 7. If something gets stuck, the run shows **Needs attention** with the steps to fix it. See [Needs attention](needs-attention.md).
 

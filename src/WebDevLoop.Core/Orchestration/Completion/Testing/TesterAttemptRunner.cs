@@ -4,6 +4,7 @@ using System.Text;
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Prompts;
 using WebDevLoop.Core.Orchestration.Results;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
@@ -98,6 +99,7 @@ public sealed class TesterAttemptRunner(
         try
         {
             prompt = prompts.Render(AgentRole.Tester, role.PromptTemplate, TesterPromptValues.Build(context, attempt, target, options.SkillsRoot));
+            prompt = IntegratedWorkScope.AppendTo(prompt, context.Tickets);
         }
         catch (Exception exception) when (exception is SettingsValidationException or PromptRenderingException)
         {

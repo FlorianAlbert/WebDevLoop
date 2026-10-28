@@ -33,6 +33,10 @@ internal sealed class AgentScript
     public HashSet<int> FailFirstImplementation { get; } = [];
     public bool ThrowFirstImplementation { get; set; }
 
+    public Func<AgentRunRequest, ReviewReport>? ParentReview { get; set; }
+
+    public Func<AgentRunRequest, TestReport>? Test { get; set; }
+
     public StepKind? FindingOnFirstCycle { get; set; }
 
     public bool RepeatFinding { get; set; }
@@ -103,6 +107,16 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
                 script.FailingTurnStarted.TrySetResult(request.StepRunId);
                 await script.ReleaseFailingTurn.Task.WaitAsync(cancellationToken);
                 return AgentRunResult.NotReported(AgentRunOutcome.Failed, "Model rejected by Copilot.");
+            }
+
+            if (kind == StepKind.ParentReview && script.ParentReview is { } parentReview)
+            {
+                return AgentRunResult.Reported(parentReview(request));
+            }
+
+            if (kind == StepKind.Test && script.Test is { } test)
+            {
+                return AgentRunResult.Reported(test(request));
             }
 
             return request.Role switch

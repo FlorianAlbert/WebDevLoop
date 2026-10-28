@@ -216,6 +216,17 @@ lookup, including authorization or transient failures, fails closed (`503` with 
 never authorizes queueing. New runs return `202`; duplicate unfinished runs return `200 AlreadyQueued` and the existing
 run id without creating another run. Diagnostic-only safeguards still apply.
 
+### Parent review and testing scope
+
+Parent review and application testing assess only tickets actually integrated into the spec branch, not every requirement
+or sub-issue of the parent spec. Both review axes and the tester receive the integrated tickets' titles and requirement
+snapshots, with the parent spec providing applicable constraints. This scope is supplied even with custom prompt templates.
+Removing a ticket's opt-in after its work was selected does not remove its integrated changes from review or testing.
+
+Agents may acknowledge omitted work in their summaries, but absent excluded requirements must not cause a failure or be
+recreated as finding issues. Genuine defects, regressions, or unmet requirements in integrated work still follow the normal
+finding-ticket workflow. Once those fixes are integrated, subsequent review and testing include them too.
+
 New parent-review and tester finding issues are created with `webdevloop` and linked as sub-issues of their parent,
 so they can enter the normal ticket workflow. Reused findings, including issues recovered after a crash or retried
 issuance, keep their current labels: WebDevLoop never silently reverses a maintainer's opt-out.

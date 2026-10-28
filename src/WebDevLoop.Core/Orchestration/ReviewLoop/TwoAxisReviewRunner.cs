@@ -4,6 +4,7 @@ using System.Text;
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Prompts;
 using WebDevLoop.Core.Orchestration.Results;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Ports;
@@ -171,7 +172,13 @@ public sealed class TwoAxisReviewRunner(
             try
             {
                 IReadOnlyDictionary<string, string> values = ReviewerPromptValues.Build(context, axis, attempt, options.SkillsRoot, tickets, dependencies);
-                turns.Add((axis, role, attempt, prompts.Render(role, context.Settings.For(role).PromptTemplate, values)));
+                string prompt = prompts.Render(role, context.Settings.For(role).PromptTemplate, values);
+                if (context.Request.Scope == ReviewScope.ParentSpec)
+                {
+                    prompt = IntegratedWorkScope.AppendTo(prompt, tickets);
+                }
+
+                turns.Add((axis, role, attempt, prompt));
             }
             catch (Exception exception) when (exception is SettingsValidationException or PromptRenderingException)
             {

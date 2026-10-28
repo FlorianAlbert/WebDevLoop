@@ -20,7 +20,7 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         (IReadOnlyList<JsonElement> items, bool hasMore) = await _api.GetPageAsync(repository, path, cancellationToken);
         var parents = items.Where(issue => !issue.TryGetProperty("pull_request", out _) && !HasParent(issue))
             .Select(issue => IssueJson.ToSnapshot(issue, repository, []))
-            .Where(issue => issue.State == IssueState.Open && issue.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase))
+            .Where(issue => issue.IsOpenAndOptedIn())
             .Select(issue => new ParentIssueSummary(issue.Ref, issue.Title))
             .ToArray();
         return new ParentIssuePage(parents, hasMore ? page + 1 : null);
@@ -88,7 +88,7 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
         JsonElement created = (await _api.SendAsync(HttpMethod.Post, repo, $"repos/{repo.Owner}/{repo.Name}/issues", new { title = draft.Title, body, labels = new[] { WebDevLoopOptIn.Label } }, cancellationToken))
             ?? throw new GitHubApiException(GitHubApiErrorKind.Invalid, "GitHub returned no content for the created issue.");
         IssueSnapshot snapshot = IssueJson.ToSnapshot(created, repo, []);
-        if (!snapshot.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase))
+        if (!snapshot.HasOptIn())
         {
             throw new GitHubApiException(
                 GitHubApiErrorKind.Forbidden,

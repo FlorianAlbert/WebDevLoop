@@ -18,7 +18,7 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
         {
             IssueSnapshot parent = await issues.GetIssueAsync(spec.ParentIssue, cancellationToken);
             IReadOnlyList<IssueSnapshot> children = await issues.GetSubIssuesAsync(spec.ParentIssue, cancellationToken);
-            if (!IsEligible(parent))
+            if (!parent.IsOpenAndOptedIn())
             {
                 string stopReason = parent.State != IssueState.Open
                     ? $"Parent spec {spec.ParentIssue} is closed. Selected tickets may finish; queue again explicitly after reopening and opting in."
@@ -42,7 +42,7 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
                 try
                 {
                     IssueSnapshot current = await issues.GetIssueAsync(child.Ref, cancellationToken);
-                    if (!IsEligible(current))
+                    if (!current.IsOpenAndOptedIn())
                     {
                         continue;
                     }
@@ -70,9 +70,6 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
 
         return new CurrentWork(null, waitReason, eligible, runnable, errors) { Blocked = blocked };
     }
-
-    private static bool IsEligible(IssueSnapshot issue) =>
-        issue.State == IssueState.Open && issue.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase);
 
     private async Task<bool> IsUnblockedAsync(IssueSnapshot issue, CancellationToken cancellationToken)
     {

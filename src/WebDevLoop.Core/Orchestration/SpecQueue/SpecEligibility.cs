@@ -15,13 +15,13 @@ public static class SpecEligibility
             return (spec, $"Parent spec #{parent.Number} must be open.");
         }
 
-        if (!spec.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase))
+        if (!spec.HasOptIn())
         {
             return (spec, $"Parent spec #{parent.Number} requires the '{WebDevLoopOptIn.Label}' label (WebDevLoop Opt-in).");
         }
 
         IReadOnlyList<IssueSnapshot> tickets = await issues.GetSubIssuesAsync(spec.Ref, cancellationToken);
-        return tickets.Any(ticket => ticket.State == IssueState.Open && ticket.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase))
+        return tickets.Any(ticket => ticket.IsOpenAndOptedIn())
             ? (spec, null)
             : (spec, $"Parent spec #{parent.Number} needs at least one open sub-issue independently labeled '{WebDevLoopOptIn.Label}'.");
     }

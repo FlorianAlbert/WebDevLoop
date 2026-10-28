@@ -19,3 +19,4 @@ _Avoid_: Thinking level
 **WebDevLoop Opt-in**:
 Explicit permission for WebDevLoop to work on a particular issue, independent of its readiness or dependencies.
 Represented by the fixed GitHub label `webdevloop`; a parent spec and each sub-issue opt in independently.
+Label matching is case-insensitive. Work selection additionally requires the issue to be open.

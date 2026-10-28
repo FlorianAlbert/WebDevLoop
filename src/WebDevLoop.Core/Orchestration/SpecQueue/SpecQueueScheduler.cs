@@ -1,6 +1,7 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Completion;
 using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
@@ -17,6 +18,7 @@ namespace WebDevLoop.Core.Orchestration.SpecQueue;
 /// (repository, slot) index makes a concurrent claim of the same slot lose with <see cref="SaveOutcome.ConcurrencyConflict"/>.
 /// Parked <see cref="SpecRunStatus.WaitingForTickets"/> runs recheck current eligibility and blockers and claim a free slot
 /// to resume directly at <see cref="SpecRunStatus.Running"/>, without repeating preparation or preempting active work.
+/// Parent opt-out and no-work outcomes complete parked runs without claiming a slot.
 /// </summary>
 public sealed class SpecQueueScheduler(
     IRepositoryRecordRepository repositories,
@@ -31,6 +33,7 @@ public sealed class SpecQueueScheduler(
 {
     private readonly SpecDependencyGate _gate = new(issues);
     private readonly CurrentWorkEligibility _eligibility = new(issues);
+    private readonly SpecRunJournal _journal = new(outbox, clock);
 
     public async Task<SpecScheduleResult> ScheduleRepositoryAsync(int repositoryId, CancellationToken cancellationToken)
     {
@@ -125,6 +128,14 @@ public sealed class SpecQueueScheduler(
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(run.Id, cancellationToken);
         CurrentWork current = await _eligibility.ReadAsync(run, tickets, cancellationToken);
         bool hasWork = current.Eligible.Count > 0 || tickets.Any(ticket => ticket.Status == TicketRunStatus.Integrated);
+        if (current.Errors.Count == 0 && (current.StopReason is not null || !hasWork))
+        {
+            _journal.Move(run, SpecRunStatus.Completed);
+            run.SetWorkDecisionReason(current.StopReason ?? CurrentWork.NoEligibleWorkReason);
+            bool saved = await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved;
+            return new SpecScheduleResult([], [], ConcurrencyConflict: !saved);
+        }
+
         string? reason = current.Errors.FirstOrDefault()?.Message
             ?? (hasWork ? current.WaitReason : null)
             ?? (current.AllEligibleBlocked ? CurrentWork.BlockedReason : null);

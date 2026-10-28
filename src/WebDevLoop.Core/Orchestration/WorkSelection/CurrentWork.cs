@@ -15,6 +15,8 @@ public sealed record CurrentWork(
 
     public const string ResumeSlotWaitReason = "Work can resume; waiting for a free active-spec slot without preempting an active spec.";
 
+    public const string NoEligibleWorkReason = "No eligible work remains and no tickets were integrated. No parent review or pull request was created. Opt tickets in and queue again explicitly.";
+
     /// <summary>Eligible issues whose current native relationships include a confirmed open blocker.</summary>
     public IReadOnlyList<IssueRef> Blocked { get; init; } = [];
 

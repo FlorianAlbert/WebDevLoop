@@ -119,6 +119,11 @@ or unavailable lookups defer resumption and show retry guidance, never treating 
 Once work is runnable and a slot is free, the same run and integration branch resume in queue order; active specs
 are not interrupted. Preparation and integrated tickets are not repeated. You do not need to enqueue a parked spec again.
 
+If the parent closes or loses its opt-in while parked, scheduling completes the run with that explanation, preserving
+its branch and pull requests. If all remaining tickets become ineligible and nothing was integrated, it completes with
+**No eligible work**. Neither outcome needs a free slot, even when every slot is busy. These completed runs must be
+queued again explicitly after restoring eligibility.
+
 ## Lanes
 
 Runs are grouped into lanes. A lane only shows when it has runs. Within a lane, runs are sorted by queue position.

@@ -103,11 +103,10 @@ public sealed class WorkCompletionDecider(
 
         return hasIntegratedWork
             ? new(WorkCompletionOutcome.ReviewStarted, null, SpecRunStatus.ParentReviewing)
-            : new(WorkCompletionOutcome.NoEligibleWork, NoEligibleWorkReason, SpecRunStatus.Completed);
+            : new(WorkCompletionOutcome.NoEligibleWork, CurrentWork.NoEligibleWorkReason, SpecRunStatus.Completed);
     }
 
     private const string BlockedWorkReason = "Eligible tickets remain blocked or await graph reconciliation; parent review is deferred.";
-    private const string NoEligibleWorkReason = "No eligible work remains and no tickets were integrated. No parent review or pull request was created. Opt tickets in and queue again explicitly.";
 
     private readonly record struct CompletionDecision(WorkCompletionOutcome Outcome, string? Reason, SpecRunStatus? NextStatus = null);
 }

@@ -11,26 +11,75 @@ namespace WebDevLoop.Web.Tests.Workflow;
 
 public sealed class BlockedSpecWorkflowTests
 {
-    [Fact]
-    public async Task parked_work_that_opts_out_finishes_without_an_empty_review_even_with_a_new_parent_blocker()
+    [Theory]
+    [InlineData("parent unlabeled", false, "opted out of WebDevLoop")]
+    [InlineData("parent closed", false, "is closed")]
+    [InlineData("tickets unlabeled", false, "No eligible work")]
+    [InlineData("parent unlabeled", true, "opted out of WebDevLoop")]
+    public async Task parked_work_that_opts_out_finishes_while_all_slots_are_busy_without_resuming(
+        string change, bool hasIntegratedWork, string expectedReason)
     {
-        using var scenario = new WorkflowScenario(101);
+        using var scenario = new WorkflowScenario(101, 102, 201);
         scenario.Issues.Seed(100, "Spec");
         scenario.Issues.Seed(900, "Blocker");
         scenario.Issues.Seed(101, "Ticket", parent: 100, blockedBy: 900);
-        await using var host = new WorkflowHost(scenario);
+        if (hasIntegratedWork)
+        {
+            scenario.Issues.Seed(102, "Integrated ticket", parent: 100);
+        }
+        else
+        {
+            scenario.Issues.Seed(102, "Other blocked ticket", parent: 100, blockedBy: 900);
+        }
+        scenario.Issues.Seed(200, "Busy spec");
+        scenario.Issues.Seed(201, "Busy ticket", parent: 200);
+        var script = new AgentScript();
+        script.HangingImplementers.Add(201);
+        await using var host = new WorkflowHost(scenario, script);
         var api = new WorkflowApi(host.CreateClient(), scenario.Logs);
         int repository = await api.RegisterRepositoryAsync(scenario);
         string run = await api.EnqueueAsync(repository, 100);
-        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.WaitingForTickets));
+        var parked = await api.WaitForStatusAsync(run, nameof(SpecRunStatus.WaitingForTickets));
+        string busy = await api.EnqueueAsync(repository, 200);
+        await script.HangingImplementerStarted.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
-        scenario.Issues.SetLabels(101);
-        scenario.Issues.SetBlockedBy(100, scenario.Issues.Ref(900));
+        using (IServiceScope scope = host.Services.CreateScope())
+        {
+            Assert.Null(await scope.ServiceProvider.GetRequiredService<SpecQueueScheduler>()
+                .FindFreeSlotAsync(repository, TestContext.Current.CancellationToken));
+        }
+        if (change == "parent closed")
+        {
+            await scenario.Issues.CloseAsync(scenario.Issues.Ref(100), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+        }
+        else if (change == "parent unlabeled")
+        {
+            scenario.Issues.SetLabels(100);
+        }
+        else
+        {
+            scenario.Issues.SetLabels(101);
+            scenario.Issues.SetLabels(102);
+            scenario.Issues.SetBlockedBy(100, scenario.Issues.Ref(900));
+        }
         var finished = await api.WaitForStatusAsync(run, nameof(SpecRunStatus.Completed), TimeSpan.FromSeconds(10));
 
-        Assert.Contains("No eligible work", finished.GetProperty("workDecisionReason").GetString());
-        Assert.Empty(await api.StackAsync(run));
-        Assert.DoesNotContain(scenario.Journal.Calls, call => call.Role != AgentRole.Explorer);
+        Assert.Contains(expectedReason, finished.GetProperty("workDecisionReason").GetString());
+        Assert.Equal(parked.GetProperty("integrationBranch").GetString(), finished.GetProperty("integrationBranch").GetString());
+        Assert.Equal(parked.GetProperty("integrationTipSha").GetString(), finished.GetProperty("integrationTipSha").GetString());
+        Assert.Equal(0, finished.GetProperty("reviewCycle").GetInt32());
+        Assert.Equal(0, finished.GetProperty("testCycle").GetInt32());
+        Assert.Equal(hasIntegratedWork ? 1 : 0, (await api.StackAsync(run)).Length);
+        Assert.Equal(nameof(SpecRunStatus.Running), (await api.GetAsync($"/api/spec-runs/{busy}")).GetProperty("status").GetString());
+        Assert.DoesNotContain(scenario.Journal.Calls, call => call.TicketIssue == 101 || call.Kind == StepKind.ParentReview || call.Role == AgentRole.Tester);
+        using (IServiceScope scope = host.Services.CreateScope())
+        {
+            SpecScheduleResult result = await scope.ServiceProvider.GetRequiredService<SpecQueueScheduler>()
+                .ScheduleRepositoryAsync(repository, TestContext.Current.CancellationToken);
+            Assert.Empty(result.Activated);
+        }
+        script.ReleaseHangingImplementer.TrySetResult();
+        await api.WaitForStatusAsync(busy, nameof(SpecRunStatus.AwaitingMerge));
     }
 
     [Fact]

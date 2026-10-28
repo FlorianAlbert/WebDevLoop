@@ -274,6 +274,8 @@ including after partial integration, without starting parent review. Agent-capac
 Normal scheduling and restart recovery recheck current GitHub state, labels and relationships; unavailable information
 keeps work deferred with a retry reason. Runnable parked work claims a free slot in queue order, without preempting an
 active spec, then resumes the **same run and integration branch** without repeating preparation or integrated tickets.
+If the parent closes or opts out while parked, or no eligible tickets remain and nothing was integrated, scheduling
+completes the run with the corresponding reason without claiming or waiting for an active slot.
 
 The run API exposes the persisted `workDecisionReason` for waiting/deferred decisions and terminal opt-out/no-work outcomes.
 The queue and run detail pages display that reason. A preserved opt-out stack has merge state `Stopped`, not `Merged`.

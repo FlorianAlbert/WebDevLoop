@@ -7,6 +7,7 @@ using WebDevLoop.Core.Orchestration.Results;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.Findings;
 using WebDevLoop.Core.Tests.Orchestration.Completion;
+using WebDevLoop.Core.Tests.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
 
 namespace WebDevLoop.Core.Tests.Orchestration.Completion.Testing;
@@ -18,12 +19,36 @@ public sealed class SpecTestRunnerTests
     private readonly TestingFixture _fixture = new();
 
     [Fact]
+    public async Task Tester_receives_only_integrated_ticket_requirements_even_with_a_custom_template()
+    {
+        _fixture.UseTesterTemplate("Verify every parent requirement.");
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []), (3, []), (4, []));
+        await _fixture.Parent.WorkTicketAsync(spec, spec[2]);
+        await _fixture.Execution.MoveAsync(spec[4], TicketRunStatus.Aborted);
+        await _fixture.Parent.MoveSpecAsync(spec.Id, SpecRunStatus.ParentReviewing);
+        await _fixture.Parent.MoveSpecAsync(spec.Id, SpecRunStatus.Testing);
+        _fixture.Tester.Reports(TestingFixture.Pass());
+
+        TestingResult result = await _fixture.RunAsync(spec.Id);
+
+        Assert.Equal(TestingOutcome.Passed, result.Outcome);
+        string prompt = Assert.Single(_fixture.Tester.Started).Prompt;
+        Assert.Contains("<integrated_tickets>\n### #2: Ticket 2\n\nImplement 2.\n</integrated_tickets>", prompt);
+        Assert.DoesNotContain("Implement 3.", prompt);
+        Assert.DoesNotContain("Implement 4.", prompt);
+        Assert.Contains("This scope overrides any instruction above to assess every parent requirement or sub-issue.", prompt);
+        Assert.Contains("Do not fail solely because excluded work is absent", prompt);
+        Assert.Contains("do not recreate excluded requirements as finding issues", prompt);
+        Assert.Empty(_fixture.Issues.CreatedDrafts);
+    }
+
+    [Fact]
     public async Task Reserved_port_appears_in_tester_prompt_and_environment()
     {
         _fixture.UseTesterTemplate("{reserved_port} {app_url} [{tester_instructions}] {worktree_path} {branch_name}");
         _fixture.Configure(settings => settings with { TesterRunInstructions = "npm start -- --port $PORT", TestPortRange = new TestPortRange(41007, 41009) });
         SeededSpec spec = await _fixture.SeedTestingAsync();
-        TestWorkspace workspace = TestWorkspace.For(TicketExecutionFixture.WorkspaceRoot, spec.Id);
+        TestWorkspace workspace = TestWorkspace.For(ParentReviewFixture.WorkspaceRoot, spec.Id);
         TestLease? leaseDuringTurn = null;
         StepStatus? stepDuringTurn = null;
         _fixture.Tester.DuringTurn = _ =>
@@ -37,7 +62,7 @@ public sealed class SpecTestRunnerTests
 
         Assert.Equal(TestingOutcome.Passed, result.Outcome);
         AgentRunRequest request = Assert.Single(_fixture.Tester.Started);
-        Assert.Equal($"41007 http://localhost:41007/ [npm start -- --port $PORT] {workspace.CheckoutDirectory} webdevloop/{spec.Id}/test", request.Prompt);
+        Assert.StartsWith($"41007 http://localhost:41007/ [npm start -- --port $PORT] {workspace.CheckoutDirectory} webdevloop/{spec.Id}/test\n\n", request.Prompt);
         Assert.Equal(AgentRole.Tester, request.Role);
         Assert.Equal(workspace.CheckoutDirectory, request.Policy.Paths.WorkingDirectory);
         IReadOnlyDictionary<string, string> shell = request.Policy.BuildEnvironment(new Dictionary<string, string>());
@@ -53,7 +78,7 @@ public sealed class SpecTestRunnerTests
     public async Task Passing_tester_keeps_spec_testing_and_hands_it_to_completion()
     {
         SeededSpec spec = await _fixture.SeedTestingAsync();
-        string checkout = TestWorkspace.For(TicketExecutionFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
+        string checkout = TestWorkspace.For(ParentReviewFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
         _fixture.Tester.Reports(TestingFixture.Pass());
 
         TestingResult result = await _fixture.RunAsync(spec.Id);
@@ -396,7 +421,7 @@ public sealed class SpecTestRunnerTests
     public async Task Duplicate_runner_that_loses_the_claim_leaves_the_winners_checkout_alone()
     {
         SeededSpec spec = await _fixture.SeedTestingAsync();
-        string checkout = TestWorkspace.For(TicketExecutionFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
+        string checkout = TestWorkspace.For(ParentReviewFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
         var duplicateGit = new ControlledGitWorkspace(_fixture.Execution.Git);
         duplicateGit.PauseAtNextBranchTip();
         Task<TestingResult> duplicate = _fixture.Runner(git: duplicateGit).RunAsync(new TestingAssignment(spec.Id), TestingFixture.Token);

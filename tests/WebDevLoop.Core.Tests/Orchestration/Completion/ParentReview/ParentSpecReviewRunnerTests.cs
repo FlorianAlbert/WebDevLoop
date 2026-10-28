@@ -21,12 +21,39 @@ public sealed class ParentSpecReviewRunnerTests
     private readonly ParentReviewFixture _fixture = new();
 
     [Fact]
+    public async Task Parent_review_receives_only_integrated_ticket_requirements_even_with_a_custom_template()
+    {
+        _fixture.UseReviewerTemplate(TargetTemplate);
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []), (3, []), (4, []), (5, []));
+        await _fixture.WorkTicketAsync(spec, spec[2]);
+        await _fixture.Execution.MoveAsync(spec[4], TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing);
+        await _fixture.Execution.MoveAsync(spec[5], TicketRunStatus.Aborted);
+        await _fixture.MoveSpecAsync(spec.Id, SpecRunStatus.ParentReviewing);
+        _fixture.Clean();
+
+        ParentReviewResult result = await _fixture.RunAsync(spec.Id);
+
+        Assert.Equal(ParentReviewOutcome.ReadyForTesting, result.Outcome);
+        Assert.Equal(2, _fixture.ReviewerRequests.Count());
+        Assert.All(_fixture.ReviewerRequests, request =>
+        {
+            Assert.Contains("<integrated_tickets>\n### #2: Ticket 2\n\nImplement 2.\n</integrated_tickets>", request.Prompt);
+            Assert.DoesNotContain("Implement 3.", request.Prompt);
+            Assert.DoesNotContain("Implement 4.", request.Prompt);
+            Assert.DoesNotContain("Implement 5.", request.Prompt);
+            Assert.Contains("Do not fail solely because excluded work is absent", request.Prompt);
+            Assert.Contains("do not recreate excluded requirements as finding issues", request.Prompt);
+        });
+        Assert.Empty(_fixture.Issues.CreatedDrafts);
+    }
+
+    [Fact]
     public async Task Clean_parent_review_moves_spec_to_tester_ready_state()
     {
         _fixture.UseReviewerTemplate(TargetTemplate);
         SeededSpec spec = await _fixture.SeedParentReviewingAsync();
         SpecRun before = _fixture.Spec(spec.Id);
-        string checkout = ParentReviewWorkspace.For(TicketExecutionFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
+        string checkout = ParentReviewWorkspace.For(ParentReviewFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
         _fixture.Clean();
 
         ParentReviewResult result = await _fixture.RunAsync(spec.Id);
@@ -37,8 +64,8 @@ public sealed class ParentSpecReviewRunnerTests
         Assert.Equal((SpecRunStatus.ParentReviewing, SpecRunStatus.Testing), (changed.From, changed.To));
         AgentRunRequest[] requests = _fixture.ReviewerRequests.ToArray();
         Assert.Equal(2, requests.Length);
-        Assert.All(requests, request => Assert.Equal(
-            $"parent_spec {checkout} webdevloop/{spec.Id}/parent-review {before.IntegrationBaseSha}...{before.IntegrationTipSha}",
+        Assert.All(requests, request => Assert.StartsWith(
+            $"parent_spec {checkout} webdevloop/{spec.Id}/parent-review {before.IntegrationBaseSha}...{before.IntegrationTipSha}\n\n",
             request.Prompt));
         Assert.All(requests, request => Assert.Equal(checkout, request.Policy.Paths.WorkingDirectory));
         Assert.Equal(2, _fixture.ParentReviewSteps(spec.Id).Count(step => step.Status == StepStatus.Succeeded && step.TicketRunId is null));
@@ -56,7 +83,7 @@ public sealed class ParentSpecReviewRunnerTests
         ParentReviewResult result = await _fixture.RunAsync(spec.Id);
 
         Assert.Equal(ParentReviewOutcome.ReadyForTesting, result.Outcome);
-        Assert.All(_fixture.ReviewerRequests, request => Assert.Equal("#n/a n/a n/a n/a parent_spec", request.Prompt));
+        Assert.All(_fixture.ReviewerRequests, request => Assert.StartsWith("#n/a n/a n/a n/a parent_spec\n\n", request.Prompt));
     }
 
     [Fact]
@@ -206,7 +233,7 @@ public sealed class ParentSpecReviewRunnerTests
     public async Task Duplicate_runner_that_loses_the_claim_leaves_the_winners_checkout_alone()
     {
         SeededSpec spec = await _fixture.SeedParentReviewingAsync();
-        string checkout = ParentReviewWorkspace.For(TicketExecutionFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
+        string checkout = ParentReviewWorkspace.For(ParentReviewFixture.WorkspaceRoot, spec.Id).CheckoutDirectory;
         var duplicateGit = new ControlledGitWorkspace(_fixture.Review.Git);
         duplicateGit.PauseAtNextBranchTip();
         Task<ParentReviewResult> duplicate = _fixture.Runner(git: duplicateGit).RunAsync(new ParentReviewAssignment(spec.Id), ParentReviewFixture.Token);

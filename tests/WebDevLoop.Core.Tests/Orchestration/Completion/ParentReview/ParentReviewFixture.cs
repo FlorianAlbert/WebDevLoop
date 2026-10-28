@@ -22,7 +22,13 @@ internal sealed class ParentReviewFixture
 {
     private int _eventMark;
 
-    public ParentReviewFixture() => Execution.Issues = Issues.Snapshots;
+    public static string WorkspaceRoot { get; } = Path.GetFullPath(TicketExecutionFixture.WorkspaceRoot);
+
+    public ParentReviewFixture()
+    {
+        Execution.Settings.Defaults = Execution.Settings.Defaults with { WorkspaceRootDirectory = WorkspaceRoot };
+        Execution.Issues = Issues.Snapshots;
+    }
 
     public ReviewLoopFixture Review { get; } = new();
 

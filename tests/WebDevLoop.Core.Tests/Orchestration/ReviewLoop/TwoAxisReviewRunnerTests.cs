@@ -13,6 +13,11 @@ public sealed class TwoAxisReviewRunnerTests
 
     private readonly ReviewLoopFixture _fixture = new();
 
+    public TwoAxisReviewRunnerTests()
+    {
+        _fixture.Settings.Defaults = _fixture.Settings.Defaults with { WorkspaceRootDirectory = Path.GetFullPath(TicketExecutionFixture.WorkspaceRoot) };
+    }
+
     [Fact]
     public async Task parent_spec_review_runs_both_axes_against_the_integration_branch()
     {
@@ -22,7 +27,7 @@ public sealed class TwoAxisReviewRunnerTests
         CommitSha baseSha = _fixture.Spec(spec.Id).IntegrationBaseSha!.Value;
         CommitSha integrated = _fixture.Git.Commit([baseSha], "ticket-1.cs");
         await _fixture.Git.UpdateBranchAsync(spec.Location, spec.IntegrationBranch, integrated, baseSha, ReviewLoopFixture.Token);
-        const string checkout = "/work/runs/integration-checkout";
+        string checkout = Path.Combine(_fixture.Settings.Defaults.WorkspaceRootDirectory, "runs", "integration-checkout");
         _fixture.Clean(FindingAxis.CodingStandards).Issues(FindingAxis.Specification, ReviewLoopFixture.SpecFinding);
 
         ReviewRoundResult result = await _fixture.Reviews().RunAsync(
@@ -40,12 +45,9 @@ public sealed class TwoAxisReviewRunnerTests
         Assert.Equal([ReviewLoopFixture.SpecFinding], result.Findings);
         Assert.Equal([FindingAxis.CodingStandards, FindingAxis.Specification], result.Reports.Select(report => report.Axis));
         AgentRunRequest[] requests = _fixture.ReviewerRequests.OrderBy(request => request.Role).ToArray();
-        Assert.Equal(
-            [
-                $"coding_standards parent_spec #n/a n/a {baseSha}...{integrated} ticket-1.cs",
-                $"specification parent_spec #n/a n/a {baseSha}...{integrated} ticket-1.cs",
-            ],
-            requests.Select(request => request.Prompt));
+        Assert.Equal(2, requests.Length);
+        Assert.StartsWith($"coding_standards parent_spec #n/a n/a {baseSha}...{integrated} ticket-1.cs\n\n", requests[0].Prompt);
+        Assert.StartsWith($"specification parent_spec #n/a n/a {baseSha}...{integrated} ticket-1.cs\n\n", requests[1].Prompt);
         Assert.All(requests, request => Assert.Equal(checkout, request.Policy.Paths.WorkingDirectory));
         StepRun[] steps = _fixture.Db.Rows<StepRun>().Where(step => step.SpecRunId == spec.Id).OrderBy(step => step.AgentRole).ToArray();
         Assert.Equal(
@@ -59,6 +61,27 @@ public sealed class TwoAxisReviewRunnerTests
             Assert.False(string.IsNullOrWhiteSpace(step.Model));
             Assert.Equal((request.Settings.Model, request.Settings.ReasoningEffort), (step.Model, step.ReasoningEffort));
         });
+    }
+
+    [Fact]
+    public async Task ticket_review_keeps_its_ticket_scope_without_parent_completion_instructions()
+    {
+        _fixture.UseTemplate(AgentRole.ReviewerCodingStandards, "{review_scope} {ticket_body}");
+        _fixture.UseTemplate(AgentRole.ReviewerSpecification, "{review_scope} {ticket_body}");
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []));
+        await _fixture.Execution.MoveAsync(spec[2], TicketRunStatus.Ready, TicketRunStatus.Implementing, TicketRunStatus.Reviewing);
+        CommitSha tip = _fixture.Spec(spec.Id).IntegrationTipSha!.Value;
+        _fixture.Clean(FindingAxis.CodingStandards).Clean(FindingAxis.Specification);
+
+        ReviewRoundResult result = await _fixture.Reviews().RunAsync(
+            new ReviewRequest(spec.Id, spec[2], ReviewScope.Ticket,
+                new ReviewTarget(_fixture.Settings.Defaults.WorkspaceRootDirectory, _fixture.Ticket(spec[2]).BranchName, tip, tip),
+                new ReviewRound(1, 0), ReviewRequest.BothAxes),
+            ReviewLoopFixture.Token);
+
+        Assert.True(result.IsClean);
+        Assert.Equal(2, _fixture.ReviewerRequests.Count());
+        Assert.All(_fixture.ReviewerRequests, request => Assert.Equal("ticket Implement 2.", request.Prompt));
     }
 
     [Fact]

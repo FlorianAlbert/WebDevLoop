@@ -39,6 +39,17 @@ If GitHub rejects creation, labeling or linking, the failure is reported and iss
 An issue that was already created is reused, not duplicated. If GitHub created the issue without its label, check
 that the repository has `webdevloop` and the app can apply issue labels, then add the label yourself to allow work.
 
+### What parent review and testing cover
+
+Reviewers and the tester assess only tickets actually integrated into this run's integration branch. They receive
+those tickets' requirement snapshots and use the parent spec for applicable constraints, even with custom prompt
+templates. A ticket's integrated changes stay in scope if its opt-in was later removed.
+
+The agents may note omitted work in their summaries. Missing excluded requirements, including work that was not
+opted in or implemented, do not by themselves fail review or testing and must not be recreated as finding issues.
+Genuine problems in integrated work still create finding tickets through the normal workflow. Subsequent cycles
+include those fixes after they are integrated.
+
 ## Action needed
 
 When the run needs attention, a yellow **Action needed** card is shown at the top. It tells you what happened and what to do, and it has the buttons. See [Needs attention](needs-attention.md).

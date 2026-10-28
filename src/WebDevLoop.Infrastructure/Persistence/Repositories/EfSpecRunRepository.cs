@@ -26,12 +26,6 @@ public sealed class EfSpecRunRepository(WebDevLoopDbContext context) : ISpecRunR
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<SpecDependency>> ListDependenciesAsync(RunId blockedSpecRunId, CancellationToken cancellationToken) =>
-        await context.SpecDependencies
-            .Where(dependency => dependency.BlockedSpecRunId == blockedSpecRunId)
-            .OrderBy(dependency => dependency.Id)
-            .ToListAsync(cancellationToken);
-
     public async Task<SpecRunStatus?> GetCommittedStatusAsync(RunId id, CancellationToken cancellationToken) =>
         await context.SpecRuns.AsNoTracking()
             .Where(run => run.Id == id)
@@ -40,5 +34,4 @@ public sealed class EfSpecRunRepository(WebDevLoopDbContext context) : ISpecRunR
 
     public void Add(SpecRun specRun) => context.SpecRuns.Add(specRun);
 
-    public void AddDependency(SpecDependency dependency) => context.SpecDependencies.Add(dependency);
 }

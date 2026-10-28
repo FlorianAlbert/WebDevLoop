@@ -26,19 +26,3 @@ internal sealed class SpecRunConfiguration : IEntityTypeConfiguration<SpecRun>
             .HasDatabaseName("UX_SpecRuns_ActiveSlotPerRepository");
     }
 }
-
-internal sealed class SpecDependencyConfiguration : IEntityTypeConfiguration<SpecDependency>
-{
-    public void Configure(EntityTypeBuilder<SpecDependency> builder)
-    {
-        builder.ToTable("SpecDependencies");
-        builder.HasKey(dependency => dependency.Id);
-        builder.ComplexProperty(dependency => dependency.ExternalBlockingIssue, IssueRefColumns.Configure);
-        builder.HasOne<SpecRun>().WithMany().HasForeignKey(dependency => dependency.BlockedSpecRunId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne<SpecRun>().WithMany().HasForeignKey(dependency => dependency.BlockingSpecRunId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasIndex(dependency => new { dependency.BlockedSpecRunId, dependency.BlockingSpecRunId })
-            .IsUnique()
-            .HasFilter("\"BlockingSpecRunId\" IS NOT NULL")
-            .HasDatabaseName("UX_SpecDependencies_Blocked_Blocking");
-    }
-}

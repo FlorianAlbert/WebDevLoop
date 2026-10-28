@@ -126,7 +126,6 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddScoped<FindingIssuanceReconciler>();
         services.TryAddScoped<WorktreeReconciler>();
         services.TryAddScoped<IntegrationSagaReconciler>();
-        services.TryAddScoped<StackBaseReconciler>();
         services.TryAddScoped<ExternalStateReconciler>();
         services.TryAddScoped<IExternalStateRecovery>(provider => provider.GetRequiredService<ExternalStateReconciler>());
 

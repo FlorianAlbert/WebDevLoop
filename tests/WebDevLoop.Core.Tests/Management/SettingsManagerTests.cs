@@ -37,7 +37,6 @@ public sealed class SettingsManagerTests
         {
             BaseBranch = "develop",
             MaxRetries = 4,
-            SpecDependencyMode = SpecDependencyMode.StackOnTop,
             TestPortRange = new PortRangeData(42000, 42100),
             Roles = new Dictionary<AgentRole, RoleSettingsOverride>
             {
@@ -51,7 +50,7 @@ public sealed class SettingsManagerTests
         Assert.Equal(CommandStatus.Succeeded, saved.Status);
         Assert.Equal(1, _store.SaveCount);
         Assert.Equal("develop", loaded.BaseBranch);
-        Assert.Equal((4, SpecDependencyMode.StackOnTop, new PortRangeData(42000, 42100)), (loaded.MaxRetries, loaded.SpecDependencyMode, loaded.TestPortRange));
+        Assert.Equal((4, new PortRangeData(42000, 42100)), (loaded.MaxRetries, loaded.TestPortRange));
         Assert.Equal(data.Roles![AgentRole.Tester], loaded.Roles![AgentRole.Tester]);
     }
 

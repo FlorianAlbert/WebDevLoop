@@ -12,8 +12,6 @@ public interface ISpecRunRepository
     /// <summary>Runs in any non-terminal status across all repositories (schedulers and recovery).</summary>
     Task<IReadOnlyList<SpecRun>> ListNonTerminalAsync(CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<SpecDependency>> ListDependenciesAsync(RunId blockedSpecRunId, CancellationToken cancellationToken);
-
     /// <summary>
     /// The committed status of a run, read without tracking, so a long-lived unit of work sees changes other scopes
     /// committed (e.g. an abort); null when the run does not exist.
@@ -22,5 +20,4 @@ public interface ISpecRunRepository
 
     void Add(SpecRun specRun);
 
-    void AddDependency(SpecDependency dependency);
 }

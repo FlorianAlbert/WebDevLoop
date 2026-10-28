@@ -24,7 +24,7 @@ public sealed class SpecQueueScheduler(
     IClock clock,
     RepositoryOptIn optIn)
 {
-    private readonly SpecDependencyGate _gate = new(specRuns, issues);
+    private readonly SpecDependencyGate _gate = new(issues);
 
     public async Task<SpecScheduleResult> ScheduleRepositoryAsync(int repositoryId, CancellationToken cancellationToken)
     {
@@ -47,17 +47,28 @@ public sealed class SpecQueueScheduler(
         var freeSlots = new Queue<int>(FreeSlots(queue, effective.MaxActiveSpecsPerRepo));
         var activated = new List<RunId>();
         var waiting = new List<RunId>();
+        var faults = new List<SpecScheduleFault>();
 
         foreach (SpecRun run in queue.Where(IsWaitingToStart))
         {
-            SpecStartDecision decision = await _gate.EvaluateAsync(run, queue, effective.SpecDependencyMode, cancellationToken);
+            SpecStartDecision decision;
+            try
+            {
+                decision = await _gate.EvaluateAsync(run, cancellationToken);
+            }
+            catch (GitHubIssuesException exception)
+            {
+                faults.Add(new SpecScheduleFault(run.Id, exception.Message));
+                continue;
+            }
+
             if (decision.Kind == SpecStartKind.Wait)
             {
                 waiting.Add(run.Id);
                 if (run.Status == SpecRunStatus.Queued
                     && !await TrySaveTransitionAsync(run, SpecRunStatus.WaitingForDependency, cancellationToken))
                 {
-                    return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: true);
+                    return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: true) { Faults = faults };
                 }
 
                 continue;
@@ -68,16 +79,17 @@ public sealed class SpecQueueScheduler(
                 continue;
             }
 
-            PrepareClaim(run, slot, decision, effective.BaseBranch);
+            run.MaxActiveSpecsSlot = slot;
+            run.BaseBranch = effective.BaseBranch;
             if (!await TrySaveTransitionAsync(run, SpecRunStatus.Preparing, cancellationToken))
             {
-                return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: true);
+                return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: true) { Faults = faults };
             }
 
             activated.Add(run.Id);
         }
 
-        return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: false);
+        return new SpecScheduleResult(activated, waiting, ConcurrencyConflict: false) { Faults = faults };
     }
 
     /// <summary>
@@ -101,21 +113,6 @@ public sealed class SpecQueueScheduler(
         SpecRun[] active = queue.Where(run => run.IsActive).ToArray();
         HashSet<int> occupied = active.Where(run => run.MaxActiveSpecsSlot is not null).Select(run => run.MaxActiveSpecsSlot!.Value).ToHashSet();
         return Enumerable.Range(1, maxActiveSpecs).Where(slot => !occupied.Contains(slot)).Take(Math.Max(0, maxActiveSpecs - active.Length));
-    }
-
-    private static void PrepareClaim(SpecRun run, int slot, SpecStartDecision decision, BranchName trunk)
-    {
-        run.MaxActiveSpecsSlot = slot;
-        run.BaseBranch = trunk;
-        if (decision.Kind == SpecStartKind.StackOnTop)
-        {
-            run.DependencyModeUsed = SpecDependencyMode.StackOnTop;
-            run.IntegrationBaseSha = decision.StackBaseSha;
-        }
-        else if (run.Status == SpecRunStatus.WaitingForDependency)
-        {
-            run.DependencyModeUsed = SpecDependencyMode.WaitForMerge;
-        }
     }
 
     private async Task<bool> TrySaveTransitionAsync(SpecRun run, SpecRunStatus next, CancellationToken cancellationToken)

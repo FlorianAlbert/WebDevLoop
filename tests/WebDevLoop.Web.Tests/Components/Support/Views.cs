@@ -10,9 +10,8 @@ internal static class Views
     public static SpecRunView Spec(
         string id = "run-1",
         SpecRunStatus status = SpecRunStatus.Running,
-        string title = "Add billing",
-        SpecDependencyMode? mode = null) => new(
-        id, 1, 42, title, status, 1, "main", $"integration/{id}", "base111", "tip222", mode, 0, 0, Now, Now, null, null, null);
+        string title = "Add billing") => new(
+        id, 1, 42, title, status, 1, "main", $"integration/{id}", "base111", "tip222", 0, 0, Now, Now, null, null, null);
 
     public static TicketRunView Ticket(
         string id,

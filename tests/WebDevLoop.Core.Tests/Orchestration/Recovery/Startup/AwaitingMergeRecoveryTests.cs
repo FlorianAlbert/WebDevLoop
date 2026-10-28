@@ -44,7 +44,7 @@ public sealed class AwaitingMergeRecoveryTests
         Assert.Equal(MergeTrackingOutcome.Completed, merged.ExternalState!.MergeTracking.Merges[blocking.Id].Outcome);
         Assert.Equal(SpecRunStatus.Completed, blocking.Status);
         Assert.Equal([dependent.Id], Assert.Single(merged.SpecQueues!.Repositories).Schedule.Activated);
-        Assert.Equal((SpecRunStatus.Preparing, SpecDependencyMode.WaitForMerge, 1), (dependent.Status, dependent.DependencyModeUsed, dependent.MaxActiveSpecsSlot));
+        Assert.Equal((SpecRunStatus.Preparing, 1), (dependent.Status, dependent.MaxActiveSpecsSlot));
         Assert.Empty(startup.Faults.Concat(stillOpen.Faults).Concat(merged.Faults));
     }
 
@@ -66,7 +66,6 @@ public sealed class AwaitingMergeRecoveryTests
             new FindingIssuanceReconciler(store, store, f.Issues, f.Ids, store, f.Clock),
             new WorktreeReconciler(store, store, f.Git),
             new IntegrationSagaReconciler(store, store, f.Pulls, saga, new RecordingIntegrationLauncher(), store, store, f.Clock, new ExternalReconciliationOptions()),
-            new StackBaseReconciler(store, f.Pulls, store, store, f.Clock),
             f.Tracking());
         var scheduler = new SpecQueueScheduler(store, store, f.Issues, f.Settings, store, store, f.Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()));
         var noAgentWork = new RecoveryStageFakes();

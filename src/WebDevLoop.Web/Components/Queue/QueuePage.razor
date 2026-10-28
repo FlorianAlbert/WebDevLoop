@@ -27,10 +27,6 @@ else
         <span class="small text-body-secondary" data-testid="active-slots">
             Active slots <strong>@ActiveCount@(_settings is null ? "" : $" / {_settings.MaxActiveSpecsPerRepo}")</strong>
         </span>
-        @if (_settings is not null)
-        {
-            <span class="small text-body-secondary" title="@DisplayNames.Describe(_settings.SpecDependencyMode)" data-testid="dependency-mode">Mode: @DisplayNames.For(_settings.SpecDependencyMode)</span>
-        }
     </div>
 
     <div class="mb-3">
@@ -52,7 +48,7 @@ else
 
         <SectionCard Title="@SpecRunLanes.Title(lane)" Class="mb-3" NoPadding="true" data-lane="@lane">
             <Actions><StatusPill>@laneRuns.Count</StatusPill></Actions>
-            <ChildContent><SpecRunTable Runs="laneRuns" Dependencies="_dependencies" EffectiveDependencyMode="EffectiveMode" /></ChildContent>
+            <ChildContent><SpecRunTable Runs="laneRuns" Blockers="_blockers" /></ChildContent>
         </SectionCard>
     }
 }
@@ -61,11 +57,9 @@ else
     private RepositoryView? _repository;
     private IReadOnlyList<SpecRunView> _runs = [];
     private EffectiveSettingsView? _settings;
-    private IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>> _dependencies = new Dictionary<string, IReadOnlyList<SpecDependencyView>>();
+    private IReadOnlyDictionary<string, ParentBlockersView> _blockers = new Dictionary<string, ParentBlockersView>();
 
     private int ActiveCount => _runs.Count(run => run.Status.IsActive());
-
-    private SpecDependencyMode EffectiveMode => _settings?.SpecDependencyMode ?? SpecDependencyMode.WaitForMerge;
 
     protected override bool ReactsTo(LiveEventView liveEvent) => SpecQueueEvents.Affects(liveEvent);
 
@@ -77,23 +71,23 @@ else
         int? repositoryId = RepositoryContext.CurrentRepositoryId;
         if (repositoryId is not { } id)
         {
-            (_repository, _runs, _settings, _dependencies) = (null, [], null, new Dictionary<string, IReadOnlyList<SpecDependencyView>>());
+            (_repository, _runs, _settings, _blockers) = (null, [], null, new Dictionary<string, ParentBlockersView>());
             return;
         }
 
-        (_repository, _runs, _settings, _dependencies) = await InScopeAsync<(RepositoryView?, IReadOnlyList<SpecRunView>, EffectiveSettingsView?, IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>>)>(async services =>
+        (_repository, _runs, _settings, _blockers) = await InScopeAsync<(RepositoryView?, IReadOnlyList<SpecRunView>, EffectiveSettingsView?, IReadOnlyDictionary<string, ParentBlockersView>)>(async services =>
         {
             RepositoryView? repository = await services.GetRequiredService<IRepositoryQueries>().GetAsync(id, cancellationToken);
             if (repository is null)
             {
-                return (null, [], null, new Dictionary<string, IReadOnlyList<SpecDependencyView>>());
+                return (null, [], null, new Dictionary<string, ParentBlockersView>());
             }
 
             var queries = services.GetRequiredService<IRunQueries>();
             IReadOnlyList<SpecRunView> runs = await queries.ListSpecRunsAsync(id, cancellationToken);
-            IReadOnlyDictionary<string, IReadOnlyList<SpecDependencyView>> dependencies = await queries.ListSpecDependenciesForRepositoryAsync(id, cancellationToken);
+            IReadOnlyDictionary<string, ParentBlockersView> blockers = await services.GetRequiredService<IParentBlockerQueries>().ListBlockersAsync(id, cancellationToken);
             CommandResult<EffectiveSettingsView> settings = await services.GetRequiredService<ISettingsManager>().GetEffectiveAsync(id, cancellationToken);
-            return (repository, runs, settings.Value, dependencies);
+            return (repository, runs, settings.Value, blockers);
         });
 
         if (_repository is null)

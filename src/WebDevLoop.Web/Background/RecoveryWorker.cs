@@ -58,6 +58,11 @@ public sealed partial class RecoveryWorker(
                 LogStageFault(logger, report.Kind, fault.Stage, fault.Error);
             }
 
+            foreach (QueueRecomputationFault fault in report.SpecQueues?.Faults ?? [])
+            {
+                LogQueueFault(logger, report.Kind, fault.RepositoryId, fault.Error);
+            }
+
             return report;
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
@@ -76,6 +81,9 @@ public sealed partial class RecoveryWorker(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Kind} recovery stage {Stage} failed: {Error}")]
     private static partial void LogStageFault(ILogger logger, RecoveryCycleKind kind, RecoveryStage stage, string error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Kind} queue recovery for repository {RepositoryId} deferred: {Error}")]
+    private static partial void LogQueueFault(ILogger logger, RecoveryCycleKind kind, int repositoryId, string error);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "A recovery cycle failed; the next cycle retries.")]
     private static partial void LogCycleFailed(ILogger logger, Exception exception);

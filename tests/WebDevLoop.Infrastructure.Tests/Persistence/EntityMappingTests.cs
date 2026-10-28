@@ -34,23 +34,18 @@ public sealed class EntityMappingTests : IDisposable
     }
 
     [Fact]
-    public async Task spec_run_round_trips_all_state_and_dependencies()
+    public async Task spec_run_round_trips_all_state()
     {
         (int repositoryId, RunId specRunId) = await TestData.SeedSpecRunAsync(_harness);
         using (PersistenceScope write = _harness.OpenScope())
         {
-            SpecRun other = TestData.NewSpecRun(repositoryId, "run-2", issueNumber: 20, queuePosition: 2);
-            write.SpecRuns.Add(other);
             SpecRun run = (await write.SpecRuns.GetAsync(specRunId, CancellationToken.None))!;
             run.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
             run.BaseBranch = new BranchName("main");
             run.IntegrationBaseSha = TestData.Sha1;
             run.IntegrationTipSha = TestData.Sha2;
-            run.DependencyModeUsed = SpecDependencyMode.StackOnTop;
             run.MaxActiveSpecsSlot = 1;
             run.TransitionTo(SpecRunStatus.Running, TestData.Now);
-            write.SpecRuns.AddDependency(SpecDependency.OnSpecRun(other.Id, run.Id, SpecDependencyMode.StackOnTop));
-            write.SpecRuns.AddDependency(SpecDependency.OnExternalIssue(other.Id, new IssueRef("acme", "widgets", 5, "I_5", 55), SpecDependencyMode.WaitForMerge));
             await write.SaveAsync();
         }
 
@@ -67,18 +62,9 @@ public sealed class EntityMappingTests : IDisposable
         Assert.Equal(RunScopedNaming.IntegrationBranch(specRunId), loaded.IntegrationBranch);
         Assert.Equal(TestData.Sha1, loaded.IntegrationBaseSha);
         Assert.Equal(TestData.Sha2, loaded.IntegrationTipSha);
-        Assert.Equal(SpecDependencyMode.StackOnTop, loaded.DependencyModeUsed);
         Assert.Equal(1, loaded.MaxActiveSpecsSlot);
         Assert.Equal(TestData.Now, loaded.StartedAt);
         Assert.Null(loaded.CompletedAt);
-
-        IReadOnlyList<SpecDependency> dependencies = await read.SpecRuns.ListDependenciesAsync(new RunId("run-2"), CancellationToken.None);
-        Assert.Equal(2, dependencies.Count);
-        Assert.Equal(specRunId, dependencies[0].BlockingSpecRunId);
-        Assert.Null(dependencies[0].ExternalBlockingIssue);
-        Assert.Null(dependencies[1].BlockingSpecRunId);
-        Assert.Equal(new IssueRef("acme", "widgets", 5, "I_5", 55), dependencies[1].ExternalBlockingIssue);
-        Assert.Equal(SpecDependencyMode.WaitForMerge, dependencies[1].ModeAtStart);
     }
 
     [Fact]

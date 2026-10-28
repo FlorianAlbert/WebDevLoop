@@ -8,12 +8,11 @@ public sealed class DefaultSettingsTests
     private const string DataRoot = "/var/lib/webdevloop";
 
     [Fact]
-    public void defaults_are_sequential_wait_for_merge_with_paths_under_data_root()
+    public void defaults_are_sequential_with_paths_under_data_root()
     {
         EffectiveSettings defaults = DefaultSettings.Create(new FakeTemplates(), DataRoot);
 
         Assert.Equal(1, defaults.MaxActiveSpecsPerRepo);
-        Assert.Equal(SpecDependencyMode.WaitForMerge, defaults.SpecDependencyMode);
         Assert.Equal(Path.Combine(DataRoot, "workspaces"), defaults.WorkspaceRootDirectory);
         Assert.Equal(Path.Combine(DataRoot, "copilot"), defaults.CopilotBaseDirectory);
         Assert.Equal(new BranchName("main"), defaults.BaseBranch);

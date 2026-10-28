@@ -9,5 +9,4 @@ public static class ExternalStateRunEvents
 
     public const string IntegratedTicketReopened = "IntegratedTicketReopened";
 
-    public const string PullRequestBaseRetargeted = "PullRequestBaseRetargeted";
 }

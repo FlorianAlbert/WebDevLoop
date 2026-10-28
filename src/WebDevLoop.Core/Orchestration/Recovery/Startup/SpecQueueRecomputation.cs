@@ -30,6 +30,8 @@ public sealed class SpecQueueRecomputation(IRepositoryRecordRepository repositor
                 else
                 {
                     recomputed.Add(new RepositoryQueueRecomputation(repository.Id, schedule));
+                    faults.AddRange(schedule.Faults.Select(fault =>
+                        new QueueRecomputationFault(repository.Id, fault.Message)));
                 }
             }
             catch (Exception exception) when (exception is not OperationCanceledException)

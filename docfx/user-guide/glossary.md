@@ -35,7 +35,7 @@
 | Cycle | One round of parent review or testing that may create finding tickets. The limits are in Settings. |
 | Tester | The agent that starts the integrated app and tests it with `playwright-cli`. |
 | Active slot | The right to work on a spec. By default each repository has one. |
-| Spec dependency mode | How a spec that is blocked by another spec waits: **Wait for merge** or **Stack on top**. |
+| Parent blocker | A native GitHub "blocked by" issue of the parent. Every blocker must be closed before a new spec starts from current trunk. |
 | Awaiting merge | The stack is open and waits for you to merge it. |
 | Needs attention | A run, ticket or step stopped and needs you. It shows a reason and the steps to continue. |
 | Action needed | The card that explains a Needs attention state and has the buttons. |

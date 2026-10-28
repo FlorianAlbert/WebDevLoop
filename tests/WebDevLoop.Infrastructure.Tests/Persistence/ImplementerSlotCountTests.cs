@@ -114,7 +114,6 @@ public sealed class ImplementerSlotCountTests : IDisposable
         CopilotBaseDirectory = "/copilot",
         BaseBranch = new BranchName("main"),
         MaxActiveSpecsPerRepo = 1,
-        SpecDependencyMode = SpecDependencyMode.WaitForMerge,
         MaxConcurrentImplementersGlobal = GlobalLimit,
         MaxConcurrentImplementersPerRepo = PerRepositoryLimit,
         MaxReviewIterations = 5,

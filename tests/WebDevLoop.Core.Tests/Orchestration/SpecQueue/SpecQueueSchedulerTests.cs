@@ -26,6 +26,128 @@ public sealed class SpecQueueSchedulerTests
         }
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task unavailable_parent_or_blocker_defers_only_its_spec_and_an_independent_spec_behind_it_starts(bool parentUnavailable)
+    {
+        _fixture.SeedSpec(1, 7);
+        _fixture.SeedSpec(2);
+        _fixture.SeedSpec(7);
+        SpecRun deferred = await _fixture.EnqueueAsync(1);
+        SpecRun independent = await _fixture.EnqueueAsync(2);
+        _fixture.Issues.RemoveIssue(SpecWorkflowFixture.Issue(parentUnavailable ? 1 : 7));
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+
+        Assert.Equal([independent.Id], result.Activated);
+        Assert.Equal(SpecRunStatus.Queued, deferred.Status);
+        Assert.Null(deferred.MaxActiveSpecsSlot);
+        SpecScheduleFault fault = Assert.Single(result.Faults);
+        Assert.Equal(deferred.Id, fault.SpecRunId);
+        Assert.Contains("Check issue access", fault.Error);
+    }
+
+    [Fact]
+    public async Task parent_blockers_added_and_removed_after_enqueue_control_each_scheduling_decision()
+    {
+        _fixture.SeedSpec(1);
+        _fixture.SeedSpec(7);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        _fixture.Issues.SetBlockedBy(SpecWorkflowFixture.Issue(1), SpecWorkflowFixture.Issue(7));
+
+        SpecScheduleResult blocked = await _fixture.ScheduleAsync();
+
+        Assert.Equal([run.Id], blocked.Waiting);
+        Assert.Empty(blocked.Activated);
+        _fixture.Issues.SetBlockedBy(SpecWorkflowFixture.Issue(1));
+
+        SpecScheduleResult released = await _fixture.ScheduleAsync();
+
+        Assert.Equal([run.Id], released.Activated);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task every_external_and_cross_repository_blocker_must_close_regardless_of_queue_order(bool blockerFirst)
+    {
+        _fixture.ConfigureQueue(maxActiveSpecs: 2);
+        var foreign = new IssueRef("elsewhere", "other", 7);
+        _fixture.SeedSpec(7);
+        _fixture.Issues.Seed(foreign, "External blocker");
+        _fixture.SeedSpec(1, 7);
+        _fixture.Issues.SetBlockedBy(SpecWorkflowFixture.Issue(1), SpecWorkflowFixture.Issue(7), foreign);
+        SpecRun? blocker = blockerFirst ? await _fixture.EnqueueAsync(7) : null;
+        SpecRun dependent = await _fixture.EnqueueAsync(1);
+        blocker ??= await _fixture.EnqueueAsync(7);
+        await _fixture.ScheduleAsync();
+        await _fixture.Issues.CloseAsync(blocker.ParentIssue, IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+
+        SpecScheduleResult oneOpen = await _fixture.ScheduleAsync();
+
+        Assert.Empty(oneOpen.Activated);
+        Assert.Equal([dependent.Id], oneOpen.Waiting);
+        await _fixture.Issues.CloseAsync(foreign, IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+
+        SpecScheduleResult allClosed = await _fixture.ScheduleAsync();
+
+        Assert.Equal([dependent.Id], allClosed.Activated);
+    }
+
+    [Fact]
+    public async Task closed_unmerged_blocker_releases_a_spec_from_the_latest_trunk_not_the_blocker_tip()
+    {
+        _fixture.SeedSpec(7);
+        _fixture.SeedSpec(1, 7);
+        _fixture.SeedTicket(11, spec: 1);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        await _fixture.ScheduleAsync();
+        CommitSha currentTrunk = _fixture.Git.SeedRemoteBranch(SpecWorkflowFixture.Trunk, "new-trunk.txt");
+        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(7), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+
+        await _fixture.ScheduleAsync();
+        await _fixture.PrepareAsync(run);
+
+        Assert.Equal(currentTrunk, run.IntegrationBaseSha);
+        Assert.Equal(currentTrunk, await _fixture.Git.GetBranchTipAsync(
+            GitRepositoryLocation.From(_fixture.Repository), run.IntegrationBranch, GitRefScope.Local, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task unavailable_parent_or_blocker_defers_start_and_queue_recovery_can_retry(bool parentUnavailable)
+    {
+        _fixture.SeedSpec(7);
+        _fixture.SeedSpec(1, 7);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(7), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+        IssueRef missing = SpecWorkflowFixture.Issue(parentUnavailable ? 1 : 7);
+        _fixture.Issues.RemoveIssue(missing);
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+        SpecScheduleFault error = Assert.Single(result.Faults);
+
+        Assert.Equal(run.Id, error.SpecRunId);
+        Assert.Contains(missing.ToString(), error.Error);
+        Assert.Contains("Check issue access", error.Error);
+        Assert.Contains("retry queue recovery", error.Error);
+        Assert.Equal(SpecRunStatus.Queued, run.Status);
+        Assert.Null(run.MaxActiveSpecsSlot);
+        if (parentUnavailable)
+        {
+            _fixture.SeedSpec(1, 7);
+        }
+        else
+        {
+            _fixture.SeedSpec(7);
+        }
+        await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(7), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+
+        Assert.Equal([run.Id], (await _fixture.ScheduleAsync()).Activated);
+    }
+
     [Fact]
     public async Task a_label_lookup_failure_returns_a_diagnostic_without_claiming_work_and_can_be_retried()
     {
@@ -106,9 +228,9 @@ public sealed class SpecQueueSchedulerTests
     }
 
     [Fact]
-    public async Task dependent_spec_waits_in_wait_for_merge_mode_while_blocker_is_awaiting_merge()
+    public async Task open_parent_blocker_holds_a_spec_while_its_run_is_awaiting_merge()
     {
-        _fixture.ConfigureQueue(maxActiveSpecs: 2, SpecDependencyMode.WaitForMerge);
+        _fixture.ConfigureQueue(maxActiveSpecs: 2);
         _fixture.SeedSpec(1);
         _fixture.SeedSpec(2, 1);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
@@ -129,9 +251,9 @@ public sealed class SpecQueueSchedulerTests
     }
 
     [Fact]
-    public async Task waiting_dependent_starts_from_trunk_once_the_blocker_is_merged()
+    public async Task completed_run_does_not_release_its_open_issue_but_closure_does()
     {
-        _fixture.ConfigureQueue(maxActiveSpecs: 2, SpecDependencyMode.WaitForMerge);
+        _fixture.ConfigureQueue(maxActiveSpecs: 2);
         _fixture.SeedSpec(1);
         _fixture.SeedSpec(2, 1);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
@@ -141,46 +263,22 @@ public sealed class SpecQueueSchedulerTests
         await _fixture.ScheduleAsync();
         _fixture.Advance(blocker, SpecRunStatus.Completed);
 
+        SpecScheduleResult stillOpen = await _fixture.ScheduleAsync();
+        Assert.Empty(stillOpen.Activated);
+        Assert.Equal([dependent.Id], stillOpen.Waiting);
+        await _fixture.Issues.CloseAsync(blocker.ParentIssue, IssueCloseReason.Completed, TestContext.Current.CancellationToken);
         SpecScheduleResult result = await _fixture.ScheduleAsync();
 
         Assert.Equal([dependent.Id], result.Activated);
         Assert.Equal(SpecRunStatus.Preparing, dependent.Status);
         Assert.Equal(SpecWorkflowFixture.Trunk, dependent.BaseBranch);
         Assert.Null(dependent.IntegrationBaseSha);
-        Assert.Equal(SpecDependencyMode.WaitForMerge, dependent.DependencyModeUsed);
     }
 
     [Fact]
-    public async Task dependent_spec_branches_from_the_blocking_integration_tip_in_stack_on_top_mode()
+    public async Task open_parent_blocker_holds_a_spec_while_its_run_is_running()
     {
-        _fixture.ConfigureQueue(maxActiveSpecs: 2, SpecDependencyMode.StackOnTop);
-        _fixture.SeedSpec(1);
-        _fixture.SeedTicket(11, spec: 1);
-        _fixture.SeedSpec(2, 1);
-        _fixture.SeedTicket(12, spec: 2);
-        SpecRun blocker = await _fixture.EnqueueAsync(1);
-        SpecRun dependent = await _fixture.EnqueueAsync(2);
-        await _fixture.ScheduleAsync();
-        await _fixture.PrepareAsync(blocker);
-        CommitSha blockerTip = _fixture.Git.Commit([blocker.IntegrationTipSha!.Value], "feature.txt");
-        blocker.IntegrationTipSha = blockerTip;
-        _fixture.Advance(blocker, ToAwaitingMerge[1..]);
-
-        SpecScheduleResult result = await _fixture.ScheduleAsync();
-        await _fixture.PrepareAsync(dependent);
-
-        Assert.Equal([dependent.Id], result.Activated);
-        Assert.Equal(SpecDependencyMode.StackOnTop, dependent.DependencyModeUsed);
-        Assert.Equal(SpecWorkflowFixture.Trunk, dependent.BaseBranch);
-        Assert.Equal(blockerTip, dependent.IntegrationBaseSha);
-        Assert.Equal(blockerTip, await _fixture.Git.GetBranchTipAsync(
-            GitRepositoryLocation.From(_fixture.Repository), dependent.IntegrationBranch, GitRefScope.Local, TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task stack_on_top_dependent_waits_while_the_blocker_is_still_running()
-    {
-        _fixture.ConfigureQueue(maxActiveSpecs: 2, SpecDependencyMode.StackOnTop);
+        _fixture.ConfigureQueue(maxActiveSpecs: 2);
         _fixture.SeedSpec(1);
         _fixture.SeedSpec(2, 1);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
@@ -197,7 +295,7 @@ public sealed class SpecQueueSchedulerTests
     [Fact]
     public async Task dependency_on_an_open_issue_without_a_run_waits_until_github_closes_it()
     {
-        _fixture.ConfigureQueue(maxActiveSpecs: 1, SpecDependencyMode.StackOnTop);
+        _fixture.ConfigureQueue(maxActiveSpecs: 1);
         _fixture.SeedSpec(7);
         _fixture.SeedSpec(2, 7);
         SpecRun dependent = await _fixture.EnqueueAsync(2);
@@ -214,7 +312,7 @@ public sealed class SpecQueueSchedulerTests
     [Fact]
     public async Task independent_spec_behind_a_waiting_dependent_still_starts_when_a_slot_is_free()
     {
-        _fixture.ConfigureQueue(maxActiveSpecs: 2, SpecDependencyMode.WaitForMerge);
+        _fixture.ConfigureQueue(maxActiveSpecs: 2);
         _fixture.SeedSpec(7);
         _fixture.SeedSpec(2, 7);
         _fixture.SeedSpec(3);
@@ -225,7 +323,6 @@ public sealed class SpecQueueSchedulerTests
 
         Assert.Equal([independent.Id], result.Activated);
         Assert.Equal(SpecRunStatus.WaitingForDependency, dependent.Status);
-        Assert.Null(independent.DependencyModeUsed);
     }
 
     [Fact]
@@ -283,36 +380,9 @@ public sealed class SpecQueueSchedulerTests
     }
 
     [Fact]
-    public async Task stack_on_top_dependent_starts_on_the_blocker_tip_when_max_active_specs_is_1()
+    public async Task parent_issue_closure_releases_a_waiting_spec_with_one_active_slot()
     {
-        _fixture.ConfigureQueue(maxActiveSpecs: 1, SpecDependencyMode.StackOnTop);
-        _fixture.SeedSpec(1);
-        _fixture.SeedTicket(11, spec: 1);
-        _fixture.SeedSpec(2, 1);
-        _fixture.SeedTicket(12, spec: 2);
-        SpecRun blocker = await _fixture.EnqueueAsync(1);
-        SpecRun dependent = await _fixture.EnqueueAsync(2);
-        await _fixture.ScheduleAsync();
-        await _fixture.PrepareAsync(blocker);
-        CommitSha blockerTip = _fixture.Git.Commit([blocker.IntegrationTipSha!.Value], "feature.txt");
-        blocker.IntegrationTipSha = blockerTip;
-        _fixture.Advance(blocker, ToAwaitingMerge[1..^1]);
-
-        SpecScheduleResult result = await _fixture.ScheduleAsync();
-        await _fixture.PrepareAsync(dependent);
-
-        Assert.Equal([dependent.Id], result.Activated);
-        Assert.Equal(1, dependent.MaxActiveSpecsSlot);
-        Assert.Equal(SpecDependencyMode.StackOnTop, dependent.DependencyModeUsed);
-        Assert.Equal(blockerTip, dependent.IntegrationBaseSha);
-        Assert.Equal(blockerTip, await _fixture.Git.GetBranchTipAsync(
-            GitRepositoryLocation.From(_fixture.Repository), dependent.IntegrationBranch, GitRefScope.Local, TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task wait_for_merge_dependent_waits_until_the_blocker_is_completed_when_max_active_specs_is_1()
-    {
-        _fixture.ConfigureQueue(maxActiveSpecs: 1, SpecDependencyMode.WaitForMerge);
+        _fixture.ConfigureQueue(maxActiveSpecs: 1);
         _fixture.SeedSpec(1);
         _fixture.SeedSpec(2, 1);
         SpecRun blocker = await _fixture.EnqueueAsync(1);
@@ -322,19 +392,19 @@ public sealed class SpecQueueSchedulerTests
 
         SpecScheduleResult whileUnmerged = await _fixture.ScheduleAsync();
         _fixture.Advance(blocker, SpecRunStatus.Completed);
+        await _fixture.Issues.CloseAsync(blocker.ParentIssue, IssueCloseReason.Completed, TestContext.Current.CancellationToken);
         SpecScheduleResult afterMerge = await _fixture.ScheduleAsync();
 
         Assert.Empty(whileUnmerged.Activated);
         Assert.Equal([dependent.Id], whileUnmerged.Waiting);
         Assert.Equal([dependent.Id], afterMerge.Activated);
         Assert.Equal(SpecWorkflowFixture.Trunk, dependent.BaseBranch);
-        Assert.Equal(SpecDependencyMode.WaitForMerge, dependent.DependencyModeUsed);
     }
 
     [Fact]
-    public async Task needs_attention_blocker_keeps_a_stack_on_top_dependent_waiting()
+    public async Task open_parent_blocker_holds_a_spec_when_its_run_needs_attention()
     {
-        _fixture.ConfigureQueue(maxActiveSpecs: 1, SpecDependencyMode.StackOnTop);
+        _fixture.ConfigureQueue(maxActiveSpecs: 1);
         _fixture.SeedSpec(1);
         _fixture.SeedTicket(11, spec: 1);
         _fixture.SeedSpec(2, 1);

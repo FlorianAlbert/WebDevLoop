@@ -49,10 +49,13 @@ Eligible but blocked tickets do not prevent queueing. See [Queue](queue.md#queue
 WebDevLoop does not split specs. Add the work as open sub-issues of the spec on GitHub, then press **Retry** on the run. See [Needs attention](needs-attention.md#the-spec-or-the-repository).
 
 **My spec is "Queued" and nothing happens.**
-It waits for a free slot. By default one spec per repository runs at a time. Check **Active slots** on the [Queue](queue.md#slots-and-mode) page. Raise **Max active specs per repository** in [Settings](settings.md#concurrency-review-and-retries) if you want more at once.
+It waits for a free slot. By default one spec per repository runs at a time. Check **Active slots** on the [Queue](queue.md#slots-and-parent-blockers) page. Raise **Max active specs per repository** in [Settings](settings.md#concurrency-review-and-retries) if you want more at once.
 
 **My spec is "Waiting for dependency".**
-The spec issue is blocked by another issue on GitHub. In **Wait for merge** mode it starts after the blocker's pull requests were merged. The row names the blockers. See [Spec runs](runs.md#blocked-by-specs).
+The parent issue has an open native GitHub blocker. Every blocker must be closed, including external and cross-repository
+issues; a completed WebDevLoop run does not override an open issue. Once all blockers close or are removed, the spec starts
+from current trunk, even if a blocker's pull request is unmerged. Unavailable issues defer only the affected spec and show
+**Blockers unavailable**; check access and refresh. See [Spec runs](runs.md#native-parent-blockers).
 
 **A ticket stays "Blocked".**
 It waits for every current native GitHub blocker to close, including unlabeled issues, issues outside the spec, and issues in other repositories. Local integration or skipped status cannot override an open issue. Check GitHub for the current relationships; unavailable information defers only the affected ticket and is logged for normal recovery. Unrelated tickets and running specs continue.

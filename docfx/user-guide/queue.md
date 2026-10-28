@@ -43,14 +43,21 @@ The form and direct API calls recheck current GitHub state and labels at submiss
 when you first saw it. An ineligible spec or failed lookup creates no run. WebDevLoop reads the ticket graph again
 when the run starts; this enqueue check does not reserve a snapshot of the tickets.
 
-## Slots and mode
+## Slots and parent blockers
 
-Above the form you see two values:
+Above the form you see:
 
 - **Active slots** `0 / 1`: how many specs are being worked on out of the allowed number. The limit is **Max active specs per repository** in [Settings](settings.md#concurrency-review-and-retries). Specs beyond the limit wait in the queue. Specs that await merge or need attention do not use a slot.
-- **Mode**: the spec dependency mode. It decides what happens when one spec is blocked by another spec.
-  - **Wait for merge**: the blocked spec starts only after the blocking pull requests were merged. This is the default.
-  - **Stack on top**: the blocked spec starts right away, stacked on top of the blocking branch.
+
+At each scheduling decision, WebDevLoop re-reads the parent and its current native GitHub blockers.
+Every open blocker holds the spec, including issues outside the spec or repository, regardless of opt-in or completed runs.
+If the parent or a blocker is unavailable, the decision is deferred with an actionable queue-recovery error and retried
+by normal recovery. Independent queued specs can still start. The affected row shows **Blockers unavailable** with
+access and refresh guidance; the rest of the queue remains usable. Stale or unknown state never permits a start.
+
+When every blocker is closed or removed, the spec starts from **current trunk**, even if a blocker's pull request is
+unmerged. Closing a blocker before merging accepts that its changes may not be on trunk. Queue order cannot bypass
+these dependencies. Cross-spec stacking is not supported; ticket pull requests within a spec still form a stack.
 
 ## Lanes
 
@@ -69,7 +76,7 @@ Runs are grouped into lanes. A lane only shows when it has runs. Within a lane, 
 | Status | What it means |
 | --- | --- |
 | Queued | Waiting for a free active slot. |
-| Waiting for dependency | The spec issue is blocked ("blocked by" on GitHub) by another issue. The row shows the mode and the blocking issues. |
+| Waiting for dependency | At least one current native GitHub blocker of the parent is open. The row names the blocking issues. |
 | Preparing | WebDevLoop reads the tickets, creates the integration branch and explores the repository. |
 | Running | Tickets are implemented, reviewed and integrated. |
 | Parent reviewing | An agent reviews the whole integrated spec. |

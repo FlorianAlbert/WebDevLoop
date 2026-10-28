@@ -13,7 +13,6 @@ public sealed record EffectiveSettings
 
     public required int MaxActiveSpecsPerRepo { get; init; }
 
-    public required SpecDependencyMode SpecDependencyMode { get; init; }
 
     public required int MaxConcurrentImplementersGlobal { get; init; }
 

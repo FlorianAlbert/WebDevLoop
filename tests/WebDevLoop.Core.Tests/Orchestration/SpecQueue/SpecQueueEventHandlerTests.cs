@@ -18,6 +18,26 @@ public sealed class SpecQueueEventHandlerTests
     private SpecQueueEventHandler Handler => new(_fixture.Scheduler);
 
     [Fact]
+    public async Task event_driven_scheduling_reports_deferred_runs_after_starting_independent_work()
+    {
+        _fixture.SeedSpec(1, 7);
+        _fixture.SeedSpec(7);
+        _fixture.SeedSpec(2);
+        SpecRun deferred = await _fixture.EnqueueAsync(1);
+        SpecRun independent = await _fixture.EnqueueAsync(2);
+        _fixture.Issues.RemoveIssue(SpecWorkflowFixture.Issue(7));
+
+        AggregateException error = await Assert.ThrowsAsync<AggregateException>(() =>
+            HandleAsync(new SpecRunQueued(independent.Id, _fixture.Repository.Id, _fixture.Clock.UtcNow)));
+
+        GitHubIssuesException fault = Assert.IsType<GitHubIssuesException>(Assert.Single(error.InnerExceptions));
+        Assert.Contains(deferred.Id.Value, fault.Message);
+        Assert.Contains("Check issue access", fault.Message);
+        Assert.Equal(SpecRunStatus.Queued, deferred.Status);
+        Assert.Equal(SpecRunStatus.Preparing, independent.Status);
+    }
+
+    [Fact]
     public async Task a_label_lookup_failure_reaches_the_event_bus_diagnostics_without_starting_work()
     {
         _fixture.SeedSpec(1);

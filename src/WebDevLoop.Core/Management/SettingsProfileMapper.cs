@@ -15,7 +15,6 @@ internal static class SettingsProfileMapper
         target.CopilotBaseDirectory = data.CopilotBaseDirectory;
         target.BaseBranch = ParseBranch(data.BaseBranch, errors);
         target.MaxActiveSpecsPerRepo = data.MaxActiveSpecsPerRepo;
-        target.SpecDependencyMode = data.SpecDependencyMode;
         target.MaxConcurrentImplementersGlobal = data.MaxConcurrentImplementersGlobal;
         target.MaxConcurrentImplementersPerRepo = data.MaxConcurrentImplementersPerRepo;
         target.MaxReviewIterations = data.MaxReviewIterations;
@@ -36,7 +35,6 @@ internal static class SettingsProfileMapper
         CopilotBaseDirectory = profile.CopilotBaseDirectory,
         BaseBranch = profile.BaseBranch?.Value,
         MaxActiveSpecsPerRepo = profile.MaxActiveSpecsPerRepo,
-        SpecDependencyMode = profile.SpecDependencyMode,
         MaxConcurrentImplementersGlobal = profile.MaxConcurrentImplementersGlobal,
         MaxConcurrentImplementersPerRepo = profile.MaxConcurrentImplementersPerRepo,
         MaxReviewIterations = profile.MaxReviewIterations,
@@ -55,7 +53,6 @@ internal static class SettingsProfileMapper
         settings.CopilotBaseDirectory,
         settings.BaseBranch.Value,
         settings.MaxActiveSpecsPerRepo,
-        settings.SpecDependencyMode,
         settings.MaxConcurrentImplementersGlobal,
         settings.MaxConcurrentImplementersPerRepo,
         settings.MaxReviewIterations,

@@ -35,7 +35,7 @@ internal sealed class SpecWorkflowFixture
         TrunkTip = Git.SeedRemoteBranch(Trunk, "README.md");
 
         var settingsProvider = new PersistedEffectiveSettingsProvider(Store, new SettingsResolver(TestSettings.EmbeddedDefaults()));
-        Queue = new SpecQueueService(Store, Store, Issues, settingsProvider, Store, Store, Ids, Clock);
+        Queue = new SpecQueueService(Store, Store, Issues, Store, Store, Ids, Clock);
         Scheduler = new SpecQueueScheduler(Store, Store, Issues, settingsProvider, Store, Store, Clock, new RepositoryOptIn(Labels));
         var options = new SpecPreparationOptions(SkillsRoot, explorationEnabled);
         var explorer = new SpecExplorer(Store, Store, Git, Agents, Directories, new PromptRenderer(), Store, Store, Ids, Clock, options);
@@ -82,10 +82,9 @@ internal sealed class SpecWorkflowFixture
 
     public static IssueRef Issue(int number) => new(Repo.Owner, Repo.Name, number);
 
-    public void ConfigureQueue(int maxActiveSpecs, SpecDependencyMode mode = SpecDependencyMode.WaitForMerge)
+    public void ConfigureQueue(int maxActiveSpecs)
     {
         GlobalSettings.MaxActiveSpecsPerRepo = maxActiveSpecs;
-        GlobalSettings.SpecDependencyMode = mode;
     }
 
     public IssueSnapshot SeedSpec(int number, params int[] blockedBySpecs) =>

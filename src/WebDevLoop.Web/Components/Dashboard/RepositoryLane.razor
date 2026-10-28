@@ -15,10 +15,6 @@
         </div>
         <div class="d-flex align-items-center gap-2 small">
             <span class="text-muted">Slots <strong data-testid="slots">@ActiveCount@(Overview.Settings is null ? "" : $" / {Overview.Settings.MaxActiveSpecsPerRepo}")</strong></span>
-            @if (Overview.Settings is not null)
-            {
-                <span class="text-body-secondary" title="@DisplayNames.Describe(Overview.Settings.SpecDependencyMode)" data-testid="dependency-mode">Mode: @DisplayNames.For(Overview.Settings.SpecDependencyMode)</span>
-            }
             <a class="btn btn-outline-primary btn-sm py-0" href="@UiRoutes.Queue" data-testid="open-queue" @onclick="SelectRepository">Open queue</a>
         </div>
     </div>
@@ -28,7 +24,7 @@
     }
     else
     {
-        <SpecRunTable Runs="OpenRuns" EffectiveDependencyMode="EffectiveMode" />
+        <SpecRunTable Runs="OpenRuns" />
     }
     @if (CompletedCount > 0)
     {
@@ -45,8 +41,6 @@
     private int ActiveCount => Overview.Runs.Count(run => run.Status.IsActive());
 
     private int CompletedCount => Overview.Runs.Count(run => SpecRunLanes.For(run.Status) == SpecRunLane.Completed);
-
-    private SpecDependencyMode EffectiveMode => Overview.Settings?.SpecDependencyMode ?? SpecDependencyMode.WaitForMerge;
 
     private IReadOnlyList<SpecRunView> OpenRuns =>
         Overview.Runs.Where(run => SpecRunLanes.For(run.Status) != SpecRunLane.Completed).OrderBy(run => run.QueuePosition).ToArray();

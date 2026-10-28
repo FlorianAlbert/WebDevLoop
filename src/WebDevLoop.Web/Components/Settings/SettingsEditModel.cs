@@ -18,7 +18,6 @@ public sealed class SettingsEditModel
 
     public int? MaxActiveSpecsPerRepo { get; set; }
 
-    public SpecDependencyMode? SpecDependencyMode { get; set; }
 
     public int? MaxConcurrentImplementersGlobal { get; set; }
 
@@ -54,7 +53,6 @@ public sealed class SettingsEditModel
             CopilotBaseDirectory = data.CopilotBaseDirectory,
             BaseBranch = data.BaseBranch,
             MaxActiveSpecsPerRepo = data.MaxActiveSpecsPerRepo,
-            SpecDependencyMode = data.SpecDependencyMode,
             MaxConcurrentImplementersGlobal = data.MaxConcurrentImplementersGlobal,
             MaxConcurrentImplementersPerRepo = data.MaxConcurrentImplementersPerRepo,
             MaxReviewIterations = data.MaxReviewIterations,
@@ -89,7 +87,6 @@ public sealed class SettingsEditModel
         CopilotBaseDirectory = NullIfBlank(CopilotBaseDirectory),
         BaseBranch = NullIfBlank(BaseBranch),
         MaxActiveSpecsPerRepo = MaxActiveSpecsPerRepo,
-        SpecDependencyMode = SpecDependencyMode,
         MaxConcurrentImplementersGlobal = MaxConcurrentImplementersGlobal,
         MaxConcurrentImplementersPerRepo = MaxConcurrentImplementersPerRepo,
         MaxReviewIterations = MaxReviewIterations,

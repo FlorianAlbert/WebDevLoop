@@ -16,7 +16,6 @@ public sealed record SettingsProfileData
 
     public int? MaxActiveSpecsPerRepo { get; init; }
 
-    public SpecDependencyMode? SpecDependencyMode { get; init; }
 
     public int? MaxConcurrentImplementersGlobal { get; init; }
 

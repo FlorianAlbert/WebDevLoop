@@ -64,7 +64,6 @@ erDiagram
     StepRuns ||--o{ FindingIssuances : "found by"
     SpecRuns ||--o{ TestLeases : "leases a port"
     SpecRuns ||--o{ RunEvents : "timeline"
-    SpecRuns ||--o{ SpecDependencies : "blocked spec"
     SpecRuns ||--o{ TicketDependencies : "scope"
     TicketRuns ||--o{ TicketDependencies : "blocked/blocking"
 
@@ -157,11 +156,6 @@ erDiagram
         string RolesJson
         int Version
     }
-    SpecDependencies {
-        long Id PK
-        string BlockedSpecRunId FK
-        string BlockingSpecRunId FK
-    }
     TicketDependencies {
         long Id PK
         string BlockedTicketRunId FK
@@ -173,7 +167,7 @@ Notes on the diagram:
 
 - Only key and notable columns are shown. The full model is in `Persistence/Migrations/WebDevLoopDbContextModelSnapshot.cs`.
 - `OutboxMessages` and `AgentLogEntries` have no foreign keys on purpose. A log write or an event write must never fail because of a missing parent.
-- `SpecDependencies.BlockingSpecRunId` can be null: then the blocker is an external issue (`ExternalBlockingIssue` columns).
+- Parent blocker relationships are read from current GitHub state, not stored as local dependency rows.
 - The `IntegrationSagas.ExternalIdempotencyKey` is `<specRunId>:<ticketRunId>`.
 
 ### Partial and unique indexes: claims without locks
@@ -189,7 +183,7 @@ Several rules are enforced by the database, not by code. They are built from the
 | `UX_PullStackLayers_SpecRun_Position` | One layer per stack position. |
 | `UX_FindingIssuances_SpecRun_Fingerprint` | A finding fingerprint is issued once per spec. |
 | `UX_TestLeases_ActivePerRun`, `UX_TestLeases_ActivePort` | One unreleased lease per run and per port. |
-| `UX_TicketDependencies_Blocked_Blocking`, `UX_SpecDependencies_Blocked_Blocking` | No duplicate edges. |
+| `UX_TicketDependencies_Blocked_Blocking` | No duplicate ticket edges. |
 | `UX_Repositories_Owner_Name` | One registration per GitHub repository. |
 | `IX_OutboxMessages_Pending` | Fast "next pending message" lookup (filter: not dispatched and not dead-lettered). |
 

@@ -10,19 +10,6 @@ public sealed class SettingsResolverTests
     private readonly SettingsResolver _resolver = new(TestSettings.EmbeddedDefaults());
 
     [Fact]
-    public void repo_stack_on_top_overrides_global_wait_for_merge()
-    {
-        SettingsProfile global = SettingsProfile.ForGlobal();
-        global.SpecDependencyMode = SpecDependencyMode.WaitForMerge;
-        SettingsProfile repository = SettingsProfile.ForRepository(RepositoryId);
-        repository.SpecDependencyMode = SpecDependencyMode.StackOnTop;
-
-        EffectiveSettings effective = _resolver.Resolve(global, repository);
-
-        Assert.Equal(SpecDependencyMode.StackOnTop, effective.SpecDependencyMode);
-    }
-
-    [Fact]
     public void missing_repo_role_timeout_falls_back_to_global_timeout()
     {
         SettingsProfile global = SettingsProfile.ForGlobal();

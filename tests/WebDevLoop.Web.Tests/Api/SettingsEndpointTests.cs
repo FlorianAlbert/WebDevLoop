@@ -8,8 +8,19 @@ namespace WebDevLoop.Web.Tests.Api;
 
 public sealed class SettingsEndpointTests
 {
+    [Fact]
+    public async Task settings_do_not_expose_cross_spec_stacking_configuration()
+    {
+        await using var factory = new ApiFactory();
+        using HttpClient client = factory.CreateClient();
+
+        JsonElement settings = await client.GetJsonAsync("/api/settings/global");
+
+        Assert.False(settings.TryGetProperty("specDependencyMode", out _));
+    }
+
     private static readonly EffectiveSettingsView Effective = new(
-        "/ws", "/copilot", "main", 1, SpecDependencyMode.WaitForMerge, 4, 2, 5, 2, 3, 3, "run it", new PortRangeData(41000, 41999),
+        "/ws", "/copilot", "main", 1, 4, 2, 5, 2, 3, 3, "run it", new PortRangeData(41000, 41999),
         new Dictionary<AgentRole, EffectiveRoleSettingsView> { [AgentRole.Tester] = new("model-x", "high", "Open {app_url}", 3600) }, true, 2);
 
     [Fact]
@@ -18,14 +29,13 @@ public sealed class SettingsEndpointTests
         await using var factory = new ApiFactory();
         factory.Settings.Global = new SettingsProfileData
         {
-            SpecDependencyMode = SpecDependencyMode.StackOnTop,
             Roles = new Dictionary<AgentRole, RoleSettingsOverride> { [AgentRole.Tester] = new(PromptTemplate: "Open {app_url}") },
         };
         using HttpClient client = factory.CreateClient();
 
         JsonElement body = await client.GetJsonAsync("/api/settings/global");
 
-        Assert.Equal("StackOnTop", body.GetProperty("specDependencyMode").GetString());
+        Assert.False(body.TryGetProperty("specDependencyMode", out _));
         Assert.Equal("Open {app_url}", body.GetProperty("roles").GetProperty("Tester").GetProperty("promptTemplate").GetString());
     }
 
@@ -39,14 +49,13 @@ public sealed class SettingsEndpointTests
         {
             maxRetries = 5,
             baseBranch = "develop",
-            specDependencyMode = "StackOnTop",
             testPortRange = new { start = 42000, end = 42100 },
             roles = new Dictionary<string, object> { ["Implementer"] = new { model = "m", promptTemplate = "Implement {ticket_title}", timeoutSeconds = 60 } },
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         SettingsProfileData saved = Assert.Single(factory.Settings.SavedGlobal);
-        Assert.Equal((5, "develop", SpecDependencyMode.StackOnTop, new PortRangeData(42000, 42100)), (saved.MaxRetries, saved.BaseBranch, saved.SpecDependencyMode, saved.TestPortRange));
+        Assert.Equal((5, "develop", new PortRangeData(42000, 42100)), (saved.MaxRetries, saved.BaseBranch, saved.TestPortRange));
         Assert.Equal(new RoleSettingsOverride("m", null, "Implement {ticket_title}", 60), saved.Roles![AgentRole.Implementer]);
         Assert.Equal(5, (await response.ReadJsonAsync()).GetProperty("maxRetries").GetInt32());
     }
@@ -109,7 +118,8 @@ public sealed class SettingsEndpointTests
 
         JsonElement body = await client.GetJsonAsync("/api/settings/effective/4");
 
-        Assert.Equal(("main", "WaitForMerge", 41000), (body.GetProperty("baseBranch").GetString(), body.GetProperty("specDependencyMode").GetString(), body.GetProperty("testPortRange").GetProperty("start").GetInt32()));
+        Assert.Equal(("main", 41000), (body.GetProperty("baseBranch").GetString(), body.GetProperty("testPortRange").GetProperty("start").GetInt32()));
+        Assert.False(body.TryGetProperty("specDependencyMode", out _));
         JsonElement tester = body.GetProperty("roles").GetProperty("Tester");
         Assert.Equal(("model-x", "Open {app_url}", 3600), (tester.GetProperty("model").GetString(), tester.GetProperty("promptTemplate").GetString(), tester.GetProperty("timeoutSeconds").GetInt32()));
     }

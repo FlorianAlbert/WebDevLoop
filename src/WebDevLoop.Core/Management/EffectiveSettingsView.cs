@@ -7,7 +7,6 @@ public sealed record EffectiveSettingsView(
     string CopilotBaseDirectory,
     string BaseBranch,
     int MaxActiveSpecsPerRepo,
-    SpecDependencyMode SpecDependencyMode,
     int MaxConcurrentImplementersGlobal,
     int MaxConcurrentImplementersPerRepo,
     int MaxReviewIterations,

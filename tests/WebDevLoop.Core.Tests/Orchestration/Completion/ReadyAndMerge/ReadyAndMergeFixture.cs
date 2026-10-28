@@ -96,10 +96,9 @@ internal sealed class ReadyAndMergeFixture
 
     public CompletionEventHandler Handler() => new(Launcher);
 
-    public void ConfigureQueue(int maxActiveSpecs, SpecDependencyMode mode = SpecDependencyMode.WaitForMerge)
+    public void ConfigureQueue(int maxActiveSpecs)
     {
         GlobalSettings.MaxActiveSpecsPerRepo = maxActiveSpecs;
-        GlobalSettings.SpecDependencyMode = mode;
     }
 
     public void SeedSpec(int number, params int[] blockedBySpecs)
@@ -120,7 +119,7 @@ internal sealed class ReadyAndMergeFixture
             Issues.Seed(Issue(ticket), $"Ticket {ticket}", Issue(specNumber));
         }
 
-        var queue = new SpecQueueService(Store, Store, Issues, Settings, Store, Store, Ids, Clock);
+        var queue = new SpecQueueService(Store, Store, Issues, Store, Store, Ids, Clock);
         EnqueueResult result = await queue.EnqueueAsync(Repository.Id, specNumber, Token);
         Assert.Equal(EnqueueOutcome.Queued, result.Outcome);
         return Spec(result.SpecRunId!.Value);

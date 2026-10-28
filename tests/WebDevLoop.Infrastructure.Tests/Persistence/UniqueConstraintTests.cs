@@ -284,7 +284,6 @@ public sealed class UniqueConstraintTests : IDisposable
             seed.Tickets.Add(TestData.NewTicketRun(specRunId, "t-2", 12));
             seed.Settings.Add(SettingsProfile.ForGlobal());
             seed.Settings.Add(SettingsProfile.ForRepository(repositoryId));
-            seed.SpecRuns.AddDependency(SpecDependency.OnSpecRun(new RunId("run-2"), specRunId, SpecDependencyMode.WaitForMerge));
             seed.Tickets.AddDependency(TicketDependency.Create(specRunId, new TicketRunId("t-2"), new TicketRunId("t-1"), DependencySource.GitHub));
             seed.Layers.Add(NewLayer(specRunId, "t-1", position: 1));
             await seed.SaveAsync();
@@ -293,7 +292,6 @@ public sealed class UniqueConstraintTests : IDisposable
         await AssertConflictAsync(scope => scope.Repositories.Add(TestData.NewRepository("ACME", "Widgets")));
         await AssertConflictAsync(scope => scope.Settings.Add(SettingsProfile.ForGlobal()));
         await AssertConflictAsync(scope => scope.Settings.Add(SettingsProfile.ForRepository(repositoryId)));
-        await AssertConflictAsync(scope => scope.SpecRuns.AddDependency(SpecDependency.OnSpecRun(new RunId("run-2"), specRunId, SpecDependencyMode.StackOnTop)));
         await AssertConflictAsync(scope => scope.Tickets.AddDependency(TicketDependency.Create(specRunId, new TicketRunId("t-2"), new TicketRunId("t-1"), DependencySource.CreatedFinding)));
         await AssertConflictAsync(scope => scope.Layers.Add(NewLayer(specRunId, "t-2", position: 1)));
     }

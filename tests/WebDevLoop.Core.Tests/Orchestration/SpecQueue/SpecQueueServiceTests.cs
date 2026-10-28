@@ -33,22 +33,19 @@ public sealed class SpecQueueServiceTests
     }
 
     [Fact]
-    public async Task enqueue_loads_native_spec_dependencies_onto_queued_runs_or_external_issues()
+    public async Task specs_with_native_blockers_remain_queueable()
     {
         _fixture.SeedSpec(1);
         _fixture.SeedSpec(5);
         _fixture.SeedSpec(2, 1, 5);
         _fixture.SeedTicket(11, spec: 1);
         _fixture.SeedTicket(12, spec: 2);
-        SpecRun blocker = await _fixture.EnqueueAsync(1);
+        await _fixture.EnqueueAsync(1);
 
         SpecRun dependent = await _fixture.EnqueueAsync(2);
 
-        IReadOnlyList<SpecDependency> dependencies = await SpecRuns.ListDependenciesAsync(dependent.Id, TestContext.Current.CancellationToken);
-        Assert.Equal(2, dependencies.Count);
-        Assert.Contains(dependencies, dependency => dependency.BlockingSpecRunId == blocker.Id && dependency.ExternalBlockingIssue is null);
-        Assert.Contains(dependencies, dependency => dependency.BlockingSpecRunId is null && dependency.ExternalBlockingIssue?.Number == 5);
-        Assert.All(dependencies, dependency => Assert.Equal(DependencySource.GitHub, dependency.Source));
+        Assert.Equal(SpecRunStatus.Queued, dependent.Status);
+        Assert.Equal(2, dependent.ParentIssue.Number);
     }
 
     [Fact]

@@ -11,7 +11,7 @@ public sealed class SpecRunDetailTests
     private static RunDetailHarness HarnessWithSpec(SpecRunStatus status = SpecRunStatus.Running)
     {
         var harness = new RunDetailHarness();
-        harness.Queries.Specs.Add(Views.Spec(status: status, mode: SpecDependencyMode.WaitForMerge));
+        harness.Queries.Specs.Add(Views.Spec(status: status));
         return harness;
     }
 
@@ -104,14 +104,14 @@ public sealed class SpecRunDetailTests
     }
 
     [Fact]
-    public void Blocking_specs_are_listed_with_their_status_and_whether_they_are_merged()
+    public void Native_parent_blockers_show_issue_closure_separately_from_run_status()
     {
         using var harness = HarnessWithSpec();
-        harness.Queries.Dependencies["run-1"] =
+        harness.Queries.Blockers["run-1"] =
         [
-            new SpecDependencyView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.AwaitingMerge, false),
-            new SpecDependencyView(null, "acme/widgets#5", 5, null, null, false),
-            new SpecDependencyView("run-9", "acme/widgets#9", 9, "Done", SpecRunStatus.Completed, true),
+            new ParentBlockerView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.AwaitingMerge, false),
+            new ParentBlockerView(null, "acme/widgets#5", 5, null, null, false),
+            new ParentBlockerView("run-9", "acme/widgets#9", 9, "Done", SpecRunStatus.Completed, true),
         ];
 
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
@@ -126,28 +126,43 @@ public sealed class SpecRunDetailTests
         Assert.Contains("#5", untracked);
         Assert.Contains("not tracked", untracked);
         Assert.Empty(cut.FindAll("[data-testid=spec-blocker-link-issue-5]"));
-        Assert.Contains("merged", cut.Find("[data-testid=spec-blocker-run-9]").TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("closed", cut.Find("[data-testid=spec-blocker-run-9]").TextContent, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void A_spec_without_blocking_specs_says_so()
+    public void unavailable_blockers_leave_local_run_information_visible()
+    {
+        using var harness = HarnessWithSpec();
+        harness.Queries.Tickets.Add(Views.Ticket("t1", 10, TicketRunStatus.Ready));
+        harness.Queries.BlockerErrors["run-1"] = "Blockers unavailable: check issue access and refresh.";
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.Contains("Blockers unavailable", cut.Find("[data-testid=spec-blockers]").TextContent);
+        Assert.DoesNotContain("No native parent blockers", cut.Markup);
+        Assert.Equal("Ready", cut.Find("[data-testid=ticket-status-t1]").TextContent.Trim());
+        Assert.NotEmpty(cut.FindAll("[data-testid=integration-branch]"));
+    }
+
+    [Fact]
+    public void A_spec_without_native_parent_blockers_says_so()
     {
         using var harness = HarnessWithSpec();
 
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
 
-        Assert.Contains("Not blocked", cut.Find("[data-testid=spec-blockers]").TextContent);
+        Assert.Contains("No native parent blockers", cut.Find("[data-testid=spec-blockers]").TextContent);
     }
 
     [Fact]
     public async Task Status_event_of_a_blocking_spec_refreshes_the_blockers()
     {
         using var harness = HarnessWithSpec();
-        harness.Queries.Dependencies["run-1"] = [new SpecDependencyView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.AwaitingMerge, false)];
+        harness.Queries.Blockers["run-1"] = [new ParentBlockerView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.AwaitingMerge, false)];
         var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
         Assert.Contains("Awaiting merge", cut.Find("[data-testid=spec-blocker-run-0]").TextContent);
 
-        harness.Queries.Dependencies["run-1"] = [new SpecDependencyView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.Completed, true)];
+        harness.Queries.Blockers["run-1"] = [new ParentBlockerView("run-0", "acme/widgets#7", 7, "Foundations", SpecRunStatus.Completed, true)];
         await harness.Bus.PublishAsync(Events.SpecStatus("run-0", SpecRunStatus.Completed));
 
         cut.WaitForAssertion(() => Assert.Contains("Completed", cut.Find("[data-testid=spec-blocker-run-0]").TextContent));

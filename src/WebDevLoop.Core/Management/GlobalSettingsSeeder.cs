@@ -29,7 +29,6 @@ public sealed class GlobalSettingsSeeder(ISettingsProfileRepository profiles, IU
         global.CopilotBaseDirectory = defaults.CopilotBaseDirectory;
         global.BaseBranch = defaults.BaseBranch;
         global.MaxActiveSpecsPerRepo = defaults.MaxActiveSpecsPerRepo;
-        global.SpecDependencyMode = defaults.SpecDependencyMode;
         global.MaxConcurrentImplementersGlobal = defaults.MaxConcurrentImplementersGlobal;
         global.MaxConcurrentImplementersPerRepo = defaults.MaxConcurrentImplementersPerRepo;
         global.MaxReviewIterations = defaults.MaxReviewIterations;

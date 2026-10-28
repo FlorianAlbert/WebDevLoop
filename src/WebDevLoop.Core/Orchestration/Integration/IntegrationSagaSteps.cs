@@ -372,46 +372,10 @@ public sealed class IntegrationSagaSteps(
         IReadOnlyList<PullStackLayer> specLayers = await layers.ListBySpecRunAsync(spec.Id, cancellationToken);
         PullStackLayer? own = specLayers.FirstOrDefault(layer => layer.TicketRunId == context.Ticket.Id);
         PullStackLayer? previous = specLayers.LastOrDefault(layer => layer.TicketRunId != context.Ticket.Id && (own is null || layer.Position < own.Position));
-        PullStackLayer? blockingTop = previous is null ? await FindBlockingTopLayerAsync(spec, cancellationToken) : null;
         BranchName baseBranch = own?.BaseBranch ?? PullRequestBasePlanner.PlanBase(
-            spec.DependencyModeUsed ?? SpecDependencyMode.WaitForMerge, context.Trunk, blockingTop?.BranchName, previous?.BranchName);
+            context.Trunk, previous?.BranchName);
         int position = own?.Position ?? (previous?.Position ?? 0) + 1;
-        return new StackPlacement(own, previous ?? blockingTop, baseBranch, position, specLayers);
-    }
-
-    /// <summary>For a stack-on-top spec, the blocking spec's top layer whose commit the integration branch started from.</summary>
-    private async Task<PullStackLayer?> FindBlockingTopLayerAsync(SpecRun spec, CancellationToken cancellationToken)
-    {
-        if (spec.DependencyModeUsed != SpecDependencyMode.StackOnTop || spec.IntegrationBaseSha is not { } baseSha)
-        {
-            return null;
-        }
-
-        foreach (SpecDependency dependency in await specRuns.ListDependenciesAsync(spec.Id, cancellationToken))
-        {
-            foreach (SpecRun blocker in await BlockingRunsAsync(spec, dependency, cancellationToken))
-            {
-                IReadOnlyList<PullStackLayer> blockerLayers = await layers.ListBySpecRunAsync(blocker.Id, cancellationToken);
-                if (blockerLayers.Count > 0 && blockerLayers[^1].CommitSha == baseSha)
-                {
-                    return blockerLayers[^1];
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<IEnumerable<SpecRun>> BlockingRunsAsync(SpecRun spec, SpecDependency dependency, CancellationToken cancellationToken)
-    {
-        if (dependency.BlockingSpecRunId is { } blockingId)
-        {
-            return await specRuns.GetAsync(blockingId, cancellationToken) is { } blocker ? [blocker] : [];
-        }
-
-        IssueRef external = dependency.ExternalBlockingIssue!.Value;
-        return (await specRuns.ListByRepositoryAsync(spec.RepositoryId, cancellationToken))
-            .Where(run => run.Id != spec.Id && SpecQueue.SpecIssues.AreSame(run.ParentIssue, external));
+        return new StackPlacement(own, previous, baseBranch, position, specLayers);
     }
 
     /// <summary>

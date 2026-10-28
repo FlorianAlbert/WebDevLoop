@@ -9,7 +9,7 @@ namespace WebDevLoop.Core.Orchestration.Recovery.ExternalState;
 /// Re-derives run state from Git and GitHub; the first stage of every <see cref="RecoveryCoordinator"/> cycle, startup
 /// and periodic alike (every step is idempotent). Per repository the clone is fetched once; then every spec run past
 /// preparation is reconciled step by step — local integration ref, ticket graph, finding issuances, worktrees,
-/// integration sagas, stack bases — and finally merge tracking re-derives stack merge/closed status and resumes interrupted completions. A failing
+/// integration sagas — and finally merge tracking re-derives stack merge/closed status and resumes interrupted completions. A failing
 /// step is reported and does not stop the other steps, specs, or repositories.
 /// </summary>
 public sealed class ExternalStateReconciler(
@@ -21,11 +21,10 @@ public sealed class ExternalStateReconciler(
     FindingIssuanceReconciler findingIssuances,
     WorktreeReconciler worktrees,
     IntegrationSagaReconciler integrationSagas,
-    StackBaseReconciler stackBases,
     MergeTrackingService mergeTracking) : IExternalStateRecovery
 {
     private readonly ISpecReconciliationStep[] _steps =
-        [integrationBranches, ticketGraphs, findingIssuances, worktrees, integrationSagas, stackBases];
+        [integrationBranches, ticketGraphs, findingIssuances, worktrees, integrationSagas];
 
     public async Task<ExternalReconciliationReport> ReconcileAsync(CancellationToken cancellationToken)
     {

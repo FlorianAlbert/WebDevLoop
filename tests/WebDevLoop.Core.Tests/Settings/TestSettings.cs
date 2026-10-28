@@ -13,7 +13,6 @@ internal static class TestSettings
         CopilotBaseDirectory = "/defaults/copilot",
         BaseBranch = new BranchName("main"),
         MaxActiveSpecsPerRepo = 1,
-        SpecDependencyMode = SpecDependencyMode.WaitForMerge,
         MaxConcurrentImplementersGlobal = 4,
         MaxConcurrentImplementersPerRepo = 2,
         MaxReviewIterations = 5,

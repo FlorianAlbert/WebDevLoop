@@ -126,6 +126,21 @@ public sealed class GitHubIssuesErrorTests : GitHubIssuesTestBase
     }
 
     [Theory]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task An_unavailable_blocker_relationship_list_never_returns_a_blocker_free_parent(HttpStatusCode status)
+    {
+        Api.Get(IssuePath(7), Issue(7, 700));
+        Api.Respond(HttpMethod.Get, BlockedByPath(7), status, new { message = "Cannot read dependencies" });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(GetIssue);
+
+        Assert.Equal(status, error.StatusCode);
+        Assert.Contains("Cannot read dependencies", error.Message);
+    }
+
+    [Theory]
     [InlineData(HttpStatusCode.InternalServerError, GitHubApiErrorKind.Transient, true)]
     [InlineData(HttpStatusCode.BadGateway, GitHubApiErrorKind.Transient, true)]
     [InlineData(HttpStatusCode.ServiceUnavailable, GitHubApiErrorKind.Transient, true)]

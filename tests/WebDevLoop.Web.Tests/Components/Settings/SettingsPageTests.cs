@@ -669,7 +669,6 @@ public sealed class SettingsPageTests : BunitContext
         await page.Find("[data-field='MaxReviewIterations'] input").ChangeAsync("8");
         await page.Find("[data-field='MaxConcurrentImplementersGlobal'] input").ChangeAsync("6");
         await page.Find("[data-field='BaseBranch'] input").ChangeAsync("develop");
-        await page.Find("[data-field='SpecDependencyMode'] select").ChangeAsync(nameof(SpecDependencyMode.StackOnTop));
         await page.Find("[data-field='TesterRunInstructions'] textarea").ChangeAsync("dotnet run --urls $APP_URL");
         await page.Find("[data-field='TestPortRange'] input[data-testid=port-start]").ChangeAsync("42000");
         await page.Find("[data-field='TestPortRange'] input[data-testid=port-end]").ChangeAsync("42100");
@@ -681,7 +680,6 @@ public sealed class SettingsPageTests : BunitContext
         Assert.Equal(8, saved.MaxReviewIterations);
         Assert.Equal(6, saved.MaxConcurrentImplementersGlobal);
         Assert.Equal("develop", saved.BaseBranch);
-        Assert.Equal(SpecDependencyMode.StackOnTop, saved.SpecDependencyMode);
         Assert.Equal("dotnet run --urls $APP_URL", saved.TesterRunInstructions);
         Assert.Equal(new PortRangeData(42000, 42100), saved.TestPortRange);
         Assert.Contains("saved", page.Find("[data-testid=save-status]").TextContent, StringComparison.OrdinalIgnoreCase);
@@ -1054,7 +1052,7 @@ public sealed class SettingsPageTests : BunitContext
         await toggle.ClickAsync();
 
         Assert.Equal("true", page.Find("[data-role='ReviewerCodingStandards'] [data-testid=role-toggle]").GetAttribute("aria-expanded"));
-        Assert.Contains("Wait for merge", page.Find("[data-field='SpecDependencyMode'] select").InnerHtml);
+        Assert.Empty(page.FindAll("[data-field='SpecDependencyMode']"));
         Assert.NotEmpty(page.FindAll("[data-testid=section-nav] a"));
     }
 

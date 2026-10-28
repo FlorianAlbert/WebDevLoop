@@ -183,7 +183,7 @@ Rules:
 - **Stops when the world changes.** Before every step the committed ticket and spec status are read again; an aborted spec gets no further pushes or PRs.
 - **Faults.** An unexpected error is recorded on the saga and the ticket stays `Integrating`; reconciliation resumes it. More than `MaxRetries` faults in a row without progress park the ticket (`IntegrationTemporaryFailure` or `IntegrationFailed`).
 - **Needs attention** (examples): moved or rejected integration branch, existing stack branch, PR not open, failed diff verification, no changes in the ticket (`TicketHasNoChanges`), unresolved conflict.
-- **PR base.** `PullRequestBasePlanner`: the layer below in the same spec; for the first layer of a stack-on-top spec the blocking spec's top stack branch; otherwise trunk.
+- **PR base.** `PullRequestBasePlanner`: the previous layer in the same spec, or trunk for the first layer. Specs never join another spec's stack.
 - The first layer on trunk is an ordinary PR; GitHub needs two PRs to form a stack, so the second layer creates the stack.
 
 ## Parent review, tester and completion
@@ -239,7 +239,7 @@ flowchart TB
 
 | Stage | What it does |
 | --- | --- |
-| External state (`ExternalStateReconciler`) | Fetch each clone once, then per spec: integration branch (`IntegrationBranchReconciler`), ticket graph (`TicketGraphReconciler`), finding issuances (`FindingIssuanceReconciler`), worktrees (`WorktreeReconciler`), sagas (`IntegrationSagaReconciler`), stack bases (`StackBaseReconciler`); then merge tracking. |
+| External state (`ExternalStateReconciler`) | Fetch each clone once, then per spec: integration branch (`IntegrationBranchReconciler`), ticket graph (`TicketGraphReconciler`), finding issuances (`FindingIssuanceReconciler`), worktrees (`WorktreeReconciler`), sagas (`IntegrationSagaReconciler`); then merge tracking. |
 | Agent steps (`AgentStepRecoveryService`) | Evict idle Copilot runtimes and refresh expiring tokens; kill orphaned tester processes and release leases (`OrphanedTestLeaseStopper`); finish steps no live session owns (`InterruptedStepFinisher`), parking owners interrupted more than `MaxRetries` times in a row; relaunch stalled work (`StalledWorkRelauncher`). |
 | Outbox replay | Dispatch events a previous process persisted but never delivered. |
 | Queue recomputation | `SpecQueueScheduler` for every enabled repository. |

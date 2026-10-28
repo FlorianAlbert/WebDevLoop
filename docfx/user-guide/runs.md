@@ -31,6 +31,14 @@ Queued, then Preparing, Running, Parent reviewing, Testing, Ready for review, Aw
 
 After parent review or testing, the run can go back to **Running** when the agents found problems. Those problems became new finding tickets. A run can also end in **Needs attention** or **Aborted**.
 
+New finding issues receive the **`webdevloop`** label (WebDevLoop Opt-in) and are linked to the spec as sub-issues,
+so they can be worked on like normal tickets. If you remove that label, reusing the finding or recovering it after
+a restart does not add it back.
+
+If GitHub rejects creation, labeling or linking, the failure is reported and issuance is retried through recovery.
+An issue that was already created is reused, not duplicated. If GitHub created the issue without its label, check
+that the repository has `webdevloop` and the app can apply issue labels, then add the label yourself to allow work.
+
 ## Action needed
 
 When the run needs attention, a yellow **Action needed** card is shown at the top. It tells you what happened and what to do, and it has the buttons. See [Needs attention](needs-attention.md).

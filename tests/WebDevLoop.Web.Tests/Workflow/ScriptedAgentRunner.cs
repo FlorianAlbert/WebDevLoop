@@ -33,6 +33,10 @@ internal sealed class AgentScript
     public HashSet<int> FailFirstImplementation { get; } = [];
     public bool ThrowFirstImplementation { get; set; }
 
+    public StepKind? FindingOnFirstCycle { get; set; }
+
+    public bool RepeatFinding { get; set; }
+
     public StepKind? FailingKind { get; set; }
     public AgentRole FailingRole { get; set; }
     public TaskCompletionSource<StepRunId> FailingTurnStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -107,8 +111,7 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
                 AgentRole.Implementer => await ImplementAsync(request, ticketIssue!.Value, cancellationToken),
                 AgentRole.ReviewerCodingStandards => AgentRunResult.Reported(ReviewCodingStandards(ticketIssue)),
                 AgentRole.ReviewerSpecification => AgentRunResult.Reported(ReviewReport.Clean(FindingAxis.Specification, "Matches the specification.")),
-                AgentRole.Tester => AgentRunResult.Reported(new TestReport(
-                    TestVerdict.Pass, "Every scenario passed.", [new TestScenario("Open the app", TestScenarioOutcome.Passed)], [])),
+                AgentRole.Tester => AgentRunResult.Reported(Test()),
                 AgentRole.ConflictResolver => AgentRunResult.Reported(ResolveConflict(request.Policy.Paths.WorkingDirectory)),
                 _ => AgentRunResult.NotReported(AgentRunOutcome.Failed, $"The fake has no script for {request.Role}."),
             };
@@ -202,11 +205,23 @@ internal sealed class ScriptedAgentRunner(IServiceScopeFactory scopes, FakeGitHu
     private ReviewReport ReviewCodingStandards(int? ticketIssue)
     {
         bool firstReview = journal.Calls.Count(call => call.TicketIssue == ticketIssue && call.Role == AgentRole.ReviewerCodingStandards) == 1;
+        if (ticketIssue is null && (firstReview || script.RepeatFinding) && script.FindingOnFirstCycle == StepKind.ParentReview)
+        {
+            return ReviewReport.IssuesFound(FindingAxis.CodingStandards, "One parent-review finding.",
+                [new CodingStandardsFinding(CodingStandardsSeverity.Blocking, "Feature.cs", 1, "old", "naming", "Unclear content.", "Rewrite it.")]);
+        }
+
         return ticketIssue is { } issue && firstReview && script.CodingStandardsFindingsOnFirstReview.Contains(issue)
             ? ReviewReport.IssuesFound(FindingAxis.CodingStandards, "One blocking finding.", [new CodingStandardsFinding(
                 CodingStandardsSeverity.Blocking, $"ticket-{issue}.txt", 1, "turn 0", "naming", "Unclear content.", "Rewrite it.")])
             : ReviewReport.Clean(FindingAxis.CodingStandards, "Follows the coding standards.");
     }
+
+    private TestReport Test() =>
+        script.FindingOnFirstCycle == StepKind.Test && (script.RepeatFinding || journal.Calls.Count(call => call.Role == AgentRole.Tester) == 1)
+            ? new TestReport(TestVerdict.IssuesFound, "One tester finding.", [],
+                [new TestIssue("Save fails", TestIssueSeverity.Major, null, ["Click Save"], "Saved", "Error", [])])
+            : new TestReport(TestVerdict.Pass, "Every scenario passed.", [new TestScenario("Open the app", TestScenarioOutcome.Passed)], []);
 
     private IReadOnlySet<int> ClosedTickets() =>
         journal.KnownTickets.Where(number => issues.StateOf(number) == IssueState.Closed).ToHashSet();

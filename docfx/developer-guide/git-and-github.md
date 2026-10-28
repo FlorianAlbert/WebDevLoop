@@ -167,13 +167,18 @@ Orchestration code uses the transient flag to decide between "try again later" a
 | `GetIssueAsync` | `GET repos/{o}/{r}/issues/{n}` + `.../dependencies/blocked_by` | Snapshot with `BlockedBy` |
 | `GetSpecGraphAsync` | `GET .../issues/{n}` + `.../sub_issues` + blocked-by of each | Builds the ticket DAG. Only edges between tickets of this spec in the same repo count. A cycle throws (`DependencyGraph.EnsureAcyclic`) |
 | `FindFindingIssueAsync` | `GET .../sub_issues` | Finds by hidden fingerprint marker in the body |
-| `CreateFindingIssueAsync` | `POST .../issues`, `POST .../sub_issues` | Idempotent: reuses an existing sub-issue; links an orphan carrying the fingerprint; only a new finding creates an issue |
+| `CreateFindingIssueAsync` | `POST .../issues`, `POST .../sub_issues` | Creates new findings with `labels: ["webdevloop"]`; reuses an existing sub-issue or links an orphan carrying the fingerprint without changing its labels |
 | `AddSubIssueAsync` | `POST .../sub_issues` `{sub_issue_id, replace_parent:false}` | Idempotent |
 | `AddBlockedByAsync` | `POST .../dependencies/blocked_by` `{issue_id}` | Idempotent |
 | `CommentAsync`, `ListCommentsAsync` | `.../comments` | The app checks its own markers before commenting again |
 | `CloseAsync` | `PATCH .../issues/{n}` | No-op when already closed; reason `completed` or `not_planned` |
 
 Idempotency trick: GitHub answers a duplicate relation with 422. The adapter reads the relation list and treats it as success only if the relation really exists.
+
+Finding opt-in is part of the issue-creation request, not a later label mutation. The adapter also checks the returned
+labels because GitHub can silently ignore them when permissions are insufficient. A missing opt-in or an API/linking
+failure throws; recovery reuses any issue already created, preserving its current labels even if a maintainer removed
+opt-in between attempts. It never creates the repository label or relabels an existing finding.
 
 Hidden markers make recovery possible:
 

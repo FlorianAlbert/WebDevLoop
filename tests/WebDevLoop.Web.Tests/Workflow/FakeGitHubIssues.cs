@@ -20,6 +20,14 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public Exception? SubIssueReadFailure { get; set; }
 
+    public Exception? FindingCreationFailure { get; set; }
+
+    public Exception? FindingLinkFailure { get; set; }
+
+    public Exception? FindingResponseFailure { get; set; }
+
+    public TaskCompletionSource FindingIssuanceFailed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public IssueRef Ref(int number) => new(Repository.Owner, Repository.Name, number);
 
     /// <summary>Seeds an open issue, optionally as sub-issue of <paramref name="parent"/>, blocked by the given issues.</summary>
@@ -110,10 +118,25 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
+            int? existing = _fingerprints.Where(pair => pair.Value == draft.Fingerprint).Select(pair => (int?)pair.Key).FirstOrDefault();
+            if (existing is { } known)
+            {
+                LinkFinding(draft.Parent.Number, known);
+                return Task.FromResult(_issues[known]);
+            }
+
+            ThrowFindingFailure(FindingCreationFailure);
             int number = _issues.Keys.Max() + 1;
-            var snapshot = new IssueSnapshot(Ref(number), draft.Title, draft.Body, IssueState.Open, []);
+            var snapshot = new IssueSnapshot(
+                new IssueRef(Repository.Owner, Repository.Name, number, databaseId: 9000L + number),
+                draft.Title, draft.Body, IssueState.Open, [])
+            {
+                Labels = [WebDevLoopOptIn.Label],
+            };
             _issues[number] = snapshot;
             _fingerprints[number] = draft.Fingerprint;
+            LinkFinding(draft.Parent.Number, number);
+            ThrowFindingFailure(FindingResponseFailure);
             return Task.FromResult(snapshot);
         }
     }
@@ -122,11 +145,7 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     {
         lock (_gate)
         {
-            List<int> children = SubIssuesOf(parent.Number);
-            if (!children.Contains(child.Number))
-            {
-                children.Add(child.Number);
-            }
+            LinkFinding(parent.Number, child.Number);
         }
 
         return Task.CompletedTask;
@@ -171,4 +190,23 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     private List<int> SubIssuesOf(int parent) =>
         _subIssues.TryGetValue(parent, out List<int>? children) ? children : _subIssues[parent] = [];
+
+    private void LinkFinding(int parent, int child)
+    {
+        List<int> children = SubIssuesOf(parent);
+        if (!children.Contains(child))
+        {
+            ThrowFindingFailure(FindingLinkFailure);
+            children.Add(child);
+        }
+    }
+
+    private void ThrowFindingFailure(Exception? failure)
+    {
+        if (failure is not null)
+        {
+            FindingIssuanceFailed.TrySetResult();
+            throw failure;
+        }
+    }
 }

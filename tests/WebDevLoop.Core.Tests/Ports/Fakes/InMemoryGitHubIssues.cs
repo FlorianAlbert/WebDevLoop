@@ -50,7 +50,10 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
     public Task<IssueSnapshot> CreateFindingIssueAsync(FindingIssueDraft draft, CancellationToken cancellationToken)
     {
         var issue = new IssueRef(draft.Parent.Owner, draft.Parent.Repo, _issues.Keys.DefaultIfEmpty().Max() + 1);
-        var snapshot = new IssueSnapshot(issue, draft.Title, draft.Body, IssueState.Open, []);
+        var snapshot = new IssueSnapshot(issue, draft.Title, draft.Body, IssueState.Open, [])
+        {
+            Labels = [WebDevLoopOptIn.Label],
+        };
         _issues[issue.Number] = snapshot;
         _fingerprints[issue.Number] = draft.Fingerprint;
         return Task.FromResult(snapshot);

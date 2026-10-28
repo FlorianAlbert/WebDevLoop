@@ -216,6 +216,15 @@ lookup, including authorization or transient failures, fails closed (`503` with 
 never authorizes queueing. New runs return `202`; duplicate unfinished runs return `200 AlreadyQueued` and the existing
 run id without creating another run. Diagnostic-only safeguards still apply.
 
+New parent-review and tester finding issues are created with `webdevloop` and linked as sub-issues of their parent,
+so they can enter the normal ticket workflow. Reused findings, including issues recovered after a crash or retried
+issuance, keep their current labels: WebDevLoop never silently reverses a maintainer's opt-out.
+
+Finding creation, labeling, or linking failures are reported rather than treated as successful issuance. If GitHub
+creates an issue but drops its label, check the repository label and the app's issue-label permissions, then opt the
+issue in explicitly. Recovery uses its hidden finding fingerprint to reuse the existing issue without duplicating
+it or changing its labels.
+
 ## Copilot runtime and bundled skills
 
 Agents run through the GitHub Copilot SDK (`GitHub.Copilot.SDK`). `dotnet publish` bundles the SDK's pinned Copilot CLI

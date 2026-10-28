@@ -93,24 +93,25 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
     public async Task CreateFindingIssue_reuses_an_existing_sub_issue_with_the_same_fingerprint()
     {
         var fingerprint = new FindingFingerprint("Missing null check");
-        Api.Get(SubIssuesPath(1), new[] { Issue(5, 500, "Existing", $"text\n{FindingFingerprintMarker.Render(fingerprint)}") });
+        Api.Get(SubIssuesPath(1), new[] { Issue(5, 500, "Existing", $"text\n{FindingFingerprintMarker.Render(fingerprint)}", labels: ["ready-for-human"]) });
         Api.Get(BlockedByPath(5), Array.Empty<object>());
 
         IssueSnapshot created = await CreateSut().CreateFindingIssueAsync(
             new FindingIssueDraft(Ref(1, 100), "New", "Body", new FindingFingerprint("missing  NULL check")), CancellationToken.None);
 
         Assert.Equal(5, created.Ref.Number);
-        Assert.DoesNotContain(Api.Requests, request => request.Method == HttpMethod.Post);
+        Assert.Equal(["ready-for-human"], created.Labels);
+        Assert.All(Api.Requests, request => Assert.Equal(HttpMethod.Get, request.Method));
     }
 
     [Fact]
-    public async Task CreateFindingIssue_embeds_the_fingerprint_and_links_the_new_issue_to_its_parent()
+    public async Task CreateFindingIssue_opts_in_the_new_issue_embeds_the_fingerprint_and_links_it_to_its_parent()
     {
         var fingerprint = new FindingFingerprint("Missing null check");
         string issuesPath = "/repos/acme/widgets/issues";
         Api.Get(SubIssuesPath(1), Array.Empty<object>());
         ScriptRepoIssues(Array.Empty<object>());
-        Api.Respond(HttpMethod.Post, issuesPath, HttpStatusCode.Created, Issue(5, 500, "Fix null check", "Details"));
+        Api.Respond(HttpMethod.Post, issuesPath, HttpStatusCode.Created, Issue(5, 500, "Fix null check", "Details", labels: ["webdevloop"]));
         Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
         Api.Get(BlockedByPath(5), Array.Empty<object>());
 
@@ -118,13 +119,32 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
             new FindingIssueDraft(Ref(1, 100), "Fix null check", "Details", fingerprint), CancellationToken.None);
 
         Assert.Equal(5, created.Ref.Number);
+        Assert.Equal(["webdevloop"], created.Labels);
         IssuesApiRequest create = Assert.Single(Api.RequestsTo(HttpMethod.Post, issuesPath));
         Assert.Equal("Fix null check", create.Json.GetProperty("title").GetString());
+        Assert.Equal(["webdevloop"], create.Json.GetProperty("labels").EnumerateArray().Select(label => label.GetString()));
         string body = create.Json.GetProperty("body").GetString()!;
         Assert.StartsWith("Details", body);
         Assert.True(FindingFingerprintMarker.IsPresentIn(body, fingerprint));
         IssuesApiRequest link = Assert.Single(Api.RequestsTo(HttpMethod.Post, SubIssuesPath(1)));
         Assert.Equal(500, link.Json.GetProperty("sub_issue_id").GetInt64());
+    }
+
+    [Fact]
+    public async Task CreateFindingIssue_fails_when_github_silently_drops_the_opt_in_label()
+    {
+        Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        ScriptRepoIssues(Array.Empty<object>());
+        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(5, 500));
+        Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut().CreateFindingIssueAsync(
+            new FindingIssueDraft(Ref(1, 100), "Finding", "Details", new FindingFingerprint("finding")), CancellationToken.None));
+
+        Assert.Equal(GitHubApiErrorKind.Forbidden, error.Kind);
+        Assert.Contains("#5", error.Message);
+        Assert.Contains("webdevloop", error.Message);
+        Assert.Empty(Api.RequestsTo(HttpMethod.Post, SubIssuesPath(1)));
     }
 
     [Fact]
@@ -144,8 +164,89 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
             new FindingIssueDraft(Ref(1, 100), "Fix null check", "Details", fingerprint), CancellationToken.None);
 
         Assert.Equal(5, reused.Ref.Number);
+        Assert.Empty(reused.Labels);
         Assert.Empty(Api.RequestsTo(HttpMethod.Post, IssuesPath));
         IssuesApiRequest link = Assert.Single(Api.RequestsTo(HttpMethod.Post, SubIssuesPath(1)));
+        Assert.Equal(500, link.Json.GetProperty("sub_issue_id").GetInt64());
+        Assert.Equal(link, Assert.Single(Api.Requests, request => request.Method != HttpMethod.Get));
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, false)]
+    [InlineData(HttpStatusCode.Forbidden, false)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, false)]
+    [InlineData(HttpStatusCode.UnprocessableEntity, false)]
+    [InlineData(HttpStatusCode.Unauthorized, true)]
+    [InlineData(HttpStatusCode.Forbidden, true)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, true)]
+    public async Task CreateFindingIssue_surfaces_creation_and_link_failures(HttpStatusCode status, bool linking)
+    {
+        Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        ScriptRepoIssues(Array.Empty<object>());
+        Api.Respond(HttpMethod.Post, IssuesPath, linking ? HttpStatusCode.Created : status,
+            linking ? Issue(5, 500, labels: ["webdevloop"]) : new { message = "Issue or label permission unavailable" });
+        Api.Respond(HttpMethod.Post, SubIssuesPath(1), status, new { message = "Cannot link finding" });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut().CreateFindingIssueAsync(
+            new FindingIssueDraft(Ref(1, 100), "Finding", "Details", new FindingFingerprint("finding")), CancellationToken.None));
+
+        Assert.Equal(status, error.StatusCode);
+        Assert.Equal(status == HttpStatusCode.ServiceUnavailable, error.IsRetryable);
+        Assert.Single(Api.RequestsTo(HttpMethod.Post, IssuesPath));
+        if (!linking)
+        {
+            Assert.Empty(Api.RequestsTo(HttpMethod.Post, SubIssuesPath(1)));
+        }
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    public async Task CreateFindingIssue_does_not_create_when_deduplication_cannot_be_verified(HttpStatusCode status)
+    {
+        Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        Api.Get(IssuePath(1), Issue(1, 100));
+        Api.Respond(HttpMethod.Get, IssuesPath, status, new { message = "Cannot check earlier creation" });
+
+        GitHubApiException error = await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut().CreateFindingIssueAsync(
+            new FindingIssueDraft(Ref(1, 100), "Finding", "Details", new FindingFingerprint("finding")), CancellationToken.None));
+
+        Assert.Equal(status, error.StatusCode);
+        Assert.All(Api.Requests, request => Assert.Equal(HttpMethod.Get, request.Method));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateFindingIssue_retry_after_label_or_link_failure_recovers_without_duplicates_or_reapplying_opt_in(bool labelDropped)
+    {
+        var fingerprint = new FindingFingerprint("finding");
+        var draft = new FindingIssueDraft(Ref(1, 100), "Finding", "Details", fingerprint);
+        Api.Get(SubIssuesPath(1), Array.Empty<object>());
+        ScriptRepoIssues(Array.Empty<object>());
+        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created,
+            Issue(5, 500, body: FindingFingerprintMarker.Render(fingerprint), labels: labelDropped ? [] : ["webdevloop"]));
+        Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.ServiceUnavailable, new { message = "Link response lost" });
+        await Assert.ThrowsAsync<GitHubApiException>(() => CreateSut().CreateFindingIssueAsync(draft, CancellationToken.None));
+
+        // The issue exists, but a maintainer has removed its permission before the next process retries.
+        using var recoveryApi = new FakeIssuesApiHandler();
+        recoveryApi.Get(SubIssuesPath(1), Array.Empty<object>());
+        recoveryApi.Get(IssuePath(1), Issue(1, 100));
+        recoveryApi.Get(IssuesPath, new[] { Issue(5, 500, body: FindingFingerprintMarker.Render(fingerprint), labels: ["ready-for-human"]) });
+        recoveryApi.Get(BlockedByPath(5), Array.Empty<object>());
+        recoveryApi.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
+        var recoveredAdapter = new GitHubIssues(new HttpClient(recoveryApi), Tokens);
+
+        IssueSnapshot recovered = await recoveredAdapter.CreateFindingIssueAsync(draft, CancellationToken.None);
+
+        Assert.Equal(5, recovered.Ref.Number);
+        Assert.Equal(["ready-for-human"], recovered.Labels);
+        Assert.Single(Api.RequestsTo(HttpMethod.Post, IssuesPath));
+        Assert.Empty(recoveryApi.RequestsTo(HttpMethod.Post, IssuesPath));
+        IssuesApiRequest link = Assert.Single(recoveryApi.Requests, request => request.Method != HttpMethod.Get);
+        Assert.Equal(SubIssuesPath(1), link.Path);
         Assert.Equal(500, link.Json.GetProperty("sub_issue_id").GetInt64());
     }
 
@@ -155,7 +256,7 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
         var fingerprint = new FindingFingerprint("Missing null check");
         Api.Get(SubIssuesPath(1), Array.Empty<object>());
         ScriptRepoIssues(Array.Empty<object>());
-        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(5, 500));
+        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(5, 500, labels: ["webdevloop"]));
         Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
         Api.Get(BlockedByPath(5), Array.Empty<object>());
 
@@ -174,7 +275,7 @@ public sealed class GitHubIssuesWriteTests : GitHubIssuesTestBase
         Api.Get(SubIssuesPath(1), Array.Empty<object>());
         ScriptRepoIssues(
             new { number = 4, id = 400L, node_id = "I_400", title = "Other spec's finding", body = FindingFingerprintMarker.Render(fingerprint), state = "open", parent_issue_url = "https://api.github.com/repos/acme/widgets/issues/2" });
-        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(5, 500));
+        Api.Respond(HttpMethod.Post, IssuesPath, HttpStatusCode.Created, Issue(5, 500, labels: ["webdevloop"]));
         Api.Respond(HttpMethod.Post, SubIssuesPath(1), HttpStatusCode.Created, Issue(1, 100));
         Api.Get(BlockedByPath(5), Array.Empty<object>());
 

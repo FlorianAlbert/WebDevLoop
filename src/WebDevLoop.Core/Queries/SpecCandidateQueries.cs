@@ -9,6 +9,8 @@ namespace WebDevLoop.Core.Queries;
 /// <summary>Fresh, paginated GitHub discovery. Failures propagate rather than authorizing stale candidates.</summary>
 public sealed class SpecCandidateQueries(IRepositoryQueries repositories, IRunQueries runs, IGitHubIssues issues) : ISpecCandidateQueries
 {
+    private readonly ParentBlockerReader _blockers = new(issues.GetIssueAsync);
+
     public async Task<CommandResult<SpecCandidatePage>> ListAsync(
         int repositoryId, string? search, bool onlyUnblocked, int page, CancellationToken cancellationToken)
     {
@@ -49,7 +51,7 @@ public sealed class SpecCandidateQueries(IRepositoryQueries repositories, IRunQu
             }
 
             (IssueSnapshot spec, string? rejection) = await SpecEligibility.ReadAsync(issues, summary.Ref, cancellationToken);
-            if (rejection is not null || (onlyUnblocked && await HasOpenParentBlockerAsync(spec, cancellationToken)))
+            if (rejection is not null || (onlyUnblocked && !await _blockers.AreAllSatisfiedAsync(spec, cancellationToken)))
             {
                 continue;
             }
@@ -63,18 +65,4 @@ public sealed class SpecCandidateQueries(IRepositoryQueries repositories, IRunQu
     private static bool MatchesSearch(ParentIssueSummary summary, string term) =>
         summary.Title.Contains(term, StringComparison.OrdinalIgnoreCase)
         || summary.Ref.Number.ToString(CultureInfo.InvariantCulture).Contains(term, StringComparison.Ordinal);
-
-    private async Task<bool> HasOpenParentBlockerAsync(IssueSnapshot spec, CancellationToken cancellationToken)
-    {
-        foreach (IssueRef blocker in spec.BlockedBy)
-        {
-            IssueSnapshot current = await issues.GetIssueAsync(blocker, cancellationToken);
-            if (current.State == IssueState.Open)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

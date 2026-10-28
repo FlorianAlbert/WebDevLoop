@@ -7,6 +7,8 @@ namespace WebDevLoop.Core.Orchestration.WorkSelection;
 /// <summary>Reads permission and native blockers at work-decision points, never from a saved issue snapshot.</summary>
 public sealed class CurrentWorkEligibility(IGitHubIssues issues)
 {
+    private readonly ParentBlockerReader _blockers = new(issues.GetIssueAsync);
+
     public async Task<CurrentWork> ReadAsync(SpecRun spec, IReadOnlyList<TicketRun> tickets, CancellationToken cancellationToken)
     {
         var eligible = new List<IssueRef>();
@@ -26,7 +28,7 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
                 return new CurrentWork(stopReason, null, eligible, runnable, errors);
             }
 
-            if (!await IsUnblockedAsync(parent, cancellationToken))
+            if (!await _blockers.AreAllSatisfiedAsync(parent, cancellationToken))
             {
                 waitReason = $"Parent spec {spec.ParentIssue} has open native blockers; new work and parent review are deferred.";
             }
@@ -48,7 +50,7 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
                     }
 
                     eligible.Add(current.Ref);
-                    if (!await IsUnblockedAsync(current, cancellationToken))
+                    if (!await _blockers.AreAllSatisfiedAsync(current, cancellationToken))
                     {
                         blocked.Add(current.Ref);
                     }
@@ -69,18 +71,5 @@ public sealed class CurrentWorkEligibility(IGitHubIssues issues)
         }
 
         return new CurrentWork(null, waitReason, eligible, runnable, errors) { Blocked = blocked };
-    }
-
-    private async Task<bool> IsUnblockedAsync(IssueSnapshot issue, CancellationToken cancellationToken)
-    {
-        foreach (IssueRef blocker in issue.BlockedBy)
-        {
-            if ((await issues.GetIssueAsync(blocker, cancellationToken)).State != IssueState.Closed)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

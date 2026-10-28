@@ -26,6 +26,28 @@ public sealed class SpecQueueSchedulerTests
         }
     }
 
+    [Fact]
+    public async Task a_blocker_with_an_unrecognized_state_holds_the_spec_until_explicitly_closed()
+    {
+        _fixture.SeedSpec(1);
+        var blocker = new IssueRef("elsewhere", "library", 900);
+        const IssueState unrecognizedState = (IssueState)2;
+        _fixture.Issues.Seed(new IssueSnapshot(blocker, "Blocker", "", unrecognizedState, []));
+        _fixture.Issues.SetBlockedBy(SpecWorkflowFixture.Issue(1), blocker);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+
+        SpecScheduleResult blocked = await _fixture.ScheduleAsync();
+
+        Assert.Empty(blocked.Activated);
+        Assert.Equal([run.Id], blocked.Waiting);
+        Assert.Null(run.MaxActiveSpecsSlot);
+        await _fixture.Issues.CloseAsync(blocker, IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+
+        SpecScheduleResult released = await _fixture.ScheduleAsync();
+
+        Assert.Equal([run.Id], released.Activated);
+    }
+
     [Theory]
     [InlineData("parent unlabeled", false, "requires the 'webdevloop' label")]
     [InlineData("parent closed", false, "must be open")]

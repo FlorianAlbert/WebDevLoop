@@ -10,7 +10,8 @@ public sealed class SpecDependencyGate(IGitHubIssues issues)
 
     public async Task<SpecStartDecision> EvaluateAsync(SpecRun run, CancellationToken cancellationToken)
     {
-        IReadOnlyList<ParentBlocker> blockers = await _blockers.ReadAsync(run.ParentIssue, cancellationToken);
-        return blockers.All(blocker => blocker.IsSatisfied) ? SpecStartDecision.FromTrunk : SpecStartDecision.Wait;
+        return await _blockers.AreAllSatisfiedAsync(run.ParentIssue, cancellationToken)
+            ? SpecStartDecision.FromTrunk
+            : SpecStartDecision.Wait;
     }
 }

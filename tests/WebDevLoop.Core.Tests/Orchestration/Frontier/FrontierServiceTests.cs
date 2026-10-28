@@ -12,6 +12,44 @@ public sealed class FrontierServiceTests
     private readonly TicketExecutionFixture _fixture = new();
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task parent_and_ticket_blockers_with_unrecognized_states_never_authorize_dispatch(bool parentBlocked)
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        var blocker = new IssueRef("elsewhere", "library", 900);
+        const IssueState unrecognizedState = (IssueState)2;
+        _fixture.Issues.Seed(new IssueSnapshot(blocker, "Blocker", "", unrecognizedState, []));
+        IssueRef blocked = parentBlocked ? _fixture.Spec(spec.Id).ParentIssue : _fixture.Ticket(spec[1]).Issue;
+        _fixture.Issues.SetBlockedBy(blocked, blocker);
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Empty(result.Dispatched);
+        Assert.Empty(result.LookupErrors);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(spec[1]).Status);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task unavailable_parent_or_ticket_blockers_report_actionable_issue_access_guidance(bool parentBlocked)
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        var blocker = new IssueRef("elsewhere", "library", 900);
+        IssueRef blocked = parentBlocked ? _fixture.Spec(spec.Id).ParentIssue : _fixture.Ticket(spec[1]).Issue;
+        _fixture.Issues.SetBlockedBy(blocked, blocker);
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(FrontierOutcome.GitHubUnavailable, result.Outcome);
+        Assert.Empty(result.Dispatched);
+        Assert.Contains(result.LookupErrors, error =>
+            error.Message.Contains($"could not read {blocker}", StringComparison.Ordinal)
+            && error.Message.Contains("Check issue access", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData(TicketRunStatus.Implementing)]
     [InlineData(TicketRunStatus.Reviewing)]
     [InlineData(TicketRunStatus.FixingReviewFindings)]

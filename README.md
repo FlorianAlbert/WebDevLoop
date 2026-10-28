@@ -218,6 +218,8 @@ Once every blocker is closed (or its relationship removed), a new spec starts fr
 pull request is unmerged. Closing that issue before merging accepts that its changes may not be on trunk.
 Queue order cannot bypass blockers. Cross-spec stacking is not supported or configurable; ticket PR stacks within
 each spec remain unchanged.
+Discovery's parent-blocker filter, scheduling, and parent/ticket work decisions use the same blocker rule:
+only an explicitly closed issue satisfies a native blocker.
 
 ### Repository label consent
 

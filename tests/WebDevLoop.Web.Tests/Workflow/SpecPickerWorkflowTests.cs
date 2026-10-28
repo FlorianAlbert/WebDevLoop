@@ -16,6 +16,32 @@ namespace WebDevLoop.Web.Tests.Workflow;
 public sealed class SpecPickerWorkflowTests
 {
     [Fact]
+    public async Task parent_blocker_filter_requires_explicit_closure_and_rechecks_cross_repository_blockers()
+    {
+        using var scenario = new WorkflowScenario(101);
+        var blocker = new IssueRef("elsewhere", "library", 900);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        scenario.Issues.SetBlockedBy(100, blocker);
+        const IssueState unrecognizedState = (IssueState)2;
+        scenario.Issues.Seed(blocker, unrecognizedState);
+        await using var host = new WorkflowHost(scenario);
+        using HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        string path = $"/api/repos/{repositoryId}/spec-candidates";
+
+        JsonElement all = await api.GetAsync(path);
+        Assert.Equal([100], Numbers(all));
+        Assert.Empty(Numbers(await api.GetAsync(path + "?onlyUnblocked=true")));
+
+        await scenario.Issues.CloseAsync(blocker, IssueCloseReason.Completed, Xunit.TestContext.Current.CancellationToken);
+
+        JsonElement released = await api.GetAsync(path + "?onlyUnblocked=true");
+        Assert.Equal([100], Numbers(released));
+    }
+
+    [Fact]
     public async Task discovery_returns_a_cursor_and_following_it_reaches_the_remaining_eligible_specs()
     {
         using var scenario = new WorkflowScenario(1001);

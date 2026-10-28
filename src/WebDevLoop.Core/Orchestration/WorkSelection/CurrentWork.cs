@@ -21,4 +21,19 @@ public sealed record CurrentWork(
     public IReadOnlyList<IssueRef> Blocked { get; init; } = [];
 
     public bool AllEligibleBlocked => Eligible.Count > 0 && Blocked.Count == Eligible.Count;
+
+    /// <summary>Remaining eligible, selected outstanding, or integrated tickets keep the run from being empty.</summary>
+    public bool HasWork(IReadOnlyList<TicketRun> tickets) =>
+        Eligible.Count > 0 || tickets.Any(ticket => ticket.IsSelectedAndOutstanding || ticket.Status == TicketRunStatus.Integrated);
+
+    /// <summary>The reason to complete without parent review, only after selected work finishes and lookups succeed.</summary>
+    public string? GetTerminalReason(IReadOnlyList<TicketRun> tickets)
+    {
+        if (Errors.Count > 0 || tickets.Any(ticket => ticket.IsSelectedAndOutstanding))
+        {
+            return null;
+        }
+
+        return StopReason ?? (HasWork(tickets) ? null : NoEligibleWorkReason);
+    }
 }

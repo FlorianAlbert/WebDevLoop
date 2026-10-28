@@ -127,17 +127,16 @@ public sealed class SpecQueueScheduler(
     {
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(run.Id, cancellationToken);
         CurrentWork current = await _eligibility.ReadAsync(run, tickets, cancellationToken);
-        bool hasWork = current.Eligible.Count > 0 || tickets.Any(ticket => ticket.Status == TicketRunStatus.Integrated);
-        if (current.Errors.Count == 0 && (current.StopReason is not null || !hasWork))
+        if (current.GetTerminalReason(tickets) is { } terminalReason)
         {
             _journal.Move(run, SpecRunStatus.Completed);
-            run.SetWorkDecisionReason(current.StopReason ?? CurrentWork.NoEligibleWorkReason);
+            run.SetWorkDecisionReason(terminalReason);
             bool saved = await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved;
             return new SpecScheduleResult([], [], ConcurrencyConflict: !saved);
         }
 
         string? reason = current.Errors.FirstOrDefault()?.Message
-            ?? (hasWork ? current.WaitReason : null)
+            ?? (current.HasWork(tickets) ? current.WaitReason : null)
             ?? (current.AllEligibleBlocked ? CurrentWork.BlockedReason : null);
         if (reason is not null)
         {

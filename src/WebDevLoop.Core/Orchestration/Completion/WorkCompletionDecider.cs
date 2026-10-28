@@ -73,14 +73,12 @@ public sealed class WorkCompletionDecider(
     private static CompletionDecision Decide(CurrentWork current, IReadOnlyList<TicketRun> tickets)
     {
         bool selectedOutstanding = tickets.Any(ticket => ticket.IsSelectedAndOutstanding);
-        bool hasIntegratedWork = tickets.Any(ticket => ticket.Status == TicketRunStatus.Integrated);
-        bool hasRemainingOrIntegratedWork = selectedOutstanding || hasIntegratedWork || current.Eligible.Count > 0;
         if (current.Errors.Count == 0 && !selectedOutstanding && current.AllEligibleBlocked)
         {
             return new(WorkCompletionOutcome.Parked, CurrentWork.BlockedReason, SpecRunStatus.WaitingForTickets);
         }
 
-        bool parentBlockersDeferProgress = current.WaitReason is not null && hasRemainingOrIntegratedWork;
+        bool parentBlockersDeferProgress = current.WaitReason is not null && current.HasWork(tickets);
         if (current.Errors.Count > 0 || parentBlockersDeferProgress)
         {
             return new(WorkCompletionOutcome.Deferred, current.Errors.FirstOrDefault()?.Message ?? current.WaitReason);
@@ -91,9 +89,12 @@ public sealed class WorkCompletionDecider(
             return new(WorkCompletionOutcome.TicketsOutstanding, current.StopReason);
         }
 
-        if (current.StopReason is not null)
+        if (current.GetTerminalReason(tickets) is { } terminalReason)
         {
-            return new(WorkCompletionOutcome.Stopped, current.StopReason, SpecRunStatus.Completed);
+            return new(
+                current.StopReason is not null ? WorkCompletionOutcome.Stopped : WorkCompletionOutcome.NoEligibleWork,
+                terminalReason,
+                SpecRunStatus.Completed);
         }
 
         if (current.Eligible.Count > 0)
@@ -101,9 +102,7 @@ public sealed class WorkCompletionDecider(
             return new(WorkCompletionOutcome.TicketsOutstanding, current.Runnable.Count == 0 ? BlockedWorkReason : null);
         }
 
-        return hasIntegratedWork
-            ? new(WorkCompletionOutcome.ReviewStarted, null, SpecRunStatus.ParentReviewing)
-            : new(WorkCompletionOutcome.NoEligibleWork, CurrentWork.NoEligibleWorkReason, SpecRunStatus.Completed);
+        return new(WorkCompletionOutcome.ReviewStarted, null, SpecRunStatus.ParentReviewing);
     }
 
     private const string BlockedWorkReason = "Eligible tickets remain blocked or await graph reconciliation; parent review is deferred.";

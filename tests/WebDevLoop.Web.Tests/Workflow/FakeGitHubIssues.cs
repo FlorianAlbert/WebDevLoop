@@ -23,6 +23,10 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public Exception? SubIssueReadFailure { get; set; }
 
+    public Dictionary<int, Exception> IssueFailures { get; } = [];
+
+    public Func<int, CancellationToken, Task<ParentIssuePage>>? OnListParents { get; set; }
+
     public Exception? FindingCreationFailure { get; set; }
 
     public Exception? FindingLinkFailure { get; set; }
@@ -32,6 +36,31 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
     public TaskCompletionSource FindingIssuanceFailed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public IssueRef Ref(int number) => new(Repository.Owner, Repository.Name, number);
+
+    public Task<ParentIssuePage> ListOpenParentIssuesAsync(GitHubRepoRef repository, int page, CancellationToken cancellationToken)
+    {
+        if (OnListParents is { } list)
+        {
+            return list(page, cancellationToken);
+        }
+
+        if (IssueReadFailure is { } failure)
+        {
+            throw failure;
+        }
+
+        lock (_gate)
+        {
+            var parents = _issues.Values.Where(issue => issue.State == IssueState.Open
+                && issue.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase)
+                && !_subIssues.Values.Any(children => children.Contains(issue.Ref.Number)))
+                .OrderBy(issue => issue.Ref.Number).ToArray();
+            return Task.FromResult(new ParentIssuePage(
+                parents.Skip((page - 1) * ParentIssuePage.PageSize).Take(ParentIssuePage.PageSize)
+                    .Select(issue => new ParentIssueSummary(issue.Ref, issue.Title)).ToArray(),
+                parents.Length > page * ParentIssuePage.PageSize ? page + 1 : null));
+        }
+    }
 
     /// <summary>Seeds an open issue, optionally as sub-issue of <paramref name="parent"/>, blocked by the given issues.</summary>
     public void Seed(int number, string title, int? parent = null, params int[] blockedBy)
@@ -124,6 +153,11 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken)
     {
+        if (IssueFailures.TryGetValue(issue.Number, out Exception? issueFailure))
+        {
+            throw issueFailure;
+        }
+
         if (issue == UnavailableIssue)
         {
             throw new GitHubIssuesException($"GitHub issue {issue} is unavailable.");

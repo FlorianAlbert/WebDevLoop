@@ -17,4 +17,10 @@ public enum EnqueueOutcome
 
     /// <summary>Another writer changed the queue first; nothing was saved and the caller may retry.</summary>
     ConcurrencyConflict,
+
+    /// <summary>The host's workflow prerequisites do not currently allow enqueueing.</summary>
+    Unavailable,
+
+    /// <summary>An unexpected enqueue failure was reported by the host; check the queue before retrying.</summary>
+    Failed,
 }

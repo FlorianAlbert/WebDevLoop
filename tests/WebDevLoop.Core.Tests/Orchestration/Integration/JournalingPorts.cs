@@ -139,6 +139,8 @@ internal sealed class JournalingGitHubIssues(IGitHubIssues inner, ExternalCallJo
 
     public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken) => inner.GetSpecGraphAsync(specIssue, cancellationToken);
 
+    public Task<ParentIssuePage> ListOpenParentIssuesAsync(GitHubRepoRef repository, int page, CancellationToken cancellationToken) => inner.ListOpenParentIssuesAsync(repository, page, cancellationToken);
+
     public Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken) => inner.GetSubIssuesAsync(parent, cancellationToken);
 
     public Task<IssueSnapshot?> FindFindingIssueAsync(IssueRef specIssue, FindingFingerprint fingerprint, CancellationToken cancellationToken) =>

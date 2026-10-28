@@ -34,6 +34,8 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
 
     public FakeSpecEnqueuer Enqueuer { get; } = new();
 
+    public FakeGitHubIssues Issues { get; } = new(new("acme", "widgets"));
+
     public FakeRunQueries Runs { get; } = new();
 
     public FakeRunControl Control { get; } = new();
@@ -90,6 +92,7 @@ internal sealed class ApiFactory : WebApplicationFactory<WebAssemblyMarker>
             services.AddSingleton<IGitHubRepositoryLabels>(Labels);
             services.AddSingleton<ISettingsManager>(Settings);
             services.AddSingleton<ISpecEnqueuer>(Enqueuer);
+            services.AddSingleton<IGitHubIssues>(Issues);
             services.AddSingleton<IRunQueries>(Runs);
             services.AddSingleton<IRunControl>(Control);
             services.AddSingleton<IAgentLogReader>(Logs);

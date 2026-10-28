@@ -8,6 +8,7 @@ using WebDevLoop.Core.Queries;
 using WebDevLoop.Infrastructure.Prerequisites;
 using WebDevLoop.Web.Components.Repositories;
 using WebDevLoop.Web.Tests.Api;
+using WebDevLoop.Web.DependencyInjection;
 using WebDevLoop.Web.Tests.Workflow;
 
 namespace WebDevLoop.Web.Tests.Components.Dashboard;
@@ -35,6 +36,8 @@ public abstract class UiTestContext : BunitContext
 
     internal DiagnosticReadiness Readiness { get; }
 
+    internal FakeGitHubIssues Issues { get; } = new(new("acme", "widgets"));
+
     protected UiTestContext()
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -48,6 +51,8 @@ public abstract class UiTestContext : BunitContext
         Services.AddSingleton<IParentBlockerQueries>(Runs);
         Services.AddSingleton<ISettingsManager>(Settings);
         Services.AddSingleton<ISpecEnqueuer>(Enqueuer);
+        Services.AddSingleton<IGitHubIssues>(Issues);
+        Services.AddWebDevLoopSpecSelection();
         Services.AddSingleton<ICurrentRepositorySelection>(Selection);
         Services.AddSingleton<IRunEventBus>(EventBus);
         Services.AddSingleton(Readiness);

@@ -36,21 +36,11 @@ public sealed class SpecQueueService(
         IssueSnapshot spec;
         try
         {
-            spec = await issues.GetIssueAsync(new IssueRef(repository.Owner, repository.Name, specIssueNumber), cancellationToken);
-            if (spec.State != IssueState.Open)
+            string? rejection;
+            (spec, rejection) = await SpecEligibility.ReadAsync(issues, new IssueRef(repository.Owner, repository.Name, specIssueNumber), cancellationToken);
+            if (rejection is not null)
             {
-                return new EnqueueResult(EnqueueOutcome.Ineligible, Reason: $"Parent spec #{specIssueNumber} must be open.");
-            }
-
-            if (!spec.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase))
-            {
-                return new EnqueueResult(EnqueueOutcome.Ineligible, Reason: $"Parent spec #{specIssueNumber} requires the '{WebDevLoopOptIn.Label}' label (WebDevLoop Opt-in).");
-            }
-
-            IReadOnlyList<IssueSnapshot> tickets = await issues.GetSubIssuesAsync(spec.Ref, cancellationToken);
-            if (!tickets.Any(ticket => ticket.State == IssueState.Open && ticket.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase)))
-            {
-                return new EnqueueResult(EnqueueOutcome.Ineligible, Reason: $"Parent spec #{specIssueNumber} needs at least one open sub-issue independently labeled '{WebDevLoopOptIn.Label}'.");
+                return new EnqueueResult(EnqueueOutcome.Ineligible, Reason: rejection);
             }
         }
         catch (GitHubIssuesException exception)

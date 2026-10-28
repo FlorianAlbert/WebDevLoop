@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using WebDevLoop.Core.Domain;
@@ -9,6 +10,43 @@ namespace WebDevLoop.Infrastructure.Tests.GitHub.Issues;
 
 public sealed class GitHubIssuesReadTests : GitHubIssuesTestBase
 {
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, GitHubApiErrorKind.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden, GitHubApiErrorKind.Forbidden)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, GitHubApiErrorKind.Transient)]
+    public async Task parent_discovery_surfaces_authorization_and_transient_failures(HttpStatusCode status, GitHubApiErrorKind expected)
+    {
+        Api.Respond(HttpMethod.Get, "/repos/acme/widgets/issues", status, new { message = "Lookup failed." });
+
+        GitHubApiException failure = await Assert.ThrowsAsync<GitHubApiException>(() =>
+            CreateSut().ListOpenParentIssuesAsync(new("acme", "widgets"), 1, CancellationToken.None));
+
+        Assert.Equal(expected, failure.Kind);
+    }
+
+    [Fact]
+    public async Task parent_picker_pages_exclude_pull_requests_sub_issues_closed_and_unlabeled_issues()
+    {
+        string path = "/repos/acme/widgets/issues?state=open&labels=webdevloop&sort=created&direction=asc&per_page=30";
+        Api.Get(path + "&page=1", new object[]
+        {
+            Issue(1, 100, labels: ["webdevloop"]),
+            new { number = 2, pull_request = new { url = "pr" } },
+            new { number = 3, parent_issue_url = "parent" },
+            Issue(4, 400, state: "closed", labels: ["webdevloop"]),
+            Issue(5, 500),
+        }, ("Link", $"<https://api.github.com{path}&page=2>; rel=\"next\""));
+        Api.Get(path + "&page=2", new[] { Issue(6, 600, labels: ["WEBDEVLOOP"]) });
+        GitHubIssues github = CreateSut();
+
+        ParentIssuePage first = await github.ListOpenParentIssuesAsync(new("acme", "widgets"), 1, CancellationToken.None);
+        ParentIssuePage second = await github.ListOpenParentIssuesAsync(new("acme", "widgets"), first.NextPage!.Value, CancellationToken.None);
+
+        Assert.Equal([1], first.Issues.Select(issue => issue.Ref.Number));
+        Assert.Equal([6], second.Issues.Select(issue => issue.Ref.Number));
+        Assert.Null(second.NextPage);
+    }
+
     [Fact]
     public async Task paginated_native_blockers_keep_external_repository_identity_and_current_state_without_a_local_graph()
     {

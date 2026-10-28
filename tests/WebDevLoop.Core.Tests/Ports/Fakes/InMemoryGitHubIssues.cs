@@ -11,6 +11,20 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
 
     public List<(IssueRef Issue, string Body)> Comments { get; } = [];
 
+    public Task<ParentIssuePage> ListOpenParentIssuesAsync(GitHubRepoRef repository, int page, CancellationToken cancellationToken)
+    {
+        var parents = _issues.Values.Where(issue => Key(issue.Ref).Owner == repository.Owner.ToUpperInvariant()
+            && Key(issue.Ref).Repo == repository.Name.ToUpperInvariant()
+            && issue.State == IssueState.Open
+            && issue.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase)
+            && !_subIssues.Values.Any(children => children.Any(child => Key(child) == Key(issue.Ref))))
+            .OrderBy(issue => issue.Ref.Number).ToArray();
+        return Task.FromResult(new ParentIssuePage(
+            parents.Skip((page - 1) * ParentIssuePage.PageSize).Take(ParentIssuePage.PageSize)
+                .Select(issue => new ParentIssueSummary(issue.Ref, issue.Title)).ToArray(),
+            parents.Length > page * ParentIssuePage.PageSize ? page + 1 : null));
+    }
+
     public void Seed(IssueSnapshot snapshot) => _issues[Key(snapshot.Ref)] = snapshot;
 
     public IssueSnapshot Seed(IssueRef issue, string title, IssueRef? parent = null, params IssueRef[] blockedBy)

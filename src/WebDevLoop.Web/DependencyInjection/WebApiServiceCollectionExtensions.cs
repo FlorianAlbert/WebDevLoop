@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Control;
+using WebDevLoop.Core.Queries;
 using WebDevLoop.Web.Background;
 
 namespace WebDevLoop.Web.DependencyInjection;
@@ -32,12 +33,23 @@ public static class WebApiServiceCollectionExtensions
         services.TryAddScoped<SettingsManager>();
         services.TryAddScoped<ISettingsManager, ValidatingSettingsManager>();
         services.TryAddScoped<ISpecEnqueuer, SpecEnqueuer>();
+        services.AddWebDevLoopSpecSelection();
         services.TryAddSingleton(RunControlOptions.Default);
         services.TryAddScoped<RunControlJournal>();
         services.TryAddScoped<ActiveWorkStopper>();
         services.TryAddScoped<SpecRunControl>();
         services.TryAddScoped<TicketRunControl>();
         services.TryAddScoped<IRunControl, RunControlService>();
+        return services;
+    }
+
+    /// <summary>Registers Core spec discovery and ordered enqueue with an independent, readiness-gated scope per item.</summary>
+    public static IServiceCollection AddWebDevLoopSpecSelection(this IServiceCollection services)
+    {
+        services.TryAddScoped<ISpecCandidateQueries, SpecCandidateQueries>();
+        services.TryAddScoped<ScopedSpecEnqueuer>();
+        services.TryAddScoped<ISpecSelectionEnqueuer>(provider =>
+            new SpecSelectionEnqueuer(provider.GetRequiredService<ScopedSpecEnqueuer>()));
         return services;
     }
 }

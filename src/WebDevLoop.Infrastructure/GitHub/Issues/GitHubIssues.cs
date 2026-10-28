@@ -13,6 +13,19 @@ public sealed class GitHubIssues(HttpClient http, ITokenProvider tokens) : IGitH
 {
     private readonly GitHubRestClient _api = new(http, tokens);
 
+    public async Task<ParentIssuePage> ListOpenParentIssuesAsync(GitHubRepoRef repository, int page, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        string path = $"repos/{repository.Owner}/{repository.Name}/issues?state=open&labels={WebDevLoopOptIn.Label}&sort=created&direction=asc&per_page={ParentIssuePage.PageSize}&page={page}";
+        (IReadOnlyList<JsonElement> items, bool hasMore) = await _api.GetPageAsync(repository, path, cancellationToken);
+        var parents = items.Where(issue => !issue.TryGetProperty("pull_request", out _) && !HasParent(issue))
+            .Select(issue => IssueJson.ToSnapshot(issue, repository, []))
+            .Where(issue => issue.State == IssueState.Open && issue.Labels.Contains(WebDevLoopOptIn.Label, StringComparer.OrdinalIgnoreCase))
+            .Select(issue => new ParentIssueSummary(issue.Ref, issue.Title))
+            .ToArray();
+        return new ParentIssuePage(parents, hasMore ? page + 1 : null);
+    }
+
     public async Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken)
     {
         GitHubRepoRef repo = RepoOf(issue);

@@ -33,6 +33,9 @@ else
         <EnqueueSpecForm RepositoryId="_repository.Id" OnQueued="ReloadAsync" />
     </div>
 
+    <SpecPicker @key="_repository.Id" RepositoryId="_repository.Id" OnQueued="ReloadAsync"
+                UnavailableIssueNumbers="@_runs.Where(run => !run.Status.IsTerminal()).Select(run => run.ParentIssueNumber).ToArray()" />
+
     @if (_runs.Count == 0)
     {
         <EmptyState Icon="inbox" Title="Nothing queued yet" Text="Queue a parent spec issue above to get started." />

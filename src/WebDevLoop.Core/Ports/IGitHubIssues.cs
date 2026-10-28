@@ -8,6 +8,8 @@ namespace WebDevLoop.Core.Ports;
 /// </summary>
 public interface IGitHubIssues
 {
+    Task<ParentIssuePage> ListOpenParentIssuesAsync(GitHubRepoRef repository, int page, CancellationToken cancellationToken);
+
     Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken);
 
     /// <summary>Current sub-issues across all pages, including closed issues; does not validate their dependency graph.</summary>

@@ -26,7 +26,7 @@ flowchart LR
     Api["/api"] --> Health["Health<br/>health, prerequisites"]
     Api --> Repos["Repositories<br/>repos, repos/id"]
     Api --> Settings["Settings<br/>settings/global,<br/>repos/id/settings,<br/>settings/effective/id"]
-    Api --> Spec["Spec runs<br/>repos/id/spec-runs,<br/>spec-runs/id/..."]
+    Api --> Spec["Spec runs<br/>repos/id/spec-candidates,<br/>repos/id/spec-runs and batch,<br/>spec-runs/id/..."]
     Api --> Ticket["Ticket runs<br/>ticket-runs/id/..."]
     Api --> Step["Steps<br/>steps/id, steps/id/logs"]
     Api --> Control["Run control<br/>retry, abort"]
@@ -82,6 +82,8 @@ Lookup/creation failures return permission/retry diagnostics rather than pretend
 | Method | Route | Purpose | Notes |
 | --- | --- | --- | --- |
 | POST | `/api/repos/{repoId:int}/spec-runs` | Queue an open parent spec labeled `webdevloop` with at least one independently labeled open sub-issue. Body: `{ "specIssueNumber": 123 }`. | Gated. `202` `Queued`, or `200` `AlreadyQueued`; `400`, `404`, `409` (ineligible or concurrent change), `503` (GitHub lookup failure or diagnostic-only). |
+| GET | `/api/repos/{repoId:int}/spec-candidates` | Discover eligible parent specs. Query: `search` (number or title), `onlyUnblocked` (default `false`), `page` (default `1`). | `200` with `items` and `nextPage`; `400` for an invalid page; `404` repository missing; `503` GitHub lookup failure. |
+| POST | `/api/repos/{repoId:int}/spec-runs/batch` | Queue an ordered selection. Body: `{ "specIssueNumbers": [123, 45] }`. | Gated. `200` with one ordered result per spec, including failures; `400` for an empty/null list or nonpositive number before any mutation; `503` diagnostic-only before submission. |
 | GET | `/api/repos/{repoId:int}/spec-runs` | The repository's queue. | `404`. |
 | GET | `/api/spec-runs/{id}` | One spec run. | `404`. |
 | GET | `/api/spec-runs/{id}/tickets` | Ticket runs of the spec. | `404`. |
@@ -90,11 +92,38 @@ Lookup/creation failures return permission/retry diagnostics rather than pretend
 | GET | `/api/spec-runs/{id}/merge-status` | Awaiting merge, merged, or closed unmerged, as last tracked. | `404`. |
 | GET | `/api/spec-runs/{id}/events/stream` | Live events of one run (SSE). | `404`. See [Event stream](#event-stream-sse). |
 
-Queue eligibility is enforced by the shared `SpecQueueService` for API calls and typed input. It fetches current
+Queue eligibility is enforced by the shared `SpecQueueService` for API calls, picker selections and typed input. It fetches current
 GitHub state and labels at each submission; stale selections do not bypass WebDevLoop Opt-in. Triage labels never
 authorize work, and eligible children can all be blocked. Failure problem `detail` explains an ineligible parent,
 missing eligible children, or a failed GitHub lookup (including permission and transient failures). Nothing is queued
 on failure. An unfinished duplicate is returned without creating another run.
+
+Discovery uses `ISpecCandidateQueries`. It excludes pull requests, sub-issues, and specs with unfinished runs. Search
+matches issue numbers or titles case-insensitively. `onlyUnblocked=true` excludes specs with open native **parent**
+blockers, including cross-repository blockers; ticket blockers never affect discovery eligibility or that filter.
+Follow `nextPage` with the same search and filter until it is null; it is a GitHub source-page cursor, not a result
+offset. Empty source pages are skipped. Refresh by starting at page 1. Discovery never authorizes a later enqueue.
+
+Batch submission calls the Core `ISpecSelectionEnqueuer`; the UI uses this same interface directly. The host supplies
+a scoped `ISpecEnqueuer` adapter that checks readiness and creates an independent unit of work for each attempt, so
+an unexpected failure cannot leave tracked changes in the next item's scope. The handler projects Core
+`SpecSelectionResult` values to `QueueSpecItemResult` DTOs. `EnqueueOutcome` is shared rather than converted to a
+second outcome enum. Each result contains `specIssueNumber`, string `outcome`, nullable `runId`, and actionable
+`message`. Existing queue positions are never changed.
+
+| Per-item outcome | Meaning |
+| --- | --- |
+| `Queued` | A new run was created; `runId` links to it. |
+| `AlreadyQueued` | An unfinished run already exists; `runId` identifies it. |
+| `RepositoryNotFound` | Select a connected repository. |
+| `Ineligible` | Current parent/child state or independent opt-in does not permit enqueueing. |
+| `GitHubUnavailable` | Current eligibility could not be verified; check access or retry. |
+| `ConcurrencyConflict` | Another writer changed the queue; refresh and retry. |
+| `Unavailable` | Readiness changed during the batch; fix prerequisites before retrying. |
+| `Failed` | An unexpected item failure was logged; check the queue before retrying. |
+
+These are per-item outcomes in a `200` batch response, not whole-batch HTTP failures. One failed item never hides or
+prevents later results. Client cancellation stops further attempts; completed enqueue operations are not rolled back.
 
 ### Ticket runs and steps (`Api/TicketRunEndpoints.cs`, `Api/StepEndpoints.cs`)
 
@@ -182,7 +211,7 @@ flowchart TD
 ```
 
 - <xref:WebDevLoop.Web.Api.OperationalOnlyFilter> (`Api/OperationalOnlyFilter.cs`) is an `IEndpointFilter`. In diagnostic-only mode it returns `ApiProblems.PrerequisitesFailed(snapshot)`. If no evaluation has run yet, the text says the prerequisites were not evaluated.
-- Gated: queue a spec, and the whole Run control group (applied once with `MapGroup(...).AddEndpointFilter<OperationalOnlyFilter>()`).
+- Gated: queue a spec or batch selection, and the whole Run control group (applied once with `MapGroup(...).AddEndpointFilter<OperationalOnlyFilter>()`).
 - Not gated: health, prerequisites, all reads, repository and settings changes, `select`, event streams and OpenAPI. Registering a repository or editing settings must work so a user can fix the setup.
 - `GET /api/health` uses `ReadinessResponses.ToHealth` and returns `503` itself (it is not filtered).
 - No workflow worker runs in diagnostic-only mode, so a gated endpoint that would start work must stay gated.
@@ -265,6 +294,9 @@ Rules for clients and for changes to this endpoint:
 | Type | File | Used by |
 | --- | --- | --- |
 | `QueueSpecRequest`, `QueueSpecResponse`, `AgentLogsResponse` | `Api/Contracts/RunContracts.cs` | Queue spec, step logs. |
+| `QueueSpecsRequest`, `QueueSpecItemResult` | `Api/Contracts/QueueSpecsRequest.cs`, `QueueSpecItemResult.cs` | Ordered batch request and HTTP projection of Core results. |
+| `SpecCandidateView`, `SpecCandidatePage` | `src/WebDevLoop.Core/Queries/` | Paginated candidate discovery. |
+| `SpecSelectionResult` | `src/WebDevLoop.Core/Management/SpecSelectionResult.cs` | Core batch result consumed directly by the UI. |
 | `RunControlResponse<TRun>` | `Api/Contracts/ControlContracts.cs` | Run control; manual skip operations are removed. |
 | `HealthResponse`, `PrerequisitesResponse`, `PrerequisiteCheckResponse` | `Api/Contracts/HealthContracts.cs` | Health. `ReadinessResponses.cs` maps from the readiness snapshot. |
 | `RepositoryView`, `SpecRunView`, `TicketRunView`, `StepRunView`, `StackLayerView`, `RunEventView`, `MergeStatusView`, `AgentLogView`, `LiveEventView` | `src/WebDevLoop.Core/Queries/` | Read endpoints and SSE. |

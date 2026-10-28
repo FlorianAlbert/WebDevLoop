@@ -1,0 +1,261 @@
+@using WebDevLoop.Infrastructure.Prerequisites
+@using WebDevLoop.Core.Orchestration.SpecQueue
+@inherits ScopedComponentBase
+@implements IDisposable
+@inject DiagnosticReadiness Readiness
+@inject ILogger<SpecPicker> Logger
+
+<section class="card mb-3" aria-labelledby="spec-picker-title">
+    <div class="card-body">
+        <h2 id="spec-picker-title" class="h5">Find parent specs</h2>
+        <p id="spec-picker-help" class="small text-body-secondary">
+            Open parents and at least one open sub-issue must independently opt in with <code>webdevloop</code>.
+            Specs with unfinished runs are excluded. Blocked tickets remain eligible. GitHub changes are checked again when queued.
+        </p>
+        <form class="d-flex flex-wrap gap-2 align-items-end mb-3" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+            <div class="flex-grow-1">
+                <label for="spec-search" class="form-label small">Issue number or title</label>
+                <input id="spec-search" type="search" class="form-control form-control-sm" @bind="_search"
+                       aria-describedby="spec-picker-help" disabled="@_submitting" />
+            </div>
+            <button type="submit" class="btn btn-outline-primary btn-sm" disabled="@_submitting">Search</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-testid="refresh-specs"
+                    @onclick="SearchAsync" disabled="@_submitting">Refresh from GitHub</button>
+            <div class="form-check">
+                <input id="spec-unblocked" class="form-check-input" type="checkbox" @bind="_onlyUnblocked"
+                       @bind:after="SearchAsync" disabled="@_submitting" />
+                <label for="spec-unblocked" class="form-check-label small">No open parent blockers</label>
+            </div>
+        </form>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger small" role="alert">@_error</div>
+        }
+        <div class="small mb-2" role="status" aria-live="polite">
+            @(_loading ? "Loading current GitHub specs..." : $"{AvailableCandidates.Count} candidates loaded. {_selected.Count} selected.")
+        </div>
+        <div class="row g-3">
+            <div class="col-12 col-lg-7" aria-busy="@(_loading ? "true" : "false")">
+                <ul class="list-group" aria-label="Eligible parent specs">
+                    @foreach (SpecCandidateView candidate in AvailableCandidates)
+                    {
+                        <li @key="candidate.IssueNumber" class="list-group-item">
+                            <label class="d-flex align-items-start gap-2 text-break">
+                                <input type="checkbox" class="form-check-input flex-shrink-0"
+                                       aria-label="@($"Select #{candidate.IssueNumber}")"
+                                       checked="@IsSelected(candidate.IssueNumber)" disabled="@(IsDisabled || _submitting || _loading)"
+                                       @onchange="() => Toggle(candidate)" />
+                                <span><strong>#@candidate.IssueNumber</strong> @candidate.Title</span>
+                            </label>
+                        </li>
+                    }
+                </ul>
+                @if (!_loading && AvailableCandidates.Count == 0 && _error is null)
+                {
+                    <p class="small text-body-secondary">No eligible specs match. Try another search or refresh after updating GitHub.</p>
+                }
+                @if (_nextPage is not null)
+                {
+                    <button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-testid="more-specs"
+                            @onclick="LoadMoreAsync" disabled="@(_loading || _submitting)">Load more specs</button>
+                }
+            </div>
+            <div class="col-12 col-lg-5">
+                <h3 class="h6">Selected queue order</h3>
+                <p class="small text-body-secondary">Use Move up and Move down before queueing. Existing queue positions are not changed.</p>
+                <ol class="ps-4" aria-label="Selected specs in queue order">
+                    @for (int index = 0; index < _selected.Count; index++)
+                    {
+                        SpecCandidateView selected = _selected[index];
+                        <li @key="selected.IssueNumber" class="mb-2 text-break" data-selected-issue="@selected.IssueNumber">
+                            <span><strong>#@selected.IssueNumber</strong> @selected.Title</span>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="@($"Move #{selected.IssueNumber} up")"
+                                        disabled="@(IsDisabled || _submitting || index == 0)" @onclick="() => Move(selected, -1)">Move up</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="@($"Move #{selected.IssueNumber} down")"
+                                        disabled="@(IsDisabled || _submitting || index == _selected.Count - 1)" @onclick="() => Move(selected, 1)">Move down</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" aria-label="@($"Remove #{selected.IssueNumber}")"
+                                        disabled="@(IsDisabled || _submitting)" @onclick="() => Remove(selected)">Remove</button>
+                            </div>
+                        </li>
+                    }
+                </ol>
+                <button type="button" class="btn btn-primary btn-sm" data-testid="queue-selection"
+                        disabled="@(IsDisabled || _submitting || _loading || _selected.Count == 0)" aria-busy="@(_submitting ? "true" : null)"
+                        @onclick="SubmitAsync">@(_submitting ? "Queueing selection..." : $"Queue selected ({_selected.Count})")</button>
+                @if (IsDisabled)
+                {
+                    <p class="small text-warning-emphasis mt-2">Queueing is disabled in diagnostic-only mode. <a href="@UiRoutes.Health">See health</a>.</p>
+                }
+            </div>
+        </div>
+        <div role="status" aria-live="polite" aria-label="Selection results">
+            @foreach (var result in _results)
+            {
+                <div class="alert @(result.Outcome == EnqueueOutcome.Queued ? "alert-success" : "alert-warning") small mt-2 mb-0"
+                     data-testid="selection-result" data-issue="@result.SpecIssueNumber">
+                    <strong>#@result.SpecIssueNumber: @result.Outcome.</strong> @result.Message
+                    @if (result.SpecRunId is { } runId)
+                    {
+                        <a href="@UiRoutes.Run(runId.Value)">Open run @runId.Value</a>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    private readonly CancellationTokenSource _lifetime = new();
+    private IReadOnlyList<SpecCandidateView> _selected = [];
+    private IReadOnlyList<SpecCandidateView> _candidates = [];
+    private IReadOnlyList<SpecSelectionResult> _results = [];
+    private CancellationTokenSource? _load;
+    private string? _search;
+    private string? _appliedSearch;
+    private string? _error;
+    private bool _onlyUnblocked;
+    private bool _loading;
+    private bool _submitting;
+    private int? _nextPage;
+
+    [Parameter, EditorRequired]
+    public int RepositoryId { get; set; }
+
+    [Parameter]
+    public EventCallback OnQueued { get; set; }
+
+    [Parameter]
+    public IReadOnlyCollection<int> UnavailableIssueNumbers { get; set; } = [];
+
+    private IReadOnlyList<SpecCandidateView> AvailableCandidates =>
+        _candidates.Where(item => !UnavailableIssueNumbers.Contains(item.IssueNumber)).ToArray();
+
+    private bool IsDisabled => Readiness.Current.Mode != ReadinessMode.Operational;
+
+    protected override Task OnInitializedAsync() => SearchAsync();
+
+    private bool IsSelected(int number) => _selected.Any(item => item.IssueNumber == number);
+
+    private void Toggle(SpecCandidateView candidate)
+    {
+        if (!IsDisabled && !_submitting && !_loading)
+        {
+            _selected = SpecSelection.Toggle(_selected, candidate);
+        }
+    }
+
+    private void Move(SpecCandidateView candidate, int direction)
+    {
+        if (!IsDisabled && !_submitting)
+        {
+            _selected = SpecSelection.Move(_selected, candidate.IssueNumber, direction);
+        }
+    }
+
+    private void Remove(SpecCandidateView candidate)
+    {
+        if (!IsDisabled && !_submitting)
+        {
+            _selected = SpecSelection.Remove(_selected, candidate.IssueNumber);
+        }
+    }
+
+    private Task SearchAsync()
+    {
+        _appliedSearch = _search;
+        return LoadAsync(1, replace: true);
+    }
+
+    private Task LoadMoreAsync() => _nextPage is { } page ? LoadAsync(page, replace: false) : Task.CompletedTask;
+
+    private async Task LoadAsync(int page, bool replace)
+    {
+        if (_submitting)
+        {
+            return;
+        }
+
+        _load?.Cancel();
+        using var load = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _load = load;
+        _loading = true;
+        _error = null;
+        if (replace)
+        {
+            _candidates = [];
+            _nextPage = null;
+        }
+
+        try
+        {
+            CommandResult<SpecCandidatePage> result = await InScopeAsync(services =>
+                services.GetRequiredService<ISpecCandidateQueries>().ListAsync(RepositoryId, _appliedSearch, _onlyUnblocked, page, load.Token));
+            load.Token.ThrowIfCancellationRequested();
+            if (result.IsSuccess)
+            {
+                _candidates = SpecSelection.AppendCandidates(_candidates, result.Value!.Items);
+                _nextPage = result.Value.NextPage;
+            }
+            else
+            {
+                _error = result.Message;
+            }
+        }
+        catch (OperationCanceledException) when (load.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            SpecPickerLog.LoadFailed(Logger, exception, RepositoryId);
+            if (ReferenceEquals(_load, load))
+            {
+                _error = $"Could not load current GitHub specs. Check GitHub access and refresh. {exception.Message}";
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_load, load))
+            {
+                _load = null;
+                _loading = false;
+            }
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (IsDisabled || _submitting || _loading || _selected.Count == 0)
+        {
+            return;
+        }
+
+        _submitting = true;
+        _results = [];
+        try
+        {
+            _results = await InScopeAsync(services => services.GetRequiredService<ISpecSelectionEnqueuer>()
+                .EnqueueAsync(RepositoryId, _selected.Select(item => item.IssueNumber).ToArray(), _lifetime.Token));
+            _selected = SpecSelection.RemoveHandled(_selected, _results);
+            _candidates = SpecSelection.RemoveHandled(_candidates, _results);
+            if (_results.Any(result => result.Outcome.IsHandled()))
+            {
+                await OnQueued.InvokeAsync();
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+}

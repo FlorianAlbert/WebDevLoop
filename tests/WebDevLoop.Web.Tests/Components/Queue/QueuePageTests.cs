@@ -177,7 +177,7 @@ public sealed class QueuePageTests : UiTestContext
     [Theory]
     [InlineData(EnqueueOutcome.AlreadyQueued, "already queued")]
     [InlineData(EnqueueOutcome.RepositoryNotFound, "no longer exists")]
-    [InlineData(EnqueueOutcome.ConcurrencyConflict, "try again")]
+    [InlineData(EnqueueOutcome.ConcurrencyConflict, "Refresh the queue and retry")]
     [InlineData(EnqueueOutcome.Ineligible, "Current issue is not eligible")]
     [InlineData(EnqueueOutcome.GitHubUnavailable, "GitHub lookup failed")]
     public void explains_every_non_queued_outcome(EnqueueOutcome outcome, string expectedText)

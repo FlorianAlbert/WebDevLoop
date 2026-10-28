@@ -8,7 +8,7 @@ public static class SpecRunStatusRules
             [SpecRunStatus.Queued] = [SpecRunStatus.WaitingForDependency, SpecRunStatus.Preparing],
             [SpecRunStatus.WaitingForDependency] = [SpecRunStatus.Preparing],
             [SpecRunStatus.Preparing] = [SpecRunStatus.Running],
-            [SpecRunStatus.Running] = [SpecRunStatus.ParentReviewing],
+            [SpecRunStatus.Running] = [SpecRunStatus.ParentReviewing, SpecRunStatus.Completed],
             [SpecRunStatus.ParentReviewing] = [SpecRunStatus.Running, SpecRunStatus.Testing],
             // Testing -> Completed is the no-PR completion path.
             [SpecRunStatus.Testing] = [SpecRunStatus.Running, SpecRunStatus.ReadyForReview, SpecRunStatus.Completed],

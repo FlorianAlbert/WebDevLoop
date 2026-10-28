@@ -10,6 +10,7 @@ internal sealed class FindingIssuanceConfiguration : IEntityTypeConfiguration<Fi
     {
         builder.ToTable("FindingIssuances");
         builder.HasKey(finding => finding.Id);
+        builder.Property(finding => finding.Status).IsConcurrencyToken();
         builder.HasOne<SpecRun>().WithMany().HasForeignKey(finding => finding.SpecRunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<StepRun>().WithMany().HasForeignKey(finding => finding.SourceStepRunId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(finding => new { finding.SpecRunId, finding.Fingerprint })

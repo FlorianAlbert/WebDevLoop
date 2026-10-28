@@ -319,7 +319,7 @@ Good to know:
 | `FrontierEventHandler` (Frontier) | Recomputes the ticket frontier (which tickets may start) |
 | `ReviewLoopEventHandler` (ReviewLoop) | Starts review loops for tickets entering `Reviewing` |
 | `IntegrationEventHandler` (Integration) | Starts integration sagas for tickets entering `Integrating` |
-| `ParentReviewEventHandler` (Completion/ParentReview) | Starts the parent review when all tickets are done |
+| `ParentReviewEventHandler` (Completion/ParentReview) | Rechecks completion permission and remaining eligible work (defer, stop, no work or scoped review); launches review on `ParentReviewing` |
 | `TestingEventHandler` (Completion/Testing) | Starts the tester |
 | `CompletionEventHandler` (Completion/ReadyAndMerge) | Starts completion after a passed test (or abort) |
 | `AttentionTriageEventHandler` (Attention) | Starts the resolution pipeline when something enters `NeedsAttention` |

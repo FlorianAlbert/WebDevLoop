@@ -7,8 +7,8 @@ namespace WebDevLoop.Core.Orchestration.Preparation;
 /// <summary>
 /// Workflow step 1: snapshots the spec's open sub-issues as <see cref="TicketRun"/>s and their native blocking edges as
 /// <see cref="TicketDependency"/>s. Closed sub-issues are already done and edges to issues outside the spec are not part of
-/// the ticket DAG. Idempotent per run: an existing snapshot is kept. A spec without any open sub-issue is rejected: WebDevLoop
-/// does not split a spec itself, and a run without tickets would only reach the parent review with an empty diff.
+/// the ticket DAG. Idempotent per run: an existing snapshot is kept. If work disappears after enqueue, the running-work
+/// decision finishes the run explicitly instead of starting an empty parent review.
 /// </summary>
 public sealed class SpecSnapshotter(IGitHubIssues issues, ITicketRunRepository ticketRuns, IIdGenerator ids, IClock clock)
 {
@@ -22,13 +22,6 @@ public sealed class SpecSnapshotter(IGitHubIssues issues, ITicketRunRepository t
 
         SpecIssueGraph graph = await issues.GetSpecGraphAsync(run.ParentIssue, cancellationToken);
         IssueSnapshot[] openTickets = graph.Tickets.Where(ticket => ticket.State == IssueState.Open).ToArray();
-        if (openTickets.Length == 0)
-        {
-            return AttentionReasons.SpecHasNoTickets(
-                $"Spec {run.ParentIssue} has no open ticket sub-issues, so there is nothing to implement. "
-                + "WebDevLoop does not split a spec into tickets: add the tickets as sub-issues of the spec on GitHub, then retry the run.");
-        }
-
         DependencyEdge<IssueRef>[] edges = graph.TicketDependencies
             .Select(edge => (Blocked: Find(openTickets, edge.Blocked), Blocking: Find(openTickets, edge.Blocking)))
             .Where(edge => edge.Blocked is not null && edge.Blocking is not null)

@@ -14,10 +14,14 @@
 
     [Parameter] public string? FailureReason { get; set; }
 
+    [Parameter] public string? WorkDecisionReason { get; set; }
+
     private string Describe() => Status switch
     {
         SpecRunStatus.ReadyForReview => $"Stack ready for review ({LayerCount} pull requests).",
         SpecRunStatus.AwaitingMerge => $"Awaiting merge of {LayerCount} stacked pull requests into the base branch.",
+        SpecRunStatus.Completed when LayerCount == 0 => "Completed without a pull request.",
+        SpecRunStatus.Completed when WorkDecisionReason is not null => "Automation finished without verifying a merge. Existing branches and pull requests are preserved.",
         SpecRunStatus.Completed => "Merged: the base branch contains the top layer of the stack.",
         SpecRunStatus.NeedsAttention => $"Needs attention: {NeedsAttentionText()}.",
         SpecRunStatus.Aborted => "Aborted before the stack was merged.",

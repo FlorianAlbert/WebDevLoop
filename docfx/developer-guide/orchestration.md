@@ -37,7 +37,7 @@ All derive from <xref:WebDevLoop.Core.Events.WorkflowEvent>.
 | <xref:WebDevLoop.Core.Events.TicketRunStatusChanged> | every ticket transition | frontier, review loop, integration, parent review, attention handlers |
 | <xref:WebDevLoop.Core.Events.StepRunStatusChanged> | step start and finish | run event log, live UI |
 | <xref:WebDevLoop.Core.Events.SagaCheckpointAdvanced> | integration saga | run event log, live UI |
-| <xref:WebDevLoop.Core.Events.FrontierReconciliationRequested> | preparation, ticket graph reconciliation, every recovery cycle | preparation, frontier, review loop, integration, attention handlers |
+| <xref:WebDevLoop.Core.Events.FrontierReconciliationRequested> | preparation, ticket graph reconciliation, every recovery cycle | preparation, frontier, review loop, integration, work completion/parent review, attention handlers |
 | `SpecTestingPassed` | `SpecTestRunner` | `CompletionEventHandler` |
 | `SpecCompletionReported`, `SpecWorktreesCleanedUp`, `SpecStackAwaitingTrunk`, `RunControlApplied` | completion, merge tracking, control | live UI only |
 
@@ -49,10 +49,10 @@ All derive from <xref:WebDevLoop.Core.Events.WorkflowEvent>.
 | --- | --- | --- |
 | `SpecQueueEventHandler` | spec queued; spec left active slot or reached a state dependents wait for | `SpecQueueScheduler.ScheduleRepositoryAsync` |
 | `PreparationEventHandler` | spec enters `Preparing`; idle `Preparing` spec on reconciliation | launch `SpecPreparationService` |
-| `FrontierEventHandler` | spec enters `Running`; reconciliation; ticket integrated, skipped or retried; implementer slot freed | `FrontierService.ReconcileAsync` or `ReconcileAllRunningAsync` |
+| `FrontierEventHandler` | spec enters `Running`; reconciliation; ticket integrated, skipped or retried; implementer slot freed | `FrontierService.ReconcileAsync` or `ReconcileAllRunningAsync`, including a completion decision |
 | `ReviewLoopEventHandler` | ticket enters `Reviewing` from `Implementing` or `NeedsAttention`; slot freed (fix waiting); reconciliation of idle `Reviewing` tickets | launch `TicketReviewLoop` |
 | `IntegrationEventHandler` | ticket enters `Integrating`; another ticket integrated; reconciliation | launch `IntegrationSagaRunner` |
-| `ParentReviewEventHandler` | ticket integrated, skipped or aborted; spec enters `Running`; spec enters `ParentReviewing` | `ParentReviewStarter`, launch `ParentSpecReviewRunner` |
+| `ParentReviewEventHandler` | reconciliation; ticket integrated, skipped or aborted; spec enters `Running`; spec enters `ParentReviewing` | `WorkCompletionDecider` (defer, finish or review); launch `ParentSpecReviewRunner` on `ParentReviewing` |
 | `TestingEventHandler` | spec enters `Testing` | launch `SpecTestRunner` |
 | `CompletionEventHandler` | `SpecTestingPassed`; spec `Aborted` | launch `SpecCompletionService` |
 | `AttentionTriageEventHandler` | spec or ticket enters `NeedsAttention`; reconciliation | launch `AttentionTriageService` |
@@ -72,13 +72,28 @@ Comments in Core refer to numbered workflow steps.
 | 5 | Review (two axes) | `TicketReviewLoop`, `TwoAxisReviewRunner` |
 | 6 | Fix review findings | `ReviewFixRunner` |
 | 7 | Integrate (squash, push, PR layer) | `IntegrationSagaRunner`, `IntegrationSagaSteps` |
-| 8 | Recompute frontier | `FrontierService`, `TicketFrontier` |
-| 9 | Parent review | `ParentReviewStarter`, `ParentSpecReviewRunner` |
+| 8 | Recompute frontier | `FrontierService`, `CurrentWorkEligibility`, `TicketFrontier` |
+| 9 | Decide completion, then scoped parent review | `WorkCompletionDecider`, `ParentSpecReviewRunner` |
 | 10 | Finding tickets from review | `FindingTicketIssuer` |
 | 11 | Test | `SpecTestRunner`, `TesterAttemptRunner` |
 | 12 | Finding tickets from tester | `FindingTicketIssuer` |
 | 13 | Verify stack, mark ready | `SpecCompletionService`, `StackVerifier` |
 | 14 | Track the human merge | `MergeTrackingService` |
+
+## Frontier and current work decisions
+
+The shared `CurrentWorkEligibility` reader lives in `Orchestration/WorkSelection`, independent of frontier and
+completion. Both services receive it through DI. It reads current parent/sub-issue state and labels, verifies
+independent `webdevloop` opt-in, and checks current native blockers rather than trusting the saved DAG.
+Required query failures defer work with a recoverable reason. These are decision-time reads, not continuous
+label monitoring. Selected tickets may finish implementation, review and integration after opt-out, including retries.
+`TicketRun.IsSelectedAndOutstanding` defines that in-flight work consistently for eligibility, retry dispatch and completion.
+
+After dispatch, `FrontierService` passes the current pass's eligibility result to its injected `WorkCompletionDecider`.
+Completion reads local ticket state after dispatch, so newly selected work remains outstanding, without repeating
+the GitHub eligibility queries or duplicating their diagnostics. Each new frontier pass and independent completion
+event reads fresh GitHub eligibility; snapshots are not cached across decisions. Repository-label readiness checks
+also gate new work and parent review without silently recreating a missing label.
 
 ## Happy path of one ticket
 
@@ -191,12 +206,24 @@ Rules:
 ```mermaid
 sequenceDiagram
     participant PH as ParentReviewEventHandler
+    participant WD as WorkCompletionDecider
     participant PS as ParentSpecReviewRunner
     participant TR as SpecTestRunner
     participant CS as SpecCompletionService
     participant MT as MergeTrackingService
     participant DB as SQLite
-    PH->>DB: all tickets done, spec to ParentReviewing (ParentReviewStarter)
+    PH->>WD: DecideCompletionAsync
+    WD->>WD: fresh permission and remaining eligible work
+    alt required query unavailable, selected work or eligible tickets remain
+        WD->>DB: remain Running, persist recoverable reason if any
+    else parent opted out or closed
+        WD->>DB: Completed with stop reason; preserve branches and PRs
+    else no integrated tickets
+        WD->>DB: Completed with no-eligible-work reason; no review or PR
+    else integrated work and no remaining eligible tickets
+        WD->>DB: ParentReviewing, status event
+    end
+    opt spec entered ParentReviewing
     PH->>PS: launch parent-review
     PS->>PS: two reviewers on a read-only checkout of the integration tip
     alt findings
@@ -214,13 +241,18 @@ sequenceDiagram
     CS->>DB: ReadyForReview, clean worktrees, AwaitingMerge
     MT->>MT: poll GitHub for the human merge
     MT->>DB: Completed
+    end
 ```
 
-- **Starter.** `ParentReviewStarter` moves a `Running` spec to `ParentReviewing` once every ticket is terminal. A spec with no tickets never starts (`NoTickets`).
+- **Work completion.** `WorkCompletionDecider.DecideCompletionAsync` reads current work, classifies it with a pure decision function, then applies the returned status/reason and saves its outbox event. `WorkCompletionResult` pairs the outcome with a reportable lookup error. Outcomes include `ReviewStarted`, `NotRunning`, `TicketsOutstanding`, `Deferred`, `Stopped`, `NoEligibleWork`, `ConcurrencyConflict`, `RepositoryLabelMissing` and `GitHubUnavailable`. Selected work finishes first. Parent opt-out or closure then completes without parent review. No remaining eligible work completes without review or PR creation if nothing was integrated; otherwise only integrated work goes to parent review. Eligible blocked tickets remain outstanding, never empty or ready for premature review.
+- **Decision reason.** `SpecRun.WorkDecisionReason` persists query failures, blocked-work deferrals and explicit stopped/no-work completion reasons. Its setter is private; `SetWorkDecisionReason` accepts reasons only while `Running` or `Completed`. Every domain status transition clears the old reason; the completion decision records its new outcome after transitioning. Queue and detail views expose it without masking later attention or abort explanations. Terminal runs are not revived by label changes; explicit enqueue after renewed eligibility creates a new run.
 - **Parent review.** `TwoAxisReviewRunner` is reused with scope `ParentSpec`, diffed against the integration base. Findings go through `FindingTicketIssuer`: sub-issues of the spec plus ticket runs, with blocking edges from the findings' `blocked_by`. The issuer records a `FindingIssuance` before creating the issue and finds an existing issue by fingerprint after a crash, so no ticket is created twice.
 - **Tester.** `SpecTestRunner` and `TesterAttemptRunner`. The app reserves a port from `TestPortRange` and a `TestLease`, checks out the integration tip into a run-scoped test workspace, runs the tester, watches the port, and always kills leftover processes and releases the lease. The verdict is stored with the step, so a restart does not test the same tip twice. `pass`, `issues_found`, `blocked`.
 - **Completion.** `SpecCompletionService` acts on persisted state only. With a passing verdict for the current cycle and a matching tip it verifies the stack (`StackVerifier`), marks every draft PR ready, moves to `ReadyForReview`, cleans implementer worktrees, reports the integration branch and moves to `AwaitingMerge`. Without PR layers it pushes the integration branch, closes the tickets, comments once on the spec (hidden marker) and completes. On `Aborted` it only cleans up.
 - **Merge tracking.** `MergeTrackingWorker` calls `MergeTrackingService.TrackAllAsync` every minute by default. It also resumes interrupted completions. Outcomes: merged completes the spec; closed unmerged parks it; all merged but trunk lacks the top layer waits for `TrunkContainmentTimeout`, then parks it.
+
+Opt-out completion bypasses normal publishing and cleanup: branches and PRs stay intact.
+`MergeStatusProjection` reports a preserved stack as `Stopped`, not `Merged`.
 
 ## Recovery and reconciliation
 

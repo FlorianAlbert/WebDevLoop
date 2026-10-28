@@ -15,6 +15,34 @@ public sealed class CompareAndSwapTests : IDisposable
     public void Dispose() => _harness.Dispose();
 
     [Fact]
+    public async Task finding_issuance_and_recovery_cannot_create_two_ticket_runs_for_the_same_finding()
+    {
+        (_, RunId specRunId) = await TestData.SeedSpecRunAsync(_harness);
+        var fingerprint = new FindingFingerprint("Missing validation");
+        using (PersistenceScope seed = _harness.OpenScope())
+        {
+            StepRun step = TestData.NewStep(specRunId, null, "s-review", StepKind.ParentReview, AgentRole.ReviewerSpecification);
+            seed.Steps.Add(step);
+            seed.Findings.Add(FindingIssuance.Plan(specRunId, step.Id, FindingAxis.Specification, fingerprint, TestData.Now));
+            await seed.SaveAsync();
+        }
+
+        using PersistenceScope issuer = _harness.OpenScope();
+        using PersistenceScope recovery = _harness.OpenScope();
+        FindingIssuance first = (await issuer.Findings.FindAsync(specRunId, fingerprint, CancellationToken.None))!;
+        FindingIssuance second = (await recovery.Findings.FindAsync(specRunId, fingerprint, CancellationToken.None))!;
+        first.RecordCreated(12, 9012, TestData.Now);
+        second.RecordCreated(12, 9012, TestData.Now);
+        issuer.Tickets.Add(TestData.NewTicketRun(specRunId, "t-issuer", 12));
+        recovery.Tickets.Add(TestData.NewTicketRun(specRunId, "t-recovery", 12));
+        await issuer.SaveAsync();
+
+        Assert.Equal(SaveOutcome.ConcurrencyConflict, await recovery.UnitOfWork.SaveChangesAsync(CancellationToken.None));
+        using PersistenceScope read = _harness.OpenScope();
+        Assert.Single(await read.Tickets.ListBySpecRunAsync(specRunId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task two_concurrent_claims_of_the_same_ready_ticket_let_exactly_one_succeed()
     {
         await SeedReadyTicketAsync();

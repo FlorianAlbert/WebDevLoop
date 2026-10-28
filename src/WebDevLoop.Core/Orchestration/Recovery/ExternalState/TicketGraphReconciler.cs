@@ -64,6 +64,8 @@ public sealed class TicketGraphReconciler(
             outbox.Append(new FrontierReconciliationRequested(spec.Id, pass.Now));
         }
 
+        // A stale Running graph must lose to a concurrent phase change or another graph writer, including finding issuance.
+        spec.AdvanceVersion();
         return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved ? pass.Actions : [];
     }
 

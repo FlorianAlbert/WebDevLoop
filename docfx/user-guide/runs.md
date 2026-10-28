@@ -30,6 +30,13 @@ Queued, then Preparing, Running, Parent reviewing, Testing, Ready for review, Aw
 
 After parent review or testing, the run can go back to **Running** when the agents found problems. Those problems became new finding tickets. A run can also end in **Needs attention** or **Aborted**.
 
+The queue and run detail show recoverable work-decision reasons and explicit parent opt-out/no-eligible-work
+outcomes. Selected tickets may finish implementation, review and integration after label removal. If the parent
+opts out, automation completes after selected work, without new tickets or parent review; branches and PRs stay
+intact and a preserved stack is not reported as merged. With no eligible tickets and no integrated work, completion
+starts no empty review or PR. Integrated work still receives scoped review; eligible blocked tickets remain
+outstanding. Opt in and queue explicitly to start again: finished runs never revive from label changes.
+
 New finding issues receive the **`webdevloop`** label (WebDevLoop Opt-in) and are linked to the spec as sub-issues,
 so they can be worked on like normal tickets. If you remove that label, reusing the finding or recovering it after
 a restart does not add it back.

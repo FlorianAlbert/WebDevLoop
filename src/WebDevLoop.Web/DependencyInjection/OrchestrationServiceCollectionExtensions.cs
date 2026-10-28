@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Orchestration.Attention;
+using WebDevLoop.Core.Orchestration.Completion;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Orchestration.Completion.ReadyAndMerge;
 using WebDevLoop.Core.Orchestration.Completion.Testing;
@@ -14,6 +15,7 @@ using WebDevLoop.Core.Orchestration.Recovery.Startup;
 using WebDevLoop.Core.Orchestration.ReviewLoop;
 using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Orchestration.TicketExecution;
+using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
 using WebDevLoop.Web.Background;
@@ -48,6 +50,7 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddScoped<ImplementerCapacity>();
         services.TryAddScoped<TicketDispatcher>();
         services.TryAddScoped<TicketImplementationRunner>();
+        services.TryAddScoped<CurrentWorkEligibility>();
         services.TryAddScoped<FrontierService>();
 
         services.TryAddScoped<TwoAxisReviewRunner>();
@@ -60,7 +63,7 @@ public static class OrchestrationServiceCollectionExtensions
         services.TryAddScoped<IntegrationSagaRunner>();
 
         services.TryAddScoped<FindingTicketIssuer>();
-        services.TryAddScoped<ParentReviewStarter>();
+        services.TryAddScoped<WorkCompletionDecider>();
         services.TryAddScoped<ParentSpecReviewRunner>();
         services.TryAddScoped<TesterAttemptRunner>();
         services.TryAddScoped<SpecTestRunner>();

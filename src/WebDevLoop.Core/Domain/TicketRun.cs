@@ -51,6 +51,10 @@ public sealed class TicketRun : VersionedEntity
 
     public bool IsTerminal => Status.IsTerminal();
 
+    /// <summary>In-flight work that must finish before spec completion, including attention and previously selected retries.</summary>
+    public bool IsSelectedAndOutstanding =>
+        !IsTerminal && (Attempt > 0 || Status is not (TicketRunStatus.Blocked or TicketRunStatus.Ready));
+
     public static TicketRun Create(
         TicketRunId id,
         RunId specRunId,

@@ -32,7 +32,8 @@ stateDiagram-v2
     Queued --> Preparing: free slot, startable
     WaitingForDependency --> Preparing: every current native parent blocker closed
     Preparing --> Running: branch created, tickets snapshotted
-    Running --> ParentReviewing: every ticket done
+    Running --> ParentReviewing: integrated work, no selected or eligible work remains
+    Running --> Completed: parent opted out/closed, or no eligible/integrated work
     ParentReviewing --> Running: findings become tickets
     ParentReviewing --> Testing: review clean
     Testing --> Running: issues become tickets
@@ -59,15 +60,27 @@ stateDiagram-v2
 | `WaitingForDependency` | no | At least one current native GitHub blocker of the parent issue is open. Unverifiable state defers starting; once all blockers are closed or removed, the spec can start from current trunk. |
 | `Preparing` | yes | Clone/fetch, snapshot, integration branch, optional exploration |
 | `Running` | yes | Tickets are being worked on |
-| `ParentReviewing` | yes | Two reviewers check the whole integration branch |
+| `ParentReviewing` | yes | Two reviewers check integrated work only |
 | `Testing` | yes | Tester agent runs the integrated app |
 | `ReadyForReview` | no | Transient: PRs are marked ready, worktrees are cleaned |
 | `AwaitingMerge` | no | Waiting for a human to merge the stack; polled by merge tracking |
-| `Completed` | no | Terminal |
+| `Completed` | no | Terminal: merged, completed without PRs, stopped after opt-out/closure, or no eligible work |
 | `NeedsAttention` | no | Parked with an <xref:WebDevLoop.Core.Domain.AttentionReason> |
 | `Aborted` | no | Terminal |
 
 `IsActive` (`Preparing`, `Running`, `ParentReviewing`, `Testing`) decides slot use. `ReadyForReview` and `AwaitingMerge` are non-terminal but free the slot so the next spec can start. `TransitionTo` also keeps counters and timestamps: `StartedAt` on first `Preparing`, `ReviewCycle++` on `ParentReviewing`, `TestCycle++` on `Testing`, `ReadyAt` on `ReadyForReview`, `CompletedAt` on a terminal state.
+
+`WorkCompletionDecider` rechecks permission and remaining eligible work at completion decisions, including after
+frontier dispatch. Required GitHub failures defer safely. Parent opt-out/closure lets selected tickets finish,
+then completes without new selection or parent review, preserving branches and PRs. With no selected or eligible
+work left, nothing integrated means explicit no-eligible-work completion without an empty review or PR; integrated
+work proceeds to scoped parent review. Eligible blocked tickets remain outstanding.
+
+`WorkDecisionReason` records a running deferral or an explicit stopped/no-work completion outcome. It is
+private-set and updated through `SetWorkDecisionReason`; every status transition clears the old reason.
+This keeps later attention/abort explanations authoritative. The queue, run detail and API expose the reason.
+A preserved opt-out stack has query merge state `Stopped`, not `Merged`. Finished runs do not revive on label
+changes: opt in again and enqueue explicitly to create a new run.
 
 ## Ticket run states
 
@@ -149,7 +162,7 @@ All end states are final. In practice a runner creates a step and starts it in t
 
 ## The ticket DAG
 
-- **Snapshot.** At preparation, `SpecSnapshotter` reads the spec's sub-issues and their native "blocked by" edges from GitHub. Only **open** sub-issues become `TicketRun`s. Edges to issues outside the spec are dropped. A spec without open sub-issues needs attention (`SpecHasNoTickets`): WebDevLoop does not split a spec itself. A cycle needs attention (`TicketDependencyCycle`). The snapshot is kept on replay.
+- **Snapshot.** At preparation, `SpecSnapshotter` reads the spec's sub-issues and their native "blocked by" edges from GitHub. Only **open** sub-issues become `TicketRun`s; snapshot membership is not permission to implement. Edges to issues outside the spec are dropped from the display graph. If children close or disappear after enqueue, preparation accepts an empty snapshot; the fresh completion decision handles no eligible work without attention or an empty review. WebDevLoop does not split a spec itself. A cycle needs attention (`TicketDependencyCycle`). The snapshot is kept on replay.
 - **Edges.** `TicketDependency(Blocked, Blocking)`; `DependencyGraph.EnsureAcyclic` rejects cycles.
 - **Frontier.** <xref:WebDevLoop.Core.Orchestration.Frontier.FrontierService> re-reads each unstarted ticket and its current native blockers through `IGitHubIssues`, stopping at the first open blocker. All blockers must be closed, including non-opted-in, external, and cross-repository issues. Closure is sufficient without PR merge; local completion is insufficient while an issue stays open. The saved DAG is not authoritative. Missing or unavailable information defers only the affected ticket; unrelated tickets and other running specs continue. Results identify GitHub lookup errors; the event handler reports them to the logging boundary after reconciliation, and periodic recovery retries. <xref:WebDevLoop.Core.Orchestration.Frontier.TicketFrontier> orders verified candidates by issue number.
 - **Dispatch.** <xref:WebDevLoop.Core.Orchestration.Frontier.FrontierService> saves the unblocking, then <xref:WebDevLoop.Core.Orchestration.TicketExecution.TicketDispatcher> claims `Ready` tickets (`Ready` to `Implementing`) up to the free capacity: `min(global limit − used, per-repository limit − used)`.

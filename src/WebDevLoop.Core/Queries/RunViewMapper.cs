@@ -23,7 +23,8 @@ public static class RunViewMapper
         run.CompletedAt,
         run.FailureReason,
         run.NeedsAttentionFrom,
-        run.Status == SpecRunStatus.NeedsAttention ? run.Attention ?? AttentionReasons.Unclassified(run.FailureReason, forTicket: false) : null);
+        run.Status == SpecRunStatus.NeedsAttention ? run.Attention ?? AttentionReasons.Unclassified(run.FailureReason, forTicket: false) : null,
+        run.WorkDecisionReason);
 
     public static TicketRunView ToView(this TicketRun ticket, IEnumerable<TicketRunId> blockedBy) => new(
         ticket.Id.Value,

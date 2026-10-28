@@ -41,6 +41,18 @@ public sealed class MergeStatusProjectionTests
     }
 
     [Fact]
+    public void a_run_stopped_after_parent_opt_out_does_not_claim_its_preserved_stack_was_merged()
+    {
+        SpecRun spec = Spec(SpecRunStatus.Preparing, SpecRunStatus.Running, SpecRunStatus.Completed);
+        spec.SetWorkDecisionReason("Parent opted out; branches and pull requests are preserved.");
+
+        MergeStatusView status = MergeStatusProjection.From(spec.ToView(), Stack);
+
+        Assert.Equal(MergeState.Stopped, status.State);
+        Assert.Equal("Parent opted out; branches and pull requests are preserved.", status.Detail);
+    }
+
+    [Fact]
     public void a_completed_run_with_a_stack_is_merged()
     {
         MergeStatusView status = MergeStatusProjection.From(Spec([.. ToAwaitingMerge, SpecRunStatus.Completed]).ToView(), Stack);

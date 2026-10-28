@@ -2,7 +2,7 @@ using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Ports;
 
-namespace WebDevLoop.Core.Orchestration.Completion.ParentReview;
+namespace WebDevLoop.Core.Orchestration.Completion;
 
 /// <summary>Applies spec status changes together with their outbox events (saved by the caller's unit of work).</summary>
 internal sealed class SpecRunJournal(IOutbox outbox, IClock clock)

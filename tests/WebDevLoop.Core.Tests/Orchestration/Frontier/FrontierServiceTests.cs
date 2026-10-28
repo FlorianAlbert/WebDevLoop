@@ -12,6 +12,87 @@ public sealed class FrontierServiceTests
     private readonly TicketExecutionFixture _fixture = new();
 
     [Fact]
+    public async Task one_frontier_pass_uses_one_github_snapshot_for_dispatch_and_completion()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
+        var missing = new IssueRef("elsewhere", "library", 900);
+        _fixture.Issues.SetBlockedBy(_fixture.Ticket(spec[2]).Issue, missing);
+        IssueRef parent = _fixture.Spec(spec.Id).ParentIssue;
+        IssueRef first = _fixture.Ticket(spec[1]).Issue;
+        IssueRef second = _fixture.Ticket(spec[2]).Issue;
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal([spec[1]], result.Dispatched);
+        Assert.Equal(FrontierOutcome.GitHubUnavailable, result.Outcome);
+        Assert.Single(result.LookupErrors);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Contains("unavailable", _fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Equal([parent], _fixture.Issues.SubIssueReads);
+        Assert.Equal(4, _fixture.Issues.IssueReads.Count);
+        foreach (IssueRef issue in new[] { parent, first, second, missing })
+        {
+            Assert.Single(_fixture.Issues.IssueReads, read => read == issue);
+        }
+    }
+
+    [Fact]
+    public async Task permission_changes_during_dispatch_apply_to_the_next_frontier_pass()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        IssueSnapshot parent = await _fixture.Issues.GetIssueAsync(_fixture.Spec(spec.Id).ParentIssue, TicketExecutionFixture.Token);
+        _fixture.Launcher.Run = _ =>
+        {
+            _fixture.Issues.Seed(parent with { Labels = [] });
+            return Task.CompletedTask;
+        };
+        var frontier = _fixture.Frontier();
+
+        await frontier.ReconcileAsync(spec.Id, TicketExecutionFixture.Token);
+
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Null(_fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(spec[1]).Status);
+
+        await frontier.ReconcileAsync(spec.Id, TicketExecutionFixture.Token);
+
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Contains("opted out", _fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Single(_fixture.Launcher.Launched);
+    }
+
+    [Fact]
+    public async Task ready_work_loses_permission_but_a_selected_ticket_can_retry_and_finish_after_parent_opt_out()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
+        _fixture.Settings.Configure(spec.RepositoryId, settings => settings with { MaxConcurrentImplementersPerRepo = 1 });
+        await _fixture.ReconcileAsync(spec.Id);
+        Assert.Equal(TicketRunStatus.Ready, _fixture.Ticket(spec[2]).Status);
+        IssueSnapshot second = await _fixture.Issues.GetIssueAsync(_fixture.Ticket(spec[2]).Issue, TicketExecutionFixture.Token);
+        _fixture.Issues.Seed(second with { Labels = ["ready-for-agent"] });
+
+        await _fixture.ReconcileAsync(spec.Id);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(spec[2]).Status);
+
+        IssueSnapshot parent = await _fixture.Issues.GetIssueAsync(_fixture.Spec(spec.Id).ParentIssue, TicketExecutionFixture.Token);
+        IssueSnapshot selected = await _fixture.Issues.GetIssueAsync(_fixture.Ticket(spec[1]).Issue, TicketExecutionFixture.Token);
+        _fixture.Issues.Seed(parent with { Labels = [] });
+        _fixture.Issues.Seed(selected with { Labels = [] });
+        await _fixture.MoveAsync(spec[1], TicketRunStatus.NeedsAttention, TicketRunStatus.Ready);
+        await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(2, _fixture.Ticket(spec[1]).Attempt);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        await _fixture.IntegrateAsync(spec, spec[1]);
+        await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(SpecRunStatus.Completed, _fixture.Spec(spec.Id).Status);
+        Assert.Contains("opted out", _fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Equal(TicketRunStatus.Blocked, _fixture.Ticket(spec[2]).Status);
+        Assert.DoesNotContain(_fixture.Launcher.Launched, assignment => assignment.TicketRunId == spec[2]);
+    }
+
+    [Fact]
     public async Task a_repository_label_lookup_failure_defers_only_its_specs_and_recovery_resumes_them()
     {
         SeededSpec affected = await _fixture.SeedRunningSpecAsync("app", (1, []));

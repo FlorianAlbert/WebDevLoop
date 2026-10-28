@@ -51,7 +51,6 @@ These are the most common ones. The card always shows the exact steps for your c
 
 | Summary on the card | Cause | What to do |
 | --- | --- | --- |
-| The spec has no open tickets to implement. | You | Add the work as sub-issues of the spec on GitHub, then **Retry**. |
 | The tickets of this spec block each other in a circle... | You | On GitHub, remove one "blocked by" link of the circle, then **Retry**. |
 | The base branch '...' does not exist on GitHub. | You | Check the branch. If it has another name, set the base branch in [Settings](settings.md#general), then **Retry**. |
 | The repository of this run is no longer registered... | You | Add the repository again on [Repositories](repositories.md), queue the spec again and abort the old run. |

@@ -2,6 +2,8 @@ using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Completion;
+using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Orchestration.Findings;
 using WebDevLoop.Core.Orchestration.Frontier;
@@ -59,13 +61,13 @@ internal sealed class ParentReviewFixture
             workflow, workflow, workflow, workflow, Review.Settings, git, Review.Reviews(workflow, git), issuer, workflow, scope, Execution.Clock);
     }
 
-    public ParentReviewStarter Starter()
+    public WorkCompletionDecider Completion()
     {
         CasWorkflowScope scope = Db.OpenScope();
-        return new ParentReviewStarter(scope, scope, scope, scope, Execution.Clock, new RepositoryOptIn(Execution.Labels));
+        return new WorkCompletionDecider(scope, scope, new CurrentWorkEligibility(Issues), scope, scope, Execution.Clock, new RepositoryOptIn(Execution.Labels));
     }
 
-    public ParentReviewEventHandler Handler() => new(Starter(), Launcher);
+    public ParentReviewEventHandler Handler() => new(Completion(), Launcher);
 
     /// <summary>
     /// Outbox dispatcher: delivers committed events to the frontier (WP-14) and parent-review handlers until no new events

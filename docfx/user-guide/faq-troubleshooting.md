@@ -45,8 +45,10 @@ Triage labels do not grant WebDevLoop Opt-in. Queueing checks current GitHub dat
 can make a previously eligible issue ineligible. A GitHub lookup failure also queues nothing: check access or retry.
 Eligible but blocked tickets do not prevent queueing. See [Queue](queue.md#queue-a-spec).
 
-**I queued a spec and it says "The spec has no open tickets to implement".**
-WebDevLoop does not split specs. Add the work as open sub-issues of the spec on GitHub, then press **Retry** on the run. See [Needs attention](needs-attention.md#the-spec-or-the-repository).
+**My run completed with "No eligible work".**
+Its open, opted-in tickets disappeared, closed or opted out before any were integrated. The run finishes without
+an empty review or PR. Add or opt in open sub-issues, ensure the parent is opted in, then queue explicitly again.
+Changing labels does not revive the finished run; **Retry** is for needs-attention runs.
 
 **My spec is "Queued" and nothing happens.**
 It waits for a free slot. By default one spec per repository runs at a time. Check **Active slots** on the [Queue](queue.md#slots-and-parent-blockers) page. Raise **Max active specs per repository** in [Settings](settings.md#concurrency-review-and-retries) if you want more at once.

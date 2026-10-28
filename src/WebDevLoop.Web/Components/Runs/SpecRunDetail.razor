@@ -33,6 +33,10 @@ else if (_spec is not null)
     {
         <p class="alert alert-danger" data-testid="failure-reason">@failure</p>
     }
+    @if (_spec.WorkDecisionReason is { } decision)
+    {
+        <p class="alert alert-info" data-testid="work-decision-reason">@decision</p>
+    }
 
     <SectionCard Title="Details" data-testid="spec-details">
         <dl class="fact-list">
@@ -60,7 +64,7 @@ else if (_spec is not null)
 
     <TicketDagView Tickets="_tickets" Sagas="_sagas" />
     <StackLayersPanel Layers="_stack" />
-    <MergeTrackingPanel Status="_spec.Status" LayerCount="_stack.Count" Attention="_spec.Attention" FailureReason="@_spec.FailureReason" />
+    <MergeTrackingPanel Status="_spec.Status" LayerCount="_stack.Count" Attention="_spec.Attention" FailureReason="@_spec.FailureReason" WorkDecisionReason="@_spec.WorkDecisionReason" />
     <RunEventsTimeline Events="_events" />
 }
 

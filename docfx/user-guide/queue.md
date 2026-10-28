@@ -125,10 +125,17 @@ Runs are grouped into lanes. A lane only shows when it has runs. Within a lane, 
 | Testing | The tester agent runs the integrated app. |
 | Ready for review | The stack of pull requests is ready for you. |
 | Awaiting merge | The stack is open and waits for you to merge it. |
-| Completed | The stack was merged. |
+| Completed | The stack was merged, or automation finished without further work. The note explains parent opt-out or no eligible work. |
 | Needs attention | The run stopped. The row shows the reason and a link such as **Fix and continue**. |
 | Aborted | The run was cancelled. |
 
 Every row shows the issue number, the title, the status, a short note and a **Details** link to the [run page](runs.md).
+
+Permission is checked again when selecting tickets and deciding completion. Removing a ticket's `webdevloop`
+label prevents new selection but lets selected work finish. If the parent opts out, selected tickets finish
+before the run completes without new work or parent review; branches and PRs remain intact.
+If no eligible work remains and nothing was integrated, the run completes with a **No eligible work** reason,
+without an empty review or PR. Integrated work still proceeds to scoped review; eligible blocked tickets remain
+outstanding. Completed runs do not restart when labels change: opt in and queue explicitly again.
 
 The page updates by itself when a run changes.

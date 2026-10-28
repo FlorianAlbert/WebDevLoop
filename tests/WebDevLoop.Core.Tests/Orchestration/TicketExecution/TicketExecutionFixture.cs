@@ -2,9 +2,11 @@ using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Completion;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.TicketExecution;
 using WebDevLoop.Core.Orchestration.Results;
+using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Settings;
 using WebDevLoop.Core.Tests.Ports.Fakes;
@@ -67,7 +69,10 @@ internal sealed class TicketExecutionFixture
             scope,
             scope,
             Clock);
-        return new FrontierService(scope, scope, Issues, dispatcher, scope, scope, Clock, new RepositoryOptIn(Labels));
+        var eligibility = new CurrentWorkEligibility(Issues);
+        var optIn = new RepositoryOptIn(Labels);
+        var completion = new WorkCompletionDecider(scope, scope, eligibility, scope, scope, Clock, optIn);
+        return new FrontierService(scope, scope, eligibility, dispatcher, completion, scope, scope, Clock, optIn);
     }
 
     public TicketImplementationRunner Runner(CasWorkflowScope? scope = null)
@@ -140,7 +145,8 @@ internal sealed class TicketExecutionFixture
         await SaveAsync(scope);
 
         CommitSha baseSha = Git.SeedRemoteBranch(Trunk, $"{repositoryName}.md");
-        SpecRun spec = SpecRun.Queue(Ids.NewRunId(), repository.Id, new IssueRef("octo", repositoryName, 1), "Spec", "spec body", 1, T0);
+        SpecRun spec = SpecRun.Queue(Ids.NewRunId(), repository.Id, new IssueRef("octo", repositoryName, 1000), "Spec", "spec body", 1, T0);
+        Issues.Seed(spec.ParentIssue, spec.Title);
         spec.TransitionTo(SpecRunStatus.Preparing, T0);
         spec.MaxActiveSpecsSlot = 1;
         spec.BaseBranch = Trunk;
@@ -154,7 +160,7 @@ internal sealed class TicketExecutionFixture
         foreach ((int number, _) in tickets)
         {
             TicketRun ticket = TicketRun.Create(Ids.NewTicketRunId(), spec.Id, new IssueRef("octo", repositoryName, number), $"Ticket {number}", $"Implement {number}.", T0);
-            Issues.Seed(ticket.Issue, ticket.Title);
+            Issues.Seed(ticket.Issue, ticket.Title, spec.ParentIssue);
             scope.Add(ticket);
             ticketIds[number] = ticket.Id;
         }

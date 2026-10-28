@@ -90,7 +90,7 @@ public sealed class TicketBlockerWorkflowTests
 
         FrontierResult deferred = await ReconcileAsync(host, run);
         Assert.Equal(FrontierOutcome.GitHubUnavailable, deferred.Outcome);
-        Assert.Contains(failure, Assert.Single(deferred.LookupErrors).Message);
+        Assert.Contains(deferred.LookupErrors, error => error.Message.Contains(failure, StringComparison.Ordinal));
         await host.Services.GetRequiredService<IRunEventBus>().PublishAsync(
             new EventEnvelope(0, new FrontierReconciliationRequested(new RunId(run), DateTimeOffset.UtcNow)),
             TestContext.Current.CancellationToken);

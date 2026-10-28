@@ -3,7 +3,7 @@ using WebDevLoop.Core.Domain;
 namespace WebDevLoop.Core.Queries;
 
 /// <param name="PullRequests">The stack's pull requests, bottom to top.</param>
-/// <param name="Detail">Why tracking gave up, for <see cref="MergeState.Closed"/>.</param>
+/// <param name="Detail">Why work was deferred or stopped, or why merge tracking gave up.</param>
 public sealed record MergeStatusView(
     string SpecRunId,
     MergeState State,

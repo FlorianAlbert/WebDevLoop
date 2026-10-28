@@ -15,7 +15,7 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261028064701_RemoveParentDependencySnapshots";
+    public override string LastMigrationId => "20261028070440_CurrentWorkDecisionReason";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -55,6 +55,7 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<string>("Status")
                     .IsRequired()
+                    .IsConcurrencyToken()
                     .HasColumnType("TEXT");
 
                 b.Property<long>("UpdatedAt")
@@ -472,6 +473,9 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                 b.Property<int>("Version")
                     .IsConcurrencyToken()
                     .HasColumnType("INTEGER");
+
+                b.Property<string>("WorkDecisionReason")
+                    .HasColumnType("TEXT");
 
                 b.ComplexProperty(typeof(Dictionary<string, object>), "ParentIssue", "WebDevLoop.Core.Domain.SpecRun.ParentIssue#IssueRef", b1 =>
                     {

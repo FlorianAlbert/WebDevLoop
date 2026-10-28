@@ -7,7 +7,7 @@ squash-merges each ticket into a run-scoped integration branch and publishes it 
 runs a parent review and a tester agent against the integrated app, marks the stack ready, and completes once a human
 merged it. The app is the coordinator: state, queueing, Git/GitHub mutations, and recovery are app logic; agents only
 explore, implement, review, resolve conflicts, test, and troubleshoot locally. WebDevLoop does not split a spec into tickets: the spec must
-already have open sub-issues, otherwise the run needs attention (add the sub-issues, then retry).
+already have independently opted-in open sub-issues before queueing.
 
 ## Prerequisites
 
@@ -243,6 +243,26 @@ labels at submission. An ineligible spec is rejected before creating a run (`409
 lookup, including authorization or transient failures, fails closed (`503` with access/retry guidance); stale data
 never authorizes queueing. New runs return `202`; duplicate unfinished runs return `200 AlreadyQueued` and the existing
 run id without creating another run. Diagnostic-only safeguards still apply.
+
+### Current permission and run outcomes
+
+At frontier and completion decisions, WebDevLoop fetches current parent and sub-issue state, labels, relationships,
+and required blocker states. Only open, independently opted-in tickets with closed native blockers can be newly selected.
+There is no continuous label monitor. An unavailable required query defers the affected decision with a recoverable reason;
+normal recovery retries it without authorizing work from stale data.
+
+Selected tickets may finish implementation, ticket review, and integration even if their own opt-in is removed, including
+an explicit retry of that selected work. If the parent opts out or closes, no new tickets or parent review start: selected
+work finishes, then the run completes with an explanatory reason. Existing branches and pull requests remain intact.
+Opt the parent in (and reopen it if needed), then enqueue explicitly to start another run.
+
+If no eligible tickets remain and nothing was integrated, the run completes with **No eligible work**, without an empty
+parent review, tester run, or pull request. If some work was integrated, it proceeds to scoped parent review and testing.
+Eligible tickets with open blockers remain outstanding; they are not an empty spec and do not trigger parent review.
+Completed runs are never implicitly revived by label changes: opt tickets in and enqueue again explicitly.
+
+The run API exposes the persisted `workDecisionReason` for deferred decisions and terminal opt-out/no-work outcomes.
+The queue and run detail pages display that reason. A preserved opt-out stack has merge state `Stopped`, not `Merged`.
 
 ### Parent review and testing scope
 

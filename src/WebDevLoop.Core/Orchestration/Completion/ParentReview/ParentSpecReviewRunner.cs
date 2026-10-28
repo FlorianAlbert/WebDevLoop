@@ -14,7 +14,7 @@ namespace WebDevLoop.Core.Orchestration.Completion.ParentReview;
 /// same two independent review axes as ticket reviews (<see cref="TwoAxisReviewRunner"/>, scope parent spec) against a
 /// read-only checkout of the integration tip, diffed against the integration base. Clean → <c>Testing</c>. Findings become
 /// finding tickets (<see cref="FindingTicketIssuer"/>) and the spec returns to <c>Running</c>, so the new frontier is
-/// worked through the normal ticket flow and, once every ticket is done, <see cref="ParentReviewStarter"/> starts the next
+/// worked through the normal ticket flow and, once no selected or eligible work remains, <see cref="WorkCompletionDecider"/> starts the next
 /// cycle. Loops are bounded: findings in the last allowed cycle (<c>ParentReviewCycleLimit</c>), or findings that only
 /// repeat already-done tickets, move the spec to <c>NeedsAttention</c>. Axis results are persisted with the review steps,
 /// so a restarted runner resumes the round, and finding issuance is idempotent.

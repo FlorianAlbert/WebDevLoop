@@ -23,7 +23,7 @@ public sealed class FindingTicketIssuerTests
         Assert.Equal(FindingIssuanceOutcome.Issued, result.Outcome);
         FindingIssueDraft draft = Assert.Single(_fixture.Issues.CreatedDrafts);
         Assert.Equal(fingerprint, draft.Fingerprint);
-        Assert.Equal(1, draft.Parent.Number);
+        Assert.Equal(1000, draft.Parent.Number);
         Assert.Equal("Errors are not logged.", draft.Title);
         Assert.Contains("Errors must be logged.", draft.Body, StringComparison.Ordinal);
         Assert.Contains("Implement it as specified.", draft.Body, StringComparison.Ordinal);

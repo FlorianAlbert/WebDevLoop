@@ -150,6 +150,50 @@ public sealed class RunEntityTests
     }
 
     [Fact]
+    public void selected_work_survives_attention_and_retry_until_the_ticket_finishes()
+    {
+        TicketRun ticket = NewTicket();
+        Assert.False(ticket.IsSelectedAndOutstanding);
+        ticket.TransitionTo(TicketRunStatus.Ready, T0);
+        Assert.False(ticket.IsSelectedAndOutstanding);
+
+        ticket.TransitionTo(TicketRunStatus.Implementing, T0);
+        Assert.True(ticket.IsSelectedAndOutstanding);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("retry implementation", true), T0);
+        Assert.True(ticket.IsSelectedAndOutstanding);
+        ticket.Retry(T0);
+        Assert.True(ticket.IsSelectedAndOutstanding);
+        ticket.TransitionTo(TicketRunStatus.Blocked, T0);
+        Assert.True(ticket.IsSelectedAndOutstanding);
+        ticket.TransitionTo(TicketRunStatus.Ready, T0);
+        ticket.TransitionTo(TicketRunStatus.Implementing, T0);
+        ticket.TransitionTo(TicketRunStatus.Reviewing, T0);
+        Assert.True(ticket.IsSelectedAndOutstanding);
+        ticket.TransitionTo(TicketRunStatus.FixingReviewFindings, T0);
+        Assert.True(ticket.IsSelectedAndOutstanding);
+        ticket.TransitionTo(TicketRunStatus.Reviewing, T0);
+        ticket.TransitionTo(TicketRunStatus.Integrating, T0);
+        Assert.True(ticket.IsSelectedAndOutstanding);
+        ticket.TransitionTo(TicketRunStatus.Integrated, T0);
+        Assert.False(ticket.IsSelectedAndOutstanding);
+    }
+
+    [Theory]
+    [InlineData(TicketRunStatus.Skipped)]
+    [InlineData(TicketRunStatus.Aborted)]
+    public void selected_work_is_not_outstanding_after_local_cancellation(TicketRunStatus terminal)
+    {
+        TicketRun ticket = NewTicket();
+        ticket.TransitionTo(TicketRunStatus.Ready, T0);
+        ticket.TransitionTo(TicketRunStatus.Implementing, T0);
+        ticket.MarkNeedsAttention(AttentionReasons.Unclassified("user decision", true), T0);
+
+        ticket.TransitionTo(terminal, T0);
+
+        Assert.False(ticket.IsSelectedAndOutstanding);
+    }
+
+    [Fact]
     public void ticket_cannot_go_from_blocked_directly_to_integrating()
     {
         TicketRun ticket = NewTicket();

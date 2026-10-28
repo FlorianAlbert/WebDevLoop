@@ -69,6 +69,10 @@ The state machines are in [run lifecycle](run-lifecycle.md). The enums:
 
 Rules live next to the enums: <xref:WebDevLoop.Core.Domain.SpecRunStatusRules>, <xref:WebDevLoop.Core.Domain.TicketRunStatusRules>, <xref:WebDevLoop.Core.Domain.StepStatusRules>, <xref:WebDevLoop.Core.Domain.StepKindRules>. Each has `CanTransitionTo`, `IsTerminal`, and helpers such as `IsActive`, `IsLocallyComplete`, `OccupiesImplementerSlot`.
 
+`TicketRun.IsSelectedAndOutstanding` identifies in-flight work that must finish before spec completion. Never-started
+`Blocked` and `Ready` tickets are not selected; a selected ticket remains outstanding through attention and retries,
+including a return to `Ready` or `Blocked`. Terminal tickets are no longer outstanding.
+
 ## Identifiers and value objects
 
 All are `readonly record struct`s that validate in the constructor, so an invalid value cannot exist.
@@ -158,6 +162,7 @@ Defaults are in <xref:WebDevLoop.Core.Settings.DefaultSettings>. Prompt template
 | Status changes follow the transition tables; terminal states are final | `TransitionTo` throws <xref:WebDevLoop.Core.Domain.InvalidStatusTransitionException>. Any non-terminal status may go to `Aborted` or `NeedsAttention`. |
 | `NeedsAttention` needs a structured reason | `MarkNeedsAttention(reason)`; `StepRun.Finish` refuses `NeedsAttention`. |
 | Leaving a status clears `FailureReason`, `Attention`, `NeedsAttentionFrom` | `TransitionTo` of `SpecRun` and `TicketRun`. |
+| Work-decision reasons cannot outlive their phase | `SpecRun.TransitionTo` clears `WorkDecisionReason`; its private setter is reached through `SetWorkDecisionReason` only for `Running` deferrals or explicit `Completed` stopped/no-work outcomes. |
 | A spec holds an active slot only while it is active | `TransitionTo` clears `MaxActiveSpecsSlot` when the new status is not active. Unique index on (repository, slot) for active specs. |
 | A ticket has at most one active implement or fix step | Filtered unique index on `StepRuns` (ticket, active, kind implement/fix). |
 | An app-owned step (no agent role) is unique per spec and kind while active | Filtered unique index `UX_StepRuns_ActiveAppOwnedKindPerRun`. Today every step has an agent role, so this is a guard for future app-owned steps. Review and tester steps get deterministic ids instead, so a duplicate runner collides on the primary key. |

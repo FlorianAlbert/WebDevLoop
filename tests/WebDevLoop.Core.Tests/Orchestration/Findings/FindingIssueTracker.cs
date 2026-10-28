@@ -42,11 +42,11 @@ internal sealed class FindingIssueTracker : IGitHubIssues
 
     public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken) => Snapshots.GetIssueAsync(issue, cancellationToken);
 
-    public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken) => Snapshots.GetSpecGraphAsync(specIssue, cancellationToken);
 
     public Task<ParentIssuePage> ListOpenParentIssuesAsync(GitHubRepoRef repository, int page, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-    public Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken) => Snapshots.GetSubIssuesAsync(parent, cancellationToken);
 
     public Task<IssueSnapshot?> FindFindingIssueAsync(IssueRef specIssue, FindingFingerprint fingerprint, CancellationToken cancellationToken)
     {
@@ -110,6 +110,7 @@ internal sealed class FindingIssueTracker : IGitHubIssues
         if (!children.Contains(child))
         {
             children.Add(child);
+            Snapshots.AddSubIssueAsync(parent, _references[child], CancellationToken.None).GetAwaiter().GetResult();
         }
     }
 }

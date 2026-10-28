@@ -1,6 +1,8 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Completion;
+using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Orchestration.Preparation;
 using WebDevLoop.Core.Orchestration.Frontier;
 using WebDevLoop.Core.Orchestration.Recovery.ExternalState;
@@ -18,6 +20,28 @@ public sealed class TicketGraphReconciliationTests
     private readonly ExternalStateFixture _x = new();
 
     private IntegrationFixture F => _x.Integration;
+
+    [Fact]
+    public async Task a_stale_running_graph_cannot_add_tickets_after_parent_review_started()
+    {
+        var fixture = new TicketExecutionFixture();
+        SeededSpec seeded = await fixture.SeedRunningSpecAsync("app");
+        CasWorkflowScope stale = fixture.Db.OpenScope();
+        SpecRun spec = (await stale.GetAsync(seeded.Id, ExternalStateFixture.Token))!;
+        RepositoryRecord repository = (await ((IRepositoryRecordRepository)stale).GetAsync(seeded.RepositoryId, ExternalStateFixture.Token))!;
+        fixture.Issues.Seed(new IssueRef("octo", "app", 2), "New finding", spec.ParentIssue);
+        CasWorkflowScope writer = fixture.Db.OpenScope();
+        (await writer.GetAsync(spec.Id, ExternalStateFixture.Token))!.TransitionTo(SpecRunStatus.ParentReviewing, fixture.Clock.UtcNow);
+        Assert.Equal(SaveOutcome.Saved, await writer.SaveChangesAsync(ExternalStateFixture.Token));
+        var history = new InMemoryWorkflowStore();
+        var reconciler = new TicketGraphReconciler(fixture.Issues, stale, history, history, fixture.Ids, stale, stale, fixture.Clock);
+
+        IReadOnlyList<ReconciliationAction> actions = await reconciler.ReconcileAsync(new SpecReconciliationContext(spec, repository), ExternalStateFixture.Token);
+
+        Assert.Empty(actions);
+        Assert.Empty(await ((ITicketRunRepository)fixture.Db.OpenScope()).ListBySpecRunAsync(spec.Id, ExternalStateFixture.Token));
+        Assert.Equal(SpecRunStatus.ParentReviewing, fixture.Spec(spec.Id).Status);
+    }
 
     [Fact]
     public async Task New_open_sub_issue_gets_a_blocked_ticket_run_with_its_blocking_edges_and_requests_a_frontier_reconciliation()
@@ -89,7 +113,10 @@ public sealed class TicketGraphReconciliationTests
         F.Settings.Defaults = F.Settings.Defaults with { WorkspaceRootDirectory = Path.Combine(AppContext.BaseDirectory, "work") };
         var launcher = new TestImplementationLauncher();
         var dispatcher = new TicketDispatcher(F.Settings, new ImplementerCapacity(F.Store), new ImplementerCapacityGate(), launcher, F.Store, F.Store, F.Clock);
-        var frontier = new FrontierService(F.Store, F.Store, F.Issues, dispatcher, F.Store, F.Store, F.Clock, new RepositoryOptIn(new InMemoryRepositoryLabels()));
+        var eligibility = new CurrentWorkEligibility(F.Issues);
+        var optIn = new RepositoryOptIn(new InMemoryRepositoryLabels());
+        var completion = new WorkCompletionDecider(F.Store, F.Store, eligibility, F.Store, F.Store, F.Clock, optIn);
+        var frontier = new FrontierService(F.Store, F.Store, eligibility, dispatcher, completion, F.Store, F.Store, F.Clock, optIn);
 
         FrontierResult blocked = await frontier.ReconcileAsync(spec.Id, ExternalStateFixture.Token);
 

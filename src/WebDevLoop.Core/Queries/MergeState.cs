@@ -19,4 +19,7 @@ public enum MergeState
     CompletedWithoutPullRequests,
 
     Aborted,
+
+    /// <summary>Automation finished after opt-out; the preserved stack has not been verified as merged.</summary>
+    Stopped,
 }

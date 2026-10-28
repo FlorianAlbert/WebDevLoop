@@ -6,7 +6,7 @@ namespace WebDevLoop.Web.Tests.Workflow;
 
 /// <summary>
 /// A throw-away app data directory and a local bare "origin" repository standing in for GitHub's git remote. It lives under
-/// the test output directory and is deleted on dispose.
+/// the repository directory (keeping native Git paths short on Windows) and is deleted on dispose.
 /// </summary>
 internal sealed class WorkflowSandbox : IDisposable
 {
@@ -15,7 +15,7 @@ internal sealed class WorkflowSandbox : IDisposable
 
     public WorkflowSandbox()
     {
-        Root = Path.Combine(AppContext.BaseDirectory, "w", Path.GetRandomFileName());
+        Root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "w", Path.GetRandomFileName()));
         DataDirectory = Path.Combine(Root, "data");
         RemotePath = Path.Combine(Root, "origin.git");
         Directory.CreateDirectory(DataDirectory);

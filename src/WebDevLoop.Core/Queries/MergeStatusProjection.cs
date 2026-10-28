@@ -19,12 +19,13 @@ public static class MergeStatusProjection
             bottomToTop.LastOrDefault()?.CommitSha,
             spec.ReadyAt,
             spec.CompletedAt,
-            state == MergeState.Closed ? spec.FailureReason : null);
+            spec.WorkDecisionReason ?? (state == MergeState.Closed ? spec.FailureReason : null));
     }
 
     private static MergeState StateOf(SpecRunView spec, bool hasStack) => spec.Status switch
     {
         SpecRunStatus.ReadyForReview or SpecRunStatus.AwaitingMerge => MergeState.Awaiting,
+        SpecRunStatus.Completed when hasStack && spec.WorkDecisionReason is not null => MergeState.Stopped,
         SpecRunStatus.Completed => hasStack ? MergeState.Merged : MergeState.CompletedWithoutPullRequests,
         SpecRunStatus.NeedsAttention when spec.NeedsAttentionFrom == SpecRunStatus.AwaitingMerge => MergeState.Closed,
         SpecRunStatus.Aborted => MergeState.Aborted,

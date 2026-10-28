@@ -24,7 +24,7 @@ public static partial class SpecRunDisplay
     };
 
     /// <summary>A short explanation of what a non-running spec is waiting for; <c>null</c> when there is nothing to add.</summary>
-    public static string? Note(SpecRunView run, IReadOnlyList<ParentBlockerView>? blockers = null) => run.Status switch
+    public static string? Note(SpecRunView run, IReadOnlyList<ParentBlockerView>? blockers = null) => run.WorkDecisionReason ?? (run.Status switch
     {
         SpecRunStatus.Queued => "Waiting for a free active-spec slot",
         SpecRunStatus.WaitingForDependency => WithBlockers("Waiting for all native GitHub blockers to close", blockers),
@@ -33,7 +33,7 @@ public static partial class SpecRunDisplay
         SpecRunStatus.NeedsAttention => AttentionDisplay.Headline(run.Attention, run.FailureReason) ?? "Needs a human decision",
         SpecRunStatus.Aborted => run.FailureReason,
         _ => null,
-    };
+    });
 
     private static string WithBlockers(string note, IReadOnlyList<ParentBlockerView>? blockers)
     {

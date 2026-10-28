@@ -1,21 +1,24 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Management;
+using WebDevLoop.Core.Orchestration.Completion;
 using WebDevLoop.Core.Orchestration.TicketExecution;
+using WebDevLoop.Core.Orchestration.WorkSelection;
 using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Orchestration.Frontier;
 
 /// <summary>
-/// Recomputes a running spec's ticket frontier (workflow step 8): Blocked tickets whose native GitHub blockers are all closed
-/// become Ready, and dispatchable tickets are claimed and launched while other implementers keep running. Idempotent,
+/// Recomputes a running spec's frontier using current independent opt-in and native blockers, then checks completion.
+/// Selected tickets may finish after opt-out. Dispatchable tickets are claimed while other implementers keep running. Idempotent,
 /// so duplicate events, periodic reconciliation, and recovery may all call it.
 /// </summary>
 public sealed class FrontierService(
     ISpecRunRepository specRuns,
     ITicketRunRepository ticketRuns,
-    IGitHubIssues issues,
+    CurrentWorkEligibility eligibility,
     TicketDispatcher dispatcher,
+    WorkCompletionDecider completion,
     IOutbox outbox,
     IUnitOfWork unitOfWork,
     IClock clock,
@@ -86,7 +89,12 @@ public sealed class FrontierService(
         }
 
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken);
-        (HashSet<TicketRunId> unblockedTickets, IReadOnlyList<GitHubIssuesException> lookupErrors) = await CheckBlockersAsync(tickets, cancellationToken);
+        CurrentWork current = await eligibility.ReadAsync(specRun, tickets, cancellationToken);
+        var unblockedTickets = new HashSet<TicketRunId>(current.Runnable);
+        unblockedTickets.UnionWith(tickets
+            .Where(ticket => ticket.IsSelectedAndOutstanding && (ticket.Status is TicketRunStatus.Ready or TicketRunStatus.Blocked))
+            .Select(ticket => ticket.Id));
+        IReadOnlyList<GitHubIssuesException> lookupErrors = current.Errors;
         FrontierSnapshot snapshot = TicketFrontier.Compute(tickets, unblockedTickets);
         Dictionary<TicketRunId, TicketRun> byId = tickets.ToDictionary(ticket => ticket.Id);
         TicketRun[] reblocked = tickets.Where(ticket => ticket.Status == TicketRunStatus.Ready && !unblockedTickets.Contains(ticket.Id)).ToArray();
@@ -102,53 +110,21 @@ public sealed class FrontierService(
 
         TicketRun[] candidates = snapshot.Dispatchable.Select(ticketId => byId[ticketId]).ToArray();
         DispatchResult dispatch = await dispatcher.DispatchAsync(specRun, candidates, cancellationToken);
-        FrontierOutcome outcome = dispatch.ConcurrencyConflict
+        bool conflict = dispatch.ConcurrencyConflict;
+        if (!conflict)
+        {
+            WorkCompletionResult decision = await completion.DecideCompletionAsync(specRunId, current, cancellationToken);
+            conflict = decision.Outcome == WorkCompletionOutcome.ConcurrencyConflict;
+            if (decision.Outcome == WorkCompletionOutcome.GitHubUnavailable && decision.LookupError is { } error)
+            {
+                lookupErrors = [.. lookupErrors, error];
+            }
+        }
+
+        FrontierOutcome outcome = conflict
             ? FrontierOutcome.ConcurrencyConflict
             : lookupErrors.Count > 0 ? FrontierOutcome.GitHubUnavailable : FrontierOutcome.Reconciled;
         return new FrontierResult(outcome, snapshot.Unblocked, dispatch.Dispatched) { LookupErrors = lookupErrors };
-    }
-
-    private async Task<(HashSet<TicketRunId> Unblocked, IReadOnlyList<GitHubIssuesException> Errors)> CheckBlockersAsync(
-        IReadOnlyList<TicketRun> tickets, CancellationToken cancellationToken)
-    {
-        var unblocked = new HashSet<TicketRunId>();
-        var errors = new List<GitHubIssuesException>();
-        foreach (TicketRun ticket in tickets.Where(ticket => ticket.Status is TicketRunStatus.Blocked or TicketRunStatus.Ready))
-        {
-            try
-            {
-                if (await IsUnblockedAsync(ticket, cancellationToken))
-                {
-                    unblocked.Add(ticket.Id);
-                }
-            }
-            catch (GitHubIssuesException exception)
-            {
-                errors.Add(new GitHubIssuesException($"Current GitHub blocker check for ticket {ticket.Issue} failed; dispatch deferred for recovery. {exception.Message}", exception));
-            }
-        }
-
-        return (unblocked, errors);
-    }
-
-    private async Task<bool> IsUnblockedAsync(TicketRun ticket, CancellationToken cancellationToken)
-    {
-        IssueSnapshot current = await issues.GetIssueAsync(ticket.Issue, cancellationToken);
-        if (current.State != IssueState.Open)
-        {
-            return false;
-        }
-
-        foreach (IssueRef blocker in current.BlockedBy)
-        {
-            IssueSnapshot blocking = await issues.GetIssueAsync(blocker, cancellationToken);
-            if (blocking.State != IssueState.Closed)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private void UpdateReadiness(RunId specRunId, IEnumerable<TicketRun> reblocked, IEnumerable<TicketRun> unblocked)

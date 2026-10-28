@@ -1,6 +1,9 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
 using WebDevLoop.Core.Orchestration.Preparation;
+using WebDevLoop.Core.Orchestration.Completion;
+using WebDevLoop.Core.Orchestration.WorkSelection;
+using WebDevLoop.Core.Management;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.SpecQueue;
 
@@ -82,7 +85,7 @@ public sealed class SpecPreparationServiceTests
     }
 
     [Fact]
-    public async Task spec_without_open_ticket_sub_issues_needs_attention_instead_of_reaching_review()
+    public async Task spec_without_open_ticket_sub_issues_finishes_without_review()
     {
         _fixture.SeedSpec(1);
         _fixture.SeedTicket(2, spec: 1);
@@ -91,18 +94,18 @@ public sealed class SpecPreparationServiceTests
 
         PreparationOutcome outcome = await _fixture.PrepareAsync(run);
 
-        Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
-        Assert.Equal(SpecRunStatus.NeedsAttention, run.Status);
-        Assert.Equal(AttentionCode.SpecHasNoTickets, run.Attention!.Code);
-        Assert.Contains("no open ticket sub-issues", run.FailureReason);
+        Assert.Equal(PreparationOutcome.Prepared, outcome);
+        Assert.Equal(WorkCompletionOutcome.NoEligibleWork, (await CompleteAsync(run)).Outcome);
+        Assert.Equal(SpecRunStatus.Completed, run.Status);
+        Assert.Contains("No eligible work", run.WorkDecisionReason);
         Assert.Empty(await TicketRuns.ListBySpecRunAsync(run.Id, Ct));
-        Assert.Null(await LocalTipAsync(run.IntegrationBranch));
+        Assert.NotNull(await LocalTipAsync(run.IntegrationBranch));
         Assert.Empty(_fixture.Agents.Started);
-        Assert.DoesNotContain(_fixture.Store.PendingEvents, e => e is SpecRunStatusChanged { To: SpecRunStatus.Running });
+        Assert.DoesNotContain(_fixture.Store.PendingEvents, e => e is SpecRunStatusChanged { To: SpecRunStatus.ParentReviewing });
     }
 
     [Fact]
-    public async Task spec_whose_sub_issues_are_all_closed_needs_attention()
+    public async Task spec_whose_sub_issues_closed_after_enqueue_finishes_without_review()
     {
         _fixture.SeedSpec(1);
         _fixture.SeedTicket(2, spec: 1);
@@ -111,9 +114,14 @@ public sealed class SpecPreparationServiceTests
 
         PreparationOutcome outcome = await _fixture.PrepareAsync(run);
 
-        Assert.Equal(PreparationOutcome.NeedsAttention, outcome);
-        Assert.Contains("no open ticket sub-issues", run.FailureReason);
+        Assert.Equal(PreparationOutcome.Prepared, outcome);
+        Assert.Equal(WorkCompletionOutcome.NoEligibleWork, (await CompleteAsync(run)).Outcome);
+        Assert.Contains("No eligible work", run.WorkDecisionReason);
     }
+
+    private Task<WorkCompletionResult> CompleteAsync(SpecRun run) =>
+        new WorkCompletionDecider(_fixture.Store, _fixture.Store, new CurrentWorkEligibility(_fixture.Issues), _fixture.Store, _fixture.Store, _fixture.Clock, new RepositoryOptIn(_fixture.Labels))
+            .DecideCompletionAsync(run.Id, Ct);
 
     [Fact]
     public async Task missing_trunk_on_the_remote_needs_attention()

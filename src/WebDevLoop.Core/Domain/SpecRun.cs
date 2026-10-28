@@ -48,6 +48,9 @@ public sealed class SpecRun : VersionedEntity
 
     public DateTimeOffset? CompletedAt { get; private set; }
 
+    /// <summary>The current recoverable work-decision reason, or the reason this run finished without further work.</summary>
+    public string? WorkDecisionReason { get; private set; }
+
     /// <summary>The technical wording of <see cref="Attention"/>; null unless the run needs attention.</summary>
     public string? FailureReason { get; private set; }
 
@@ -91,6 +94,7 @@ public sealed class SpecRun : VersionedEntity
         AdvanceCycle(next);
         Status = next;
         StatusChangedAt = at;
+        WorkDecisionReason = null;
         FailureReason = null;
         Attention = null;
         NeedsAttentionFrom = null;
@@ -143,6 +147,17 @@ public sealed class SpecRun : VersionedEntity
         FailureReason = reason.Details;
         Attention = reason;
         NeedsAttentionFrom = failedIn;
+    }
+
+    /// <summary>Records a current work-selection deferral or an explicit stopped/no-work completion outcome.</summary>
+    public void SetWorkDecisionReason(string? reason)
+    {
+        if (Status is not (SpecRunStatus.Running or SpecRunStatus.Completed))
+        {
+            throw new InvalidOperationException($"Spec run '{Id}' is {Status}; only running or completed work decisions have a reason.");
+        }
+
+        WorkDecisionReason = reason;
     }
 
     /// <summary>Replaces the guidance of a parked run, e.g. with what the remediation pipeline tried.</summary>

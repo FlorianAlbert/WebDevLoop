@@ -89,7 +89,7 @@ Lookup/creation failures return permission/retry diagnostics rather than pretend
 | GET | `/api/spec-runs/{id}/tickets` | Ticket runs of the spec. | `404`. |
 | GET | `/api/spec-runs/{id}/events` | Persisted audit events. | `404`. |
 | GET | `/api/spec-runs/{id}/stack` | Stack layers (draft PRs). | `404`. |
-| GET | `/api/spec-runs/{id}/merge-status` | Awaiting merge, merged, or closed unmerged, as last tracked. | `404`. |
+| GET | `/api/spec-runs/{id}/merge-status` | Merge state, including stopped automation with a preserved, unverified stack. | `404`. |
 | GET | `/api/spec-runs/{id}/events/stream` | Live events of one run (SSE). | `404`. See [Event stream](#event-stream-sse). |
 
 Queue eligibility is enforced by the shared `SpecQueueService` for API calls, picker selections and typed input. It fetches current
@@ -97,6 +97,12 @@ GitHub state and labels at each submission; stale selections do not bypass WebDe
 authorize work, and eligible children can all be blocked. Failure problem `detail` explains an ineligible parent,
 missing eligible children, or a failed GitHub lookup (including permission and transient failures). Nothing is queued
 on failure. An unfinished duplicate is returned without creating another run.
+
+Run responses include nullable `workDecisionReason`: a current-work deferral while `Running`, or why `Completed`
+stopped after parent opt-out/closure or with no eligible work. Domain transitions clear stale reasons; attention
+uses `attention` and `failureReason` instead. Completed runs require explicit enqueue after renewed eligibility.
+The merge-status query reports preserved opt-out stacks as `Stopped` with the reason in `detail`, not `Merged`.
+No-eligible-work completion publishes no empty PR and starts no empty parent review or test.
 
 Discovery uses `ISpecCandidateQueries`. It excludes pull requests, sub-issues, and specs with unfinished runs. Search
 matches issue numbers or titles case-insensitively. `onlyUnblocked=true` excludes specs with open native **parent**

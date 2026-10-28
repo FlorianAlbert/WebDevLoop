@@ -23,4 +23,5 @@ public sealed record SpecRunView(
     DateTimeOffset? CompletedAt,
     string? FailureReason,
     SpecRunStatus? NeedsAttentionFrom = null,
-    AttentionReason? Attention = null);
+    AttentionReason? Attention = null,
+    string? WorkDecisionReason = null);

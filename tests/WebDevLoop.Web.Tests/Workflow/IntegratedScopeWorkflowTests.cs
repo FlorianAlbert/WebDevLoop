@@ -19,7 +19,6 @@ public sealed class IntegratedScopeWorkflowTests
         scenario.Issues.SetBody(101, "Users can create items with a non-empty title.");
         scenario.Issues.Seed(102, "Export items", parent: 100);
         scenario.Issues.SetLabels(102);
-        await scenario.Issues.CloseAsync(scenario.Issues.Ref(102), IssueCloseReason.NotPlanned, TestContext.Current.CancellationToken);
         var reviews = new ConcurrentQueue<string>();
         var tests = new ConcurrentQueue<string>();
         int specificationReviews = 0;
@@ -59,8 +58,10 @@ public sealed class IntegratedScopeWorkflowTests
         await api.WaitForStatusAsync(runId, nameof(SpecRunStatus.AwaitingMerge));
 
         JsonElement[] tickets = await api.TicketsAsync(runId);
-        Assert.Equal([101, 103, 104], tickets.Select(ticket => ticket.GetProperty("issueNumber").GetInt32()).Order());
-        Assert.All(tickets, ticket => Assert.Equal(nameof(TicketRunStatus.Integrated), ticket.GetProperty("status").GetString()));
+        Assert.Equal([101, 102, 103, 104], tickets.Select(ticket => ticket.GetProperty("issueNumber").GetInt32()).Order());
+        Assert.All(tickets.Where(ticket => ticket.GetProperty("issueNumber").GetInt32() != 102),
+            ticket => Assert.Equal(nameof(TicketRunStatus.Integrated), ticket.GetProperty("status").GetString()));
+        Assert.Equal(nameof(TicketRunStatus.Blocked), tickets.Single(ticket => ticket.GetProperty("issueNumber").GetInt32() == 102).GetProperty("status").GetString());
         Assert.Equal("Reject empty item titles", (await scenario.Issues.GetIssueAsync(scenario.Issues.Ref(103), TestContext.Current.CancellationToken)).Title);
         Assert.Equal("Creating duplicate items crashes", (await scenario.Issues.GetIssueAsync(scenario.Issues.Ref(104), TestContext.Current.CancellationToken)).Title);
         Assert.Equal(6, reviews.Count);
@@ -86,7 +87,7 @@ public sealed class IntegratedScopeWorkflowTests
 
         Assert.DoesNotContain("ticket-102.txt", scenario.Sandbox.FilesOnTrunk());
         Assert.DoesNotContain(scenario.Journal.Calls, call => call.TicketIssue == 102);
-        Assert.Equal(IssueState.Closed, scenario.Issues.StateOf(102));
+        Assert.Equal(IssueState.Open, scenario.Issues.StateOf(102));
         Assert.Equal(4, (await scenario.Issues.GetSubIssuesAsync(scenario.Issues.Ref(100), TestContext.Current.CancellationToken)).Count);
     }
 }

@@ -1,5 +1,6 @@
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Events;
+using WebDevLoop.Core.Orchestration.Completion;
 using WebDevLoop.Core.Orchestration.Completion.ParentReview;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Core.Tests.Orchestration.TicketExecution;
@@ -11,6 +12,95 @@ public sealed class ParentReviewTriggerTests
     private readonly ParentReviewFixture _fixture = new();
 
     private long _messageId;
+
+    [Fact]
+    public async Task independent_completion_decisions_read_fresh_permission_instead_of_reusing_previous_eligibility()
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        var issues = _fixture.Issues.Snapshots;
+        IssueRef remaining = new("octo", "app", 3);
+        issues.Seed(remaining, "New work", _fixture.Spec(spec.Id).ParentIssue);
+        WorkCompletionDecider completion = _fixture.Completion();
+
+        WorkCompletionResult outstanding = await completion.DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.TicketsOutstanding, outstanding.Outcome);
+        IssueSnapshot child = await issues.GetIssueAsync(remaining, ParentReviewFixture.Token);
+        issues.Seed(child with { Labels = [] });
+
+        WorkCompletionResult ready = await completion.DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.ReviewStarted, ready.Outcome);
+        Assert.Equal(SpecRunStatus.ParentReviewing, _fixture.Spec(spec.Id).Status);
+        Assert.Equal(1, _fixture.Spec(spec.Id).ReviewCycle);
+    }
+
+    [Theory]
+    [InlineData(SpecRunStatus.Aborted)]
+    [InlineData(SpecRunStatus.NeedsAttention)]
+    [InlineData(SpecRunStatus.ParentReviewing)]
+    public async Task leaving_work_selection_clears_the_previous_work_decision_reason(SpecRunStatus next)
+    {
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []));
+        var blocker = new IssueRef("another-owner", "library", 900);
+        _fixture.Issues.Snapshots.Seed(blocker, "Open ticket blocker");
+        _fixture.Issues.Snapshots.SetBlockedBy(_fixture.Execution.Ticket(spec[2]).Issue, blocker);
+        await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+        Assert.NotNull(_fixture.Spec(spec.Id).WorkDecisionReason);
+
+        await _fixture.MoveSpecAsync(spec.Id, next);
+
+        Assert.Null(_fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Equal(next, _fixture.Spec(spec.Id).Status);
+    }
+
+    [Fact]
+    public async Task no_eligible_work_finishes_even_if_a_new_parent_blocker_is_open()
+    {
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []));
+        var issues = _fixture.Issues.Snapshots;
+        var blocker = new IssueRef("another-owner", "library", 900);
+        issues.Seed(blocker, "New parent blocker");
+        issues.SetBlockedBy(_fixture.Spec(spec.Id).ParentIssue, blocker);
+        var child = await issues.GetIssueAsync(_fixture.Execution.Ticket(spec[2]).Issue, ParentReviewFixture.Token);
+        issues.Seed(child with { Labels = [] });
+
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.NoEligibleWork, result.Outcome);
+        Assert.Equal(SpecRunStatus.Completed, _fixture.Spec(spec.Id).Status);
+        Assert.Equal(0, _fixture.Spec(spec.Id).ReviewCycle);
+    }
+
+    [Fact]
+    public async Task newly_opted_in_sub_issue_prevents_review_before_local_graph_reconciliation()
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        _fixture.Issues.Snapshots.Seed(new IssueRef("octo", "app", 3), "New opted-in work", _fixture.Spec(spec.Id).ParentIssue);
+
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.TicketsOutstanding, result.Outcome);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Equal(0, _fixture.Spec(spec.Id).ReviewCycle);
+    }
+
+    [Fact]
+    public async Task integrated_work_with_remaining_eligible_blocked_tickets_waits_without_parent_review()
+    {
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []), (3, []));
+        await _fixture.WorkTicketAsync(spec, spec[2]);
+        var blocker = new IssueRef("another-owner", "library", 900);
+        _fixture.Issues.Snapshots.Seed(blocker, "External blocker");
+        _fixture.Issues.Snapshots.SetBlockedBy(_fixture.Execution.Ticket(spec[3]).Issue, blocker);
+
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.TicketsOutstanding, result.Outcome);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Contains("remain blocked", _fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Equal(0, _fixture.Spec(spec.Id).ReviewCycle);
+    }
 
     private Task DeliverAsync(WorkflowEvent workflowEvent) =>
         _fixture.Handler().HandleAsync(new EventEnvelope(++_messageId, workflowEvent), ParentReviewFixture.Token);
@@ -30,17 +120,17 @@ public sealed class ParentReviewTriggerTests
         _fixture.Execution.Labels.LookupFailures[new GitHubRepoRef("octo", "app")] =
             new RepositoryLabelException("Check Issues permissions and retry.");
 
-        ParentReviewStartResult deferred = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        WorkCompletionResult deferred = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.GitHubUnavailable, deferred.Outcome);
+        Assert.Equal(WorkCompletionOutcome.GitHubUnavailable, deferred.Outcome);
         Assert.Contains("Check Issues permissions and retry.", Assert.IsType<GitHubIssuesException>(deferred.LookupError).Message);
         Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
         Assert.Empty(_fixture.Launcher.Launched);
         _fixture.Execution.Labels.LookupFailures.Clear();
 
-        ParentReviewStartResult recovered = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        WorkCompletionResult recovered = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.Started, recovered.Outcome);
+        Assert.Equal(WorkCompletionOutcome.ReviewStarted, recovered.Outcome);
         Assert.Null(recovered.LookupError);
         Assert.Equal(SpecRunStatus.ParentReviewing, _fixture.Spec(spec.Id).Status);
     }
@@ -85,23 +175,24 @@ public sealed class ParentReviewTriggerTests
         SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []), (3, [2]));
         await _fixture.WorkTicketAsync(spec, spec[2]);
 
-        ParentReviewStartResult result = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.TicketsOutstanding, result.Outcome);
+        Assert.Equal(WorkCompletionOutcome.TicketsOutstanding, result.Outcome);
         Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
         await DeliverCommittedAsync();
         Assert.Empty(_fixture.Launcher.Launched);
     }
 
     [Fact]
-    public async Task A_spec_without_any_ticket_never_starts_the_parent_review()
+    public async Task A_spec_without_any_ticket_finishes_without_parent_review()
     {
         SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app");
 
-        ParentReviewStartResult result = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.NoTickets, result.Outcome);
-        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Equal(WorkCompletionOutcome.NoEligibleWork, result.Outcome);
+        Assert.Equal(SpecRunStatus.Completed, _fixture.Spec(spec.Id).Status);
+        Assert.Contains("No eligible work", _fixture.Spec(spec.Id).WorkDecisionReason);
         await DeliverCommittedAsync();
         Assert.Empty(_fixture.Launcher.Launched);
     }
@@ -149,11 +240,11 @@ public sealed class ParentReviewTriggerTests
         SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
         _fixture.Db.HoldSavesUntil(2);
 
-        ParentReviewStartResult[] results = await Task.WhenAll(
-            _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token),
-            _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token));
+        WorkCompletionResult[] results = await Task.WhenAll(
+            _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token),
+            _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token));
 
-        Assert.Equal([ParentReviewStartOutcome.Started, ParentReviewStartOutcome.ConcurrencyConflict], results.Select(result => result.Outcome).Order());
+        Assert.Equal([WorkCompletionOutcome.ReviewStarted, WorkCompletionOutcome.ConcurrencyConflict], results.Select(result => result.Outcome).Order());
         Assert.Equal(1, _fixture.Spec(spec.Id).ReviewCycle);
     }
 
@@ -162,9 +253,9 @@ public sealed class ParentReviewTriggerTests
     {
         SeededSpec spec = await _fixture.SeedParentReviewingAsync();
 
-        ParentReviewStartResult result = await _fixture.Starter().StartIfTicketsCompleteAsync(spec.Id, ParentReviewFixture.Token);
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
 
-        Assert.Equal(ParentReviewStartOutcome.NotRunning, result.Outcome);
+        Assert.Equal(WorkCompletionOutcome.NotRunning, result.Outcome);
         Assert.Equal(1, _fixture.Spec(spec.Id).ReviewCycle);
     }
 }

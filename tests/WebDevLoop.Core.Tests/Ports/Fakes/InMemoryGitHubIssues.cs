@@ -11,6 +11,10 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
 
     public List<(IssueRef Issue, string Body)> Comments { get; } = [];
 
+    public List<IssueRef> IssueReads { get; } = [];
+
+    public List<IssueRef> SubIssueReads { get; } = [];
+
     public Task<ParentIssuePage> ListOpenParentIssuesAsync(GitHubRepoRef repository, int page, CancellationToken cancellationToken)
     {
         var parents = _issues.Values.Where(issue => Key(issue.Ref).Owner == repository.Owner.ToUpperInvariant()
@@ -42,10 +46,13 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
         return snapshot;
     }
 
-    public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken) =>
-        _issues.TryGetValue(Key(issue), out IssueSnapshot? snapshot)
+    public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken)
+    {
+        IssueReads.Add(issue);
+        return _issues.TryGetValue(Key(issue), out IssueSnapshot? snapshot)
             ? Task.FromResult(snapshot)
             : throw new GitHubIssuesException($"GitHub issue {issue} is unavailable.");
+    }
 
     public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken)
     {
@@ -56,8 +63,11 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
         return Task.FromResult(new SpecIssueGraph(_issues[Key(specIssue)], tickets, edges));
     }
 
-    public async Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken) =>
-        (await GetSpecGraphAsync(parent, cancellationToken)).Tickets;
+    public async Task<IReadOnlyList<IssueSnapshot>> GetSubIssuesAsync(IssueRef parent, CancellationToken cancellationToken)
+    {
+        SubIssueReads.Add(parent);
+        return (await GetSpecGraphAsync(parent, cancellationToken)).Tickets;
+    }
 
     public Task<IssueSnapshot?> FindFindingIssueAsync(IssueRef specIssue, FindingFingerprint fingerprint, CancellationToken cancellationToken) =>
         Task.FromResult(SubIssuesOf(specIssue)

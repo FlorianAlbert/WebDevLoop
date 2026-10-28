@@ -8,6 +8,24 @@ namespace WebDevLoop.Web.Tests.Components.Runs;
 
 public sealed class SpecRunDetailTests
 {
+    [Theory]
+    [InlineData(SpecRunStatus.Completed, "No eligible work remains. Opt tickets in and queue again explicitly.")]
+    [InlineData(SpecRunStatus.Completed, "Parent spec opted out. Branches and pull requests are preserved.")]
+    [InlineData(SpecRunStatus.Running, "Current permission lookup failed; work deferred for recovery.")]
+    public void Work_decision_reason_is_visible_on_run_details_and_in_queue_notes(SpecRunStatus status, string reason)
+    {
+        using var harness = new RunDetailHarness();
+        SpecRunView run = Views.Spec(status: status) with { WorkDecisionReason = reason };
+        harness.Queries.Specs.Add(run);
+        harness.Queries.Stack.Add(Views.Layer(1, "t1", 201));
+
+        var cut = harness.Render<SpecRunDetail>(p => p.Add(c => c.Id, "run-1"));
+
+        Assert.Equal(reason, cut.Find("[data-testid=work-decision-reason]").TextContent);
+        Assert.Equal(reason, WebDevLoop.Web.Components.Queue.SpecRunDisplay.Note(run));
+        Assert.DoesNotContain("Merged:", cut.Find("[data-testid=merge-tracking]").TextContent);
+    }
+
     private static RunDetailHarness HarnessWithSpec(SpecRunStatus status = SpecRunStatus.Running)
     {
         var harness = new RunDetailHarness();

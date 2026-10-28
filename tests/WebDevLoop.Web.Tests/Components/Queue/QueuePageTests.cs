@@ -72,6 +72,21 @@ public sealed class QueuePageTests : UiTestContext
         Assert.Empty(cut.FindAll("[data-testid=dependency-mode]"));
     }
 
+    [Theory]
+    [InlineData(SpecRunStatus.Queued)]
+    [InlineData(SpecRunStatus.WaitingForDependency)]
+    public void current_eligibility_reason_is_visible_without_an_active_slot(SpecRunStatus status)
+    {
+        const string reason = "Start deferred. Parent spec #10 requires the 'webdevloop' label. Restore eligibility to let scheduling retry.";
+        Runs.SpecRuns.Add(Run("r-deferred", status, 1) with { WorkDecisionReason = reason });
+
+        var cut = Render<QueuePage>();
+
+        Assert.Equal(reason, cut.Find("[data-testid=run-note-r-deferred]").TextContent);
+        Assert.Contains("0 / 2", cut.Find("[data-testid=active-slots]").TextContent);
+        Assert.Equal(["r-deferred"], LaneRunIds(cut, SpecRunLane.Waiting));
+    }
+
     [Fact]
     public void waiting_note_names_the_current_native_parent_blockers_that_are_not_closed()
     {

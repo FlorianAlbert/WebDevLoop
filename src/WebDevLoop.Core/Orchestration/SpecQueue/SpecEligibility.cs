@@ -3,7 +3,7 @@ using WebDevLoop.Core.Ports;
 
 namespace WebDevLoop.Core.Orchestration.SpecQueue;
 
-/// <summary>Current opt-in and open-work requirements shared by discovery and enqueue.</summary>
+/// <summary>Current opt-in and open-work requirements shared by discovery, enqueue and scheduling.</summary>
 public static class SpecEligibility
 {
     public static async Task<(IssueSnapshot Spec, string? Rejection)> ReadAsync(

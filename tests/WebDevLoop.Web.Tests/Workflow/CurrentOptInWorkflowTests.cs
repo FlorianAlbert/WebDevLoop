@@ -1,6 +1,9 @@
+using System.Net;
+using System.Net.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WebDevLoop.Core.Domain;
 using WebDevLoop.Core.Orchestration.Frontier;
+using WebDevLoop.Core.Orchestration.SpecQueue;
 using WebDevLoop.Core.Ports;
 using WebDevLoop.Infrastructure.GitHub.Issues;
 
@@ -8,6 +11,126 @@ namespace WebDevLoop.Web.Tests.Workflow;
 
 public sealed class CurrentOptInWorkflowTests
 {
+    [Theory]
+    [InlineData("parent unlabeled", false, "requires the 'webdevloop' label")]
+    [InlineData("parent closed", false, "must be open")]
+    [InlineData("tickets unlabeled", false, "at least one open sub-issue")]
+    [InlineData("parent unlabeled", true, "requires the 'webdevloop' label")]
+    [InlineData("parent closed", true, "must be open")]
+    [InlineData("tickets unlabeled", true, "at least one open sub-issue")]
+    public async Task opt_out_before_start_defers_without_preparation_or_agents_and_leaves_the_slot_for_independent_work(
+        string change, bool waitingForDependency, string expectedReason)
+    {
+        using var scenario = new WorkflowScenario(101, 102, 201);
+        scenario.Issues.Seed(900, "Parent blocker");
+        scenario.Issues.Seed(100, "Spec", parent: null, blockedBy: 900);
+        scenario.Issues.Seed(101, "First ticket", parent: 100);
+        scenario.Issues.Seed(102, "Second ticket", parent: 100);
+        scenario.Issues.Seed(200, "Independent spec");
+        scenario.Issues.Seed(201, "Independent ticket", parent: 200);
+        await using var host = new WorkflowHost(scenario);
+        using var client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repository = await api.RegisterRepositoryAsync(scenario);
+        if (!waitingForDependency)
+        {
+            using var disabled = await client.PatchAsJsonAsync($"/api/repos/{repository}", new { isEnabled = false }, TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+        }
+
+        string run = await api.EnqueueAsync(repository, 100);
+        string waitingStatus = waitingForDependency ? nameof(SpecRunStatus.WaitingForDependency) : nameof(SpecRunStatus.Queued);
+        await api.WaitForStatusAsync(run, waitingStatus);
+        if (change == "parent closed")
+        {
+            await scenario.Issues.CloseAsync(scenario.Issues.Ref(100), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+        }
+        else if (change == "parent unlabeled")
+        {
+            scenario.Issues.SetLabels(100, "ready-for-agent");
+        }
+        else
+        {
+            scenario.Issues.SetLabels(101, "ready-for-agent");
+            scenario.Issues.SetLabels(102, "ready-for-agent");
+        }
+
+        await scenario.Issues.CloseAsync(scenario.Issues.Ref(900), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+        using var enabled = await client.PatchAsJsonAsync($"/api/repos/{repository}", new { isEnabled = true }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
+        using (IServiceScope scope = host.Services.CreateScope())
+        {
+            var scheduler = scope.ServiceProvider.GetRequiredService<SpecQueueScheduler>();
+            SpecScheduleResult result = await scheduler.ScheduleRepositoryAsync(repository, TestContext.Current.CancellationToken);
+            Assert.Empty(result.Activated);
+            Assert.Equal(1, await scheduler.FindFreeSlotAsync(repository, TestContext.Current.CancellationToken));
+        }
+
+        var deferred = await api.GetAsync($"/api/spec-runs/{run}");
+        Assert.Equal(waitingStatus, deferred.GetProperty("status").GetString());
+        Assert.Contains(expectedReason, deferred.GetProperty("workDecisionReason").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, deferred.GetProperty("startedAt").ValueKind);
+        Assert.Empty(await api.TicketsAsync(run));
+        Assert.Empty(scenario.Journal.Calls);
+        var repositoryView = await api.GetAsync($"/api/repos/{repository}");
+        Assert.False(Directory.Exists(repositoryView.GetProperty("localPath").GetString()));
+
+        string independent = await api.EnqueueAsync(repository, 200);
+        await api.WaitForStatusAsync(independent, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Equal(waitingStatus, (await api.GetAsync($"/api/spec-runs/{run}")).GetProperty("status").GetString());
+        Assert.Empty(await api.TicketsAsync(run));
+        Assert.DoesNotContain(scenario.Journal.Calls, call => call.TicketIssue is 101 or 102);
+    }
+
+    [Theory]
+    [InlineData("parent")]
+    [InlineData("sub-issues")]
+    public async Task unavailable_start_eligibility_defers_with_a_visible_retry_reason_and_recovers(string unavailable)
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        await using var host = new WorkflowHost(scenario);
+        using var client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repository = await api.RegisterRepositoryAsync(scenario);
+        using var disabled = await client.PatchAsJsonAsync($"/api/repos/{repository}", new { isEnabled = false }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, disabled.StatusCode);
+        string run = await api.EnqueueAsync(repository, 100);
+        var failure = new GitHubApiException(GitHubApiErrorKind.Transient, "Current permission is unavailable.");
+        if (unavailable == "parent")
+        {
+            scenario.Issues.FailReads(scenario.Issues.Ref(100), failure);
+        }
+        else
+        {
+            scenario.Issues.SubIssueReadFailure = failure;
+        }
+
+        using var enabled = await client.PatchAsJsonAsync($"/api/repos/{repository}", new { isEnabled = true }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
+        using (IServiceScope scope = host.Services.CreateScope())
+        {
+            var scheduler = scope.ServiceProvider.GetRequiredService<SpecQueueScheduler>();
+            SpecScheduleResult result = await scheduler.ScheduleRepositoryAsync(repository, TestContext.Current.CancellationToken);
+            Assert.Empty(result.Activated);
+            Assert.Contains("Current permission is unavailable", Assert.Single(result.Faults).Error);
+            Assert.Equal(1, await scheduler.FindFreeSlotAsync(repository, TestContext.Current.CancellationToken));
+        }
+
+        var deferred = await api.GetAsync($"/api/spec-runs/{run}");
+        Assert.Equal(nameof(SpecRunStatus.Queued), deferred.GetProperty("status").GetString());
+        Assert.Contains("Current permission is unavailable", deferred.GetProperty("workDecisionReason").GetString());
+        Assert.Contains("retry queue recovery", deferred.GetProperty("workDecisionReason").GetString());
+        Assert.Empty(await api.TicketsAsync(run));
+        Assert.Empty(scenario.Journal.Calls);
+
+        scenario.Issues.FailReads(scenario.Issues.Ref(100), null);
+        scenario.Issues.SubIssueReadFailure = null;
+        var finished = await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, finished.GetProperty("workDecisionReason").ValueKind);
+    }
+
     [Theory]
     [InlineData("parent")]
     [InlineData("sub-issues")]

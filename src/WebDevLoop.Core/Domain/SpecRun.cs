@@ -152,9 +152,10 @@ public sealed class SpecRun : VersionedEntity
     /// <summary>Records a current work-selection deferral or an explicit stopped/no-work completion outcome.</summary>
     public void SetWorkDecisionReason(string? reason)
     {
-        if (Status is not (SpecRunStatus.Running or SpecRunStatus.WaitingForTickets or SpecRunStatus.Completed))
+        if (Status is not (SpecRunStatus.Queued or SpecRunStatus.WaitingForDependency
+            or SpecRunStatus.Running or SpecRunStatus.WaitingForTickets or SpecRunStatus.Completed))
         {
-            throw new InvalidOperationException($"Spec run '{Id}' is {Status}; only running, waiting-for-tickets or completed work decisions have a reason.");
+            throw new InvalidOperationException($"Spec run '{Id}' is {Status}; only queued, waiting, running or completed work decisions have a reason.");
         }
 
         WorkDecisionReason = reason;

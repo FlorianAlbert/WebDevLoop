@@ -244,6 +244,11 @@ lookup, including authorization or transient failures, fails closed (`503` with 
 never authorizes queueing. New runs return `202`; duplicate unfinished runs return `200 AlreadyQueued` and the existing
 run id without creating another run. Diagnostic-only safeguards still apply.
 
+Before a queued or dependency-waiting spec starts, scheduling rechecks these same current eligibility rules.
+If the parent closes or loses its label, or no open, opted-in sub-issue remains, the run stays waiting without
+claiming an active-spec slot or starting preparation or agents. The queue and run detail show the reason.
+Restore eligibility to let normal scheduling retry the same queued run; GitHub lookup failures also defer with retry guidance.
+
 ### Current permission and run outcomes
 
 At frontier and completion decisions, WebDevLoop fetches current parent and sub-issue state, labels, relationships,

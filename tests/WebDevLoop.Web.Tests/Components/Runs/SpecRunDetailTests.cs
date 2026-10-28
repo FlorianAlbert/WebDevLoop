@@ -12,6 +12,9 @@ public sealed class SpecRunDetailTests
     [InlineData(SpecRunStatus.Completed, "No eligible work remains. Opt tickets in and queue again explicitly.")]
     [InlineData(SpecRunStatus.Completed, "Parent spec opted out. Branches and pull requests are preserved.")]
     [InlineData(SpecRunStatus.Running, "Current permission lookup failed; work deferred for recovery.")]
+    [InlineData(SpecRunStatus.Queued, "Start deferred. Parent spec #42 requires the 'webdevloop' label.")]
+    [InlineData(SpecRunStatus.WaitingForDependency, "Start deferred. Parent spec #42 must be open.")]
+    [InlineData(SpecRunStatus.Queued, "Start deferred. Parent spec #42 needs at least one open sub-issue independently labeled 'webdevloop'.")]
     public void Work_decision_reason_is_visible_on_run_details_and_in_queue_notes(SpecRunStatus status, string reason)
     {
         using var harness = new RunDetailHarness();

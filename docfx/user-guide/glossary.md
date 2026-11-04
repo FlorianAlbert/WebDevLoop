@@ -5,6 +5,7 @@
 | Spec | A GitHub issue that describes a feature and has open sub-issues. It is the unit you queue. |
 | Parent issue | Another word for the spec issue, the parent of its tickets. |
 | Ticket | A sub-issue of the spec. One ticket is one piece of work for an agent. |
+| WebDevLoop Opt-in | Permission to work on one issue, represented by the fixed `webdevloop` label (case-insensitive). Parent and ticket opt in independently; readiness, triage labels and blockers are separate. See [Queue eligibility](queue.md#queue-a-spec). |
 | Finding ticket | A ticket that WebDevLoop creates for a problem found by the final review or the tester. |
 | Spec run | One pass of WebDevLoop over one spec. It has a status and its own branches. |
 | Ticket run | The work on one ticket inside a spec run. Its page is the ticket page. |
@@ -17,9 +18,9 @@
 | Explorer | The agent that looks at the repository before tickets start. |
 | Troubleshooter | The agent that looks into stuck tickets before you are asked. |
 | DAG | The ticket graph: tickets are nodes and "blocked by" links are arrows. It has no circles. |
-| Blocked by | A GitHub link that says a ticket (or spec) must be done first. |
+| Blocked by | A native GitHub dependency. Every blocking issue must be closed, regardless of opt-in or repository; local completion or a PR's merge status cannot override an open issue. |
 | Layer (ticket table) | The depth of a ticket in the DAG. `0` has no blockers. |
-| Frontier | Unstarted tickets whose current native GitHub blockers are all closed. |
+| Frontier | Open, independently opted-in, unstarted tickets whose current native GitHub blockers are all closed. |
 | Base branch | The trunk branch of the repository, usually `main`. Runs start from it and the stack is merged into it. Also called trunk. |
 | Integration branch | A branch per run (`webdevloop/<run id>/integration`) that collects the squash commits of all finished tickets. |
 | Ticket branch | A branch per ticket where the agent writes the change. |
@@ -31,10 +32,11 @@
 | Stack (PR stack) | The chain of stacked draft pull requests of one run, one per ticket. |
 | Draft PR | A pull request marked as draft. The stack becomes ready for review at the end of the run. |
 | Review iteration | One round of review and fixes of a ticket. |
-| Parent review | The final review of the whole integrated spec. |
+| Parent review | Final review scoped to tickets actually integrated into the spec branch, with the parent providing applicable constraints. |
 | Cycle | One round of parent review or testing that may create finding tickets. The limits are in Settings. |
 | Tester | The agent that starts the integrated app and tests it with `playwright-cli`. |
 | Active slot | The right to work on a spec. By default each repository has one. |
+| Waiting for tickets | A parked run with blocked eligible work. It releases its active slot and resumes the same run and branch after fresh checks and a free slot. See [Parking and resumption](queue.md#fully-blocked-tickets). |
 | Parent blocker | A native GitHub "blocked by" issue of the parent. Every blocker must be closed before a new spec starts from current trunk. |
 | Awaiting merge | The stack is open and waits for you to merge it. |
 | Needs attention | A run, ticket or step stopped and needs you. It shows a reason and the steps to continue. |

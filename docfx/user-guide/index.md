@@ -6,7 +6,7 @@ It runs on your own machine and works on GitHub as you.
 
 ## How it works
 
-1. You queue a spec issue on the [Queue](queue.md) page.
+1. Independently opt in the open parent and intended open tickets with `webdevloop`, then select parent specs on the [Queue](queue.md) page.
 2. WebDevLoop reads the spec's open sub-issues (the tickets) and their "blocked by" links. This forms a graph of tickets (a DAG).
 3. Copilot agents implement the tickets that are free to start. Every ticket is reviewed twice (coding standards and specification) and fixed until the reviews are clean.
 4. Each finished ticket is squash-merged into an integration branch and shows up as one layer of a stacked draft PR.
@@ -27,7 +27,7 @@ flowchart LR
     N -.-> C
 ```
 
-WebDevLoop does not split a spec into tickets. The spec must already have open sub-issues. Otherwise the run needs attention until you add them.
+WebDevLoop does not split a spec into tickets. The parent spec and at least one open sub-issue must already carry the `webdevloop` label; otherwise queueing is rejected before a run exists. Once work has started, a run with no eligible work left finishes with a no-work reason (nothing integrated) or proceeds to review of what was integrated. A run that is still **Queued** or **Waiting for dependency** keeps waiting without a working spot until it is eligible again. A run parked as **Waiting for tickets** resumes when a ticket becomes runnable; if its parent closes or opts out, or no eligible work and no integrated work remain, it completes instead. See the [Queue guide](queue.md#fully-blocked-tickets).
 
 ## Where do I find...?
 
@@ -37,7 +37,7 @@ WebDevLoop does not split a spec into tickets. The spec must already have open s
 | See what is running, waiting or stuck | Dashboard | [Dashboard](dashboard.md) |
 | Switch the current repository | Repository box in the sidebar | [Repositories](repositories.md#current-repository) |
 | Add, disable or edit a repository | Repositories | [Repositories](repositories.md) |
-| Queue a spec issue | Queue, "Queue parent spec issue" | [Queue](queue.md#queue-a-spec) |
+| Find and queue specs in order | Queue, "Find parent specs" (or the typed fallback) | [Queue](queue.md#find-and-select-parent-specs) |
 | See why a spec is waiting | Queue, Waiting lane | [Queue](queue.md#statuses) |
 | Open a spec run | Queue or Dashboard, "Details" | [Spec runs](runs.md) |
 | See which tickets block each other | Spec run, Tickets table | [Spec runs](runs.md#tickets-and-the-dag) |

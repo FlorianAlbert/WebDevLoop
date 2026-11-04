@@ -4,7 +4,7 @@ A spec run is one pass of WebDevLoop over one spec issue. Its page shows the sta
 
 The page updates by itself while the run changes.
 
-![The top of a spec run page](images/run-detail.png)
+![Running project-search spec with native parent blocker status and retained Retry and Abort run controls](images/run-detail.png)
 
 ## What you can do here
 
@@ -88,14 +88,14 @@ guidance. Local run details remain available. Finished runs do not re-query curr
 
 The **Tickets** table shows the tickets of the spec and how they depend on each other.
 
-![Tickets and pull request stack](images/run-tickets-stack.png)
+![Two integrated search tickets and one reviewing ticket, with a two-layer draft PR stack contained within the same spec](images/run-tickets-stack.png)
 
 | Column | Meaning |
 | --- | --- |
 | Layer | Depth in the dependency graph. `0` has no blockers. `1` waits for layer `0`, and so on. This is not the same as a stack layer. |
 | Ticket | The issue number and title. Click it to open the [ticket page](tickets-and-steps.md). |
 | Status | See below. A **Frontier** label means the last GitHub blocker check passed; dispatch checks again. |
-| Blocked by | The blocking tickets with their status. Green means satisfied. |
+| Blocked by | Saved relationships between this spec's tickets, with their local status. Green means locally complete, not permission to bypass an open native GitHub blocker. |
 | Review iteration | How many review and fix rounds the ticket has had. |
 | PR | The pull request of the ticket. |
 | Integration | The last finished step of putting the ticket into the integration branch. |
@@ -142,6 +142,8 @@ The **Merge tracking** card says where the stack is on its way to the base branc
 | Stack ready for review (N pull requests). | Ready for review. |
 | Awaiting merge of N stacked pull requests into the base branch. | Awaiting merge. Merge the stack on GitHub. |
 | Merged: the base branch contains the top layer of the stack. | Completed. |
+| Completed without a pull request. | Completed without PR layers; read the decision reason. |
+| Automation finished without verifying a merge. Existing branches and pull requests are preserved. | Completed with a preserved stack after parent opt-out/closure, not verified as merged. |
 | Needs attention: ... | For example the pull requests were closed without being merged. |
 | Aborted before the stack was merged. | Aborted. |
 
@@ -151,7 +153,7 @@ WebDevLoop checks GitHub regularly. You do not need to tell it that you merged.
 
 The **Events** list is the timeline of the run, newest first. It shows the last 50 events with the time. Examples: "Run is now testing", "Ticket is now integrated", "Integration reached pr created", "Needs attention: ...", "You retried it". Events that belong to a ticket link to that ticket.
 
-![The events timeline](images/run-events.png)
+![The run page's pull request stack of two draft pull requests above the Events timeline, which lists ticket, step and integration events newest first with links to the tickets](images/run-events.png)
 
 ## Run controls
 

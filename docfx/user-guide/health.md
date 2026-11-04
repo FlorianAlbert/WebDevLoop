@@ -2,7 +2,7 @@
 
 The Health page shows the prerequisite checks. They decide whether WebDevLoop may do real work.
 
-![The health page with all checks passed](images/health.png)
+![The Health page in Operational mode with all eleven prerequisite checks passed: workspace root, database, bundled skills, GitHub authentication, agent models, LibGit2Sharp, git, gh stack, Copilot runtime, playwright-cli and test port range](images/health.png)
 
 ## What you can do here
 

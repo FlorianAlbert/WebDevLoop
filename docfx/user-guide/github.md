@@ -2,7 +2,7 @@
 
 The GitHub page shows who is signed in and which repositories the GitHub App can reach.
 
-![The GitHub page](images/github.png)
+![The GitHub page showing the signed-in account, a filter box and the repositories the App can reach: acme/docs-site and acme/widgets registered, acme/release-notes not yet registered](images/github.png)
 
 ## What you can do here
 
@@ -44,6 +44,6 @@ For the public App, start at [github.com/apps/webdevloop](https://github.com/app
 
 ## Registered repositories
 
-The table at the bottom lists the repositories you registered. **Reachable** means the App can reach the repository. **Not accessible** means it cannot, usually because the repository is not part of the installation (the screenshot shows this case). Click **Manage repository access** and add it. Until then, work on that repository fails.
+The table at the bottom lists the repositories you registered. **Reachable** means the App can reach the repository. **Not accessible** means it cannot, usually because the repository is not part of the installation. Click **Manage repository access** and add it. Until then, work on that repository fails.
 
 If an installation is missing, the page says "The GitHub App is not installed on any account you can access". Install it first.

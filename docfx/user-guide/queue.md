@@ -2,7 +2,9 @@
 
 The Queue page shows every spec run of the current repository and lets you queue a new spec.
 
-![The queue page](images/queue.png)
+[![Queue with eligible parent specs, three selected specs, Move up and Move down controls, and a run waiting for tickets without a slot](images/queue.png)](images/queue.png)
+
+Select a screenshot to open it at full size.
 
 ## What you can do here
 
@@ -54,6 +56,8 @@ Queued and already-queued specs leave the selection. Failed selections remain fo
 queueing controls are disabled while submitting or in diagnostic-only mode. Search and refresh remain available in
 diagnostic-only mode, though missing GitHub access may prevent discovery. See [Health](health.md) to restore prerequisites.
 On narrow screens the candidate list and selected order stack vertically.
+
+[![Ordered batch results: #120 and #140 queued and shown in the Waiting lane, while #160, which lost its opt-in, remains selected with an Ineligible result](images/queue-results.png)](images/queue-results.png)
 
 The picker does not create or edit GitHub issues. Change labels, issue state and relationships on GitHub.
 

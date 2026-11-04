@@ -34,6 +34,13 @@ The GitHub App is not installed on it. On the [GitHub](github.md) page click **M
 **A registered repository shows "Not accessible".**
 The same cause. Add it to the App installation. See [GitHub](github.md#registered-repositories).
 
+**WebDevLoop asks to create a label. Does this opt in my issues?**
+No. **Approve label creation** creates only the repository's fixed `webdevloop` label.
+Apply it independently to the parent and each ticket you authorize. **Decline** cancels a new connection.
+For an already connected repository with a missing or deleted label, declining leaves it connected but pauses new work.
+Use **Recheck label**, then **Review label creation** to approve recovery. Lookup/creation failures need a permission
+fix or retry, not implicit consent. See [Repositories](repositories.md#webdevloop-opt-in-label).
+
 **Do I need to sign in again after a restart?**
 No. The sign-in is stored encrypted on your machine and renews itself. You only sign in again after a long pause, after signing out, or if you revoked the App on GitHub.
 
@@ -51,7 +58,9 @@ an empty review or PR. Add or opt in open sub-issues, ensure the parent is opted
 Changing labels does not revive the finished run; **Retry** is for needs-attention runs.
 
 **My spec is "Queued" and nothing happens.**
-It waits for a free slot. By default one spec per repository runs at a time. Check **Active slots** on the [Queue](queue.md#slots-and-parent-blockers) page. Raise **Max active specs per repository** in [Settings](settings.md#concurrency-review-and-retries) if you want more at once.
+Read its note: it may need a free slot, restored parent/child opt-in, or a successful fresh GitHub check.
+By default one spec per repository runs at a time. Check **Active slots** on [Queue](queue.md#slots-and-parent-blockers);
+only raise the limit in [Settings](settings.md#concurrency-review-and-retries) if capacity is the cause.
 
 **My spec is "Waiting for dependency".**
 The parent issue has an open native GitHub blocker. Every blocker must be closed, including external and cross-repository
@@ -63,7 +72,22 @@ from current trunk, even if a blocker's pull request is unmerged. Unavailable is
 It waits for every current native GitHub blocker to close, including unlabeled issues, issues outside the spec, and issues in other repositories. Local integration or skipped status cannot override an open issue. Check GitHub for the current relationships; unavailable information defers only the affected ticket and is logged for normal recovery. Unrelated tickets and running specs continue.
 
 **Can I add or change tickets while a run is going?**
-The tickets are read when the run starts. Changes to the spec's sub-issues later do not change a running run. To start over with new tickets, abort the run and queue the spec again.
+Yes. Normal reconciliation adds new or reopened open sub-issues and retires unstarted tickets that closed or detached.
+New work still requires independent `webdevloop` opt-in and closed native blockers. Labels and relationships are checked
+at work decisions, not continuously. Already selected tickets finish implementation, review and integration after
+their label is removed. Parent opt-out stops new selection and parent review after selected tickets finish, preserving
+branches and PRs. Finished runs require explicit queueing after eligibility is restored.
+
+**My spec is "Waiting for tickets". Should I queue it again?**
+No. All remaining eligible tickets were blocked, so the run released its slot after selected work finished.
+Close the native blockers on GitHub; normal scheduling/recovery resumes the same run and branch when a slot is free.
+It does not interrupt active specs or repeat integrated work. Read the note for lookup failures or a slot wait.
+Busy agents alone do not cause parking. See [Fully blocked tickets](queue.md#fully-blocked-tickets).
+
+**Why does review omit some of my spec?**
+Parent review and testing cover only tickets integrated into this run. Excluded work may be acknowledged but must
+not fail review or be recreated as findings just because it is absent. New findings are opted in automatically;
+reusing an existing finding never restores an opt-in you removed. See [Review and testing scope](runs.md#what-parent-review-and-testing-cover).
 
 **Why did a spec go back to "Running" after the tester?**
 The tester or the final review found problems and created finding tickets. They are implemented like other tickets. This repeats up to the cycle limits in [Settings](settings.md#concurrency-review-and-retries).

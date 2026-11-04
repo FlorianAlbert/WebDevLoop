@@ -232,6 +232,8 @@ not an approval prompt; check GitHub access and Issues read/write permissions an
 Connected repositories retain all configuration when the label is missing or deleted. New work pauses at decision
 points while already selected tickets finish. `GET /api/repos/{repoId}/opt-in` checks without changing GitHub;
 `POST` uses the same explicit approval field to create the label and let normal reconciliation resume work.
+Recreating a deleted label does not restore the labels removed from issues; opt in the parent and intended tickets
+again as needed. Runs already completed require explicit queueing.
 The [Repositories user guide](docfx/user-guide/repositories.md#webdevloop-opt-in-label) explains the UI consent and retry flow.
 
 ### Queue eligibility (WebDevLoop Opt-in)
@@ -344,8 +346,9 @@ Manual **Skip** and **Skip with dependents**, their API operation (`POST /api/ti
 attention skips are removed. Retry, step cancellation, and abort remain available. Externally closed or detached unstarted
 tickets may still appear as `Skipped` in reconciliation history, but this never overrides an open native GitHub blocker.
 
-`GET /api/spec-runs/{id}/merge-status` reports the PR stack as `Awaiting`, `Merged`, `Closed` (closed unmerged or never
-reached trunk), `NotReady`, `CompletedWithoutPullRequests`, or `Aborted`.
+`GET /api/spec-runs/{id}/merge-status` reports the PR stack as `Awaiting`, `Merged`, `Stopped` (automation stopped with
+a preserved stack, not verified as merged), `Closed` (closed unmerged or never reached trunk), `NotReady`,
+`CompletedWithoutPullRequests`, or `Aborted`.
 
 ## Needs attention: guidance and automatic remediation
 

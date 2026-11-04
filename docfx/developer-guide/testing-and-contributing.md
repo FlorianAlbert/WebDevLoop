@@ -194,6 +194,44 @@ docfx serve _site                   # preview on http://localhost:8080
 
 `dotnet tool install -g` puts the tool in `~/.dotnet/tools`; add that folder to `PATH` if `docfx` is not found. Use `-o <folder>` with `docfx build` to write the site elsewhere.
 
+On Windows without Bash, use the same metadata, OpenAPI conversion and build stages from PowerShell.
+From the repository root, start a disposable, signed-out instance in one terminal (use an unused port):
+
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = 'Production'
+$env:DOTNET_ENVIRONMENT = 'Production'
+$env:WebDevLoop__DataDirectory = "$PWD\docfx\obj\reference-data"
+$env:WebDevLoop__Workflow__Enabled = 'false'
+dotnet run --project src\WebDevLoop.Web --no-launch-profile --urls http://127.0.0.1:5199
+```
+
+In another terminal, from the repository root:
+
+```powershell
+docfx metadata docfx\docfx.json
+Invoke-WebRequest http://127.0.0.1:5199/openapi/v1.json -OutFile docfx\obj\openapi.json
+dotnet run docfx\tools\OpenApiToSwagger.cs docfx\obj\openapi.json docfx\rest-api\webdevloop.swagger.json
+Push-Location docfx
+docfx build docfx.json --warningsAsErrors
+Pop-Location
+```
+
+Stop the disposable app with Ctrl+C afterward. Do not sign it in or reuse a personal data directory.
+
+### Documentation screenshots
+
+Capture the current application, not reconstructed markup. The workflow screenshots use the real Blazor pages
+hosted on loopback with `ApiFactory`-style in-memory GitHub/query fakes, startup initialization skipped, workers
+disabled and an isolated data directory. No live GitHub account, credentials or Copilot session is needed.
+Use fictitious repositories such as `acme/widgets` and generic paths such as `C:\WebDevLoop\workspaces`.
+Never capture a personal instance or alter the page's text or controls to simulate a state.
+
+For opt-in/work-selection changes, capture the picker with several selected specs and its ordering buttons,
+per-spec results (including a stale selection rejection), registration's missing-label approval/decline panel,
+and a connected repository's missing-label recovery panel. Also check Dashboard, Settings, run and ticket
+screenshots for removed controls or stale status displays. Keep text legible at the guide's displayed size,
+review each image for sensitive information, and update its descriptive alt text.
+
 Writing rules:
 
 - Add each new page to the folder's `toc.yml`.

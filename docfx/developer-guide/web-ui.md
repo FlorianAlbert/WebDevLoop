@@ -84,7 +84,7 @@ Other pages (not drawn): `/repositories` (`RepositoriesPage` with registration, 
 | --- | --- | --- | --- |
 | Dashboard | `Dashboard/` | `/` (`Pages/Home.razor` hosts `DashboardOverview`) | `DashboardOverview` (alerts, lane counts, one `RepositoryLane` per repository), `DiagnosticBanner`, `RepositoryOverview` (record). |
 | Queue | `Queue/` | `/queue` | `QueuePage`, `SpecPicker`, `SpecSelection` (pure selection/order helpers), `EnqueueSpecForm` (typed fallback), `SpecRunTable`, `SpecStatusBadge`, `SpecRunLane`/`SpecRunLanes` (status to lane mapping), `SpecRunDisplay`. |
-| Repositories | `Repositories/` | `/repositories` | `RepositoriesPage`, `RepositoryRegistrationForm`, `RepositoryEditForm`, `RepositoryRemoveConfirm`, `RepositorySwitcher`, `RepositoryContext`. |
+| Repositories | `Repositories/` | `/repositories` | `RepositoriesPage`, `RepositoryRegistrationForm`, `RepositoryLabelConsent`, `RepositoryOptInStatus`, `RepositoryEditForm`, `RepositoryRemoveConfirm`, `RepositorySwitcher`, `RepositoryContext`. |
 | Runs | `Runs/` | `/runs/{Id}` | `SpecRunDetail`, `SpecRunControls`, `RunControlPanel`, `RunControlsArea`, `StackLayersPanel`, `MergeTrackingPanel`, `SpecBlockersPanel`, `RunEventsTimeline`, `StatusBadge`, `ShortHash`, `LiveDetailPageBase`, `RunEventSubscription`. |
 | Tickets | `Tickets/` | `/tickets/{Id}` | `TicketRunDetail`, `TicketDagView` (+ `TicketDagLayout`), `TicketRunControls`, `TicketFindingsPanel`, `SagaCheckpointTimeline`. |
 | Steps | `Steps/` | `/steps/{Id}` | `StepRunDetail`, `StepsTable`, `AgentLogTail`, `StructuredReportPanel` (+ `StepReportParser`), `RolePolicyPanel`. |
@@ -100,6 +100,11 @@ a newer search. Selection survives those reads. Submission uses Core `ISpecSelec
 and shows every result. The host checks readiness and isolates the unit of work for each enqueue attempt.
 `AddWebDevLoopSpecSelection` wires these services for both API and UI. See the [Queue guide](../user-guide/queue.md)
 for the controls and the [Web API guide](web-api.md) for batch result semantics.
+
+`RepositoryLabelConsent` is shared by registration and connected-repository recovery. `RepositoryOptInStatus`
+checks without creating the label; only explicit approval calls `RepositoryOptIn.EnsureAsync` with creation consent.
+Decline aborts a new connection but leaves an existing repository connected and paused.
+See the [Repositories guide](../user-guide/repositories.md#webdevloop-opt-in-label) for the UI and error recovery.
 
 ### Routes
 

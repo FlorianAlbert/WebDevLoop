@@ -79,10 +79,15 @@ a different Model for you. If the Model Catalog could not be fetched, retry with
 
 1. Open [Repositories](repositories.md) and click **Add repository**.
 2. Pick a repository from the list. It lists the repositories the GitHub App can reach. Use the filter if the list is long.
-3. Click **Add**. The repository is added and enabled. Its base branch is `main` unless you change it with **Edit** or in [Settings](settings.md).
-4. Select it in the repository box in the sidebar (it is selected automatically if it is the first).
+3. Click **Add**. WebDevLoop checks for the fixed `webdevloop` repository label. If it already exists, connection completes immediately and the repository is enabled.
+4. If the label is missing, choose **Approve label creation** to create it and complete connection, or **Decline** to cancel without changing GitHub or connecting the repository. Creating the label does **not** label existing issues: opt in each issue separately.
+5. Select the connected repository in the sidebar (it is selected automatically if it is the first). Its base branch is `main` unless you change it with **Edit** or in [Settings](settings.md).
 
 If your repository is missing from the list, add it to the App installation on the [GitHub](github.md) page.
+Lookup or creation errors need an access/permissions fix or retry, not approval of an unknown state.
+See [Repositories](repositories.md#webdevloop-opt-in-label) for the approval panel and recovery if a connected repository's label is deleted.
+
+[![First connection asks permission to create the missing webdevloop label, with Approve label creation and Decline choices](images/repositories-label-approval.png)](images/repositories-label-approval.png)
 
 ## Queue your first spec
 
@@ -93,11 +98,15 @@ to at least one open sub-issue. Triage labels do not grant permission. Queueing 
 blocked tickets still count as eligible.
 
 1. Open [Queue](queue.md).
-2. Type the issue number (`123`, `#123`) or the issue URL into **Queue parent spec issue**.
-3. Click **Queue**.
-4. The run appears in the list. Open **Details** to follow it. See [Spec runs](runs.md).
+2. In **Find parent specs**, search by issue number or title. Use **Refresh from GitHub** for recent changes, or **No open parent blockers** to filter on parent blockers only.
+3. Select one or more specs. Arrange **Selected queue order** with **Move up** and **Move down**, then click **Queue selected**. Each spec gets its own result; eligibility is checked again on submission.
+4. Open the queued run's link or **Details** to follow it. See [Spec runs](runs.md).
 
-By default one spec per repository runs at a time. More specs wait in the queue.
+Alternatively, type `123`, `#123` or the issue URL into **Queue parent spec issue** and click **Queue**.
+The [Queue guide](queue.md#find-and-select-parent-specs) shows the picker, ordering controls and results.
+
+By default one spec per repository runs at a time. More specs wait in the queue. Open native blockers must close
+before dependent work starts; fully blocked ticket work can [wait without using a slot](queue.md#fully-blocked-tickets).
 
 ## What next
 

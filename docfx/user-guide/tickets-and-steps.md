@@ -6,7 +6,7 @@ A spec run is made of tickets. Every ticket is worked on in steps. This page exp
 
 Open a ticket from the **Tickets** table on the [run page](runs.md#tickets-and-the-dag). The title is `#<issue number> <title>`.
 
-![A ticket page](images/ticket-detail.png)
+![Integrated search ticket with its PR stack layer, example worktree, and Retry and Abort ticket controls without manual skipping](images/ticket-detail.png)
 
 ### What you can do here
 
@@ -51,7 +51,7 @@ and is retried during normal recovery. Unrelated work continues. Changes to bloc
 
 The **Steps** table lists every agent step of the ticket.
 
-![Steps, findings and the integration saga of a ticket](images/ticket-steps.png)
+![Implementation and both review steps, no reported findings, and the completed integration saga for a ticket PR layer](images/ticket-steps.png)
 
 | Column | Meaning |
 | --- | --- |
@@ -92,7 +92,7 @@ It also shows the stack branch, the PR number and the time of the last update. I
 
 Click a step name in the Steps table to open the step page, for example **Implement step**.
 
-![A step page](images/step-detail.png)
+![The details card of a succeeded implement step: role, model, attempt, branch, worktree, prompt hash, timing and the role policy of allowed capabilities and denied commands](images/step-detail.png)
 
 The header shows the status and links to the spec run and the ticket.
 
@@ -110,13 +110,13 @@ A step that needs attention shows an **Action needed** card with a link to the p
 
 The **Structured result** card shows the summary, the verdict (for example `clean`), the review iteration and the findings. **Raw JSON** shows the full report.
 
-![A review step with its report and agent log](images/step-report.png)
+![A specification review step with its role policy, a structured result with a clean verdict, and the agent log](images/step-report.png)
 
 ### Agent log
 
 The **Agent log** shows everything the agent did, with the time. While the step runs, new lines appear by themselves. The log keeps the newest 500 lines on screen and says how many earlier lines are hidden.
 
-![The agent log of an implement step](images/step-log.png)
+![The structured result and agent log of an implement step, including a denied git push attempt](images/step-log.png)
 
 Entry types:
 

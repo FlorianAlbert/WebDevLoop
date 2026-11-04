@@ -2,7 +2,9 @@
 
 The Repositories page lists the GitHub repositories WebDevLoop works on. You add, edit, disable and remove them here.
 
-![The repositories page](images/repositories.png)
+[![Connected repositories showing an available WebDevLoop Opt-in label and a missing label with Recheck label and Review label creation controls](images/repositories.png)](images/repositories.png)
+
+Select a screenshot to open it at full size.
 
 ## What you can do here
 
@@ -30,7 +32,9 @@ The Repositories page lists the GitHub repositories WebDevLoop works on. You add
 4. If the label is missing, review the confirmation. **Approve label creation** creates the repository label and completes connection. **Decline** cancels the connection without changing GitHub or adding the repository.
 5. Click **Close**.
 
-![The add repository panel](images/repositories-add.png)
+[![Add repository panel with reachable example repositories, Added states, a filter and an Add button](images/repositories-add.png)](images/repositories-add.png)
+
+[![Missing-label confirmation for a new repository, explaining that existing issues stay unlabeled, with Approve label creation and Decline buttons](images/repositories-label-approval.png)](images/repositories-label-approval.png)
 
 The list is empty or shows a warning when you are not signed in, or when the App is not installed on the repository. Fix this on the [GitHub](github.md) page.
 
@@ -44,9 +48,13 @@ pull requests and history stay intact. New specs and tickets pause at the next w
 tickets can finish implementation, review and integration. Parent review waits while the label is missing.
 
 Use **Recheck label** in the repository's State column to fetch current GitHub state. If the label is missing,
-**Review label creation** opens the same approval dialog. Declining keeps the repository connected but paused.
+**Review label creation** opens the same approval panel. Declining keeps the repository connected but paused.
 Approving creates the label; normal scheduling/reconciliation resumes the waiting work without repeating completed
-tickets. There is no separate continuous label monitor.
+tickets. Recreating a deleted repository label does not restore issue opt-ins removed by its deletion: reapply
+`webdevloop` to the parent and intended tickets on GitHub as needed. A run that already completed still needs
+explicit queueing. There is no separate continuous label monitor.
+
+[![Already connected acme/docs-site stays enabled while its missing-label state pauses new work and offers explicit approval or decline](images/repositories-label-recovery.png)](images/repositories-label-recovery.png)
 
 A failed lookup is not treated as a missing label or permission to create one. Lookup and creation errors explain
 whether to check GitHub sign-in, repository access or Issues read/write permissions and retry. New work remains
@@ -67,7 +75,7 @@ On the Repositories page, click **Use** to make another repository current.
 
 Click **Edit** to open the form.
 
-![The edit form of a repository](images/repositories-edit.png)
+[![Edit acme/widgets with base branch, clone URL and Enabled fields, plus Save and Cancel](images/repositories-edit.png)](images/repositories-edit.png)
 
 - **Base branch**: the trunk branch of this repository.
 - **Clone URL**: where WebDevLoop clones from.

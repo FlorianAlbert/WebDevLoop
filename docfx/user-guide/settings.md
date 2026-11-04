@@ -1,6 +1,7 @@
 # Settings
 
-The Settings page controls how WebDevLoop behaves: which Models the agents use, their prompts and timeouts, the limits, and how specs depend on each other.
+The Settings page controls how WebDevLoop behaves: which Models the agents use, their prompts and timeouts, and the limits.
+Dependencies come from native GitHub blockers, not a configurable cross-spec stacking mode. Ticket PR stacks within a spec remain supported.
 
 ## Global settings and repository overrides
 
@@ -11,7 +12,7 @@ There are two levels.
 
 Choose the level in **Edit settings for**. The page opens on the current repository (see [Repositories](repositories.md#current-repository)). Pick **Global (all repositories)** to edit the global values.
 
-![Global settings](images/settings-global.png)
+![Global settings with the trunk branch and example workspace paths, without a cross-spec dependency-mode setting](images/settings-global.png)
 
 In a repository, every field shows where its value comes from:
 

@@ -8,7 +8,7 @@ The dashboard is the home page. It shows active, waiting and finished specs acro
 - Jump straight to a spec that needs attention.
 - Open the queue of a repository.
 
-![The dashboard with one spec that needs attention](images/dashboard.png)
+![Dashboard with one running spec and one parked Waiting for tickets run using no active slot](images/dashboard.png)
 
 ## Alerts
 
@@ -28,8 +28,8 @@ The cards show how many spec runs are in each lane. The same names are used on t
 | Running | Specs that are being prepared, implemented, reviewed or tested. They use an active slot. |
 | Awaiting merge | The stack is ready for review or open and waits for you to merge it. |
 | Needs attention | The spec is stopped until you act. The card turns yellow when the count is above zero. |
-| Waiting | Specs that wait for a free slot or for another spec. |
-| Completed | Specs that are merged or aborted. |
+| Waiting | Specs queued for a slot or eligibility check, waiting for native parent blockers, or parked waiting for tickets. See [Queue statuses](queue.md#statuses). |
+| Completed | Terminal runs: merged, aborted, stopped after parent opt-out/closure, or completed with no eligible work. |
 
 ## Repository lanes
 
@@ -45,7 +45,7 @@ Below the counts there is one box per repository. It shows:
 
 At the bottom of the sidebar you can choose **System**, **Light** or **Dark**. The choice is remembered in your browser.
 
-![The dashboard in the dark theme](images/dashboard-dark.png)
+![The same running and parked example specs in the dashboard's dark theme](images/dashboard-dark.png)
 
 ## Live updates
 

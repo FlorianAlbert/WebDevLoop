@@ -66,6 +66,8 @@ If the label is absent, `409` carries `code: "label_creation_approval_required"`
 user approval. A declined or omitted approval never creates the label. Provisioning never labels existing issues.
 Connected repositories retain all configuration while new work waits for a successful check or approved creation.
 Lookup/creation failures return permission/retry diagnostics rather than pretending the label is absent or created.
+Recreating a deleted repository label does not reapply issue labels. Restore independent parent/ticket opt-ins as
+needed; completed runs require explicit enqueueing. See the [consent and recovery UI](../user-guide/repositories.md#webdevloop-opt-in-label).
 
 ### Settings (`Api/SettingsEndpoints.cs`)
 
@@ -98,8 +100,8 @@ authorize work, and eligible children can all be blocked. Failure problem `detai
 missing eligible children, or a failed GitHub lookup (including permission and transient failures). Nothing is queued
 on failure. An unfinished duplicate is returned without creating another run.
 
-Run responses include nullable `workDecisionReason`: a current-work deferral while `Running`, the current wait while
-`WaitingForTickets`, or why `Completed`
+Run responses include nullable `workDecisionReason`: a current deferral/wait while `Queued`, `WaitingForDependency`,
+`Running` or `WaitingForTickets`, or why `Completed`
 stopped after parent opt-out/closure or with no eligible work. Domain transitions clear stale reasons; attention
 uses `attention` and `failureReason` instead. Completed runs require explicit enqueue after renewed eligibility.
 The merge-status query reports preserved opt-out stacks as `Stopped` with the reason in `detail`, not `Merged`.

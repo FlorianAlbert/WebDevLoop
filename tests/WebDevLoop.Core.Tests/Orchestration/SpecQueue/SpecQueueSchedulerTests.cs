@@ -243,6 +243,45 @@ public sealed class SpecQueueSchedulerTests
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task parent_opt_out_observed_by_the_blocker_read_defers_the_start_without_claiming_a_slot(
+        bool closed, bool waitingForDependency)
+    {
+        IssueSnapshot parent = _fixture.SeedSpec(1);
+        SpecRun run = await _fixture.EnqueueAsync(1);
+        if (waitingForDependency)
+        {
+            _fixture.SeedSpec(7);
+            _fixture.Issues.SetBlockedBy(parent.Ref, SpecWorkflowFixture.Issue(7));
+            await _fixture.ScheduleAsync();
+            await _fixture.Issues.CloseAsync(SpecWorkflowFixture.Issue(7), IssueCloseReason.Completed, TestContext.Current.CancellationToken);
+            parent = parent with { BlockedBy = [SpecWorkflowFixture.Issue(7)] };
+        }
+
+        int parentReads = 0;
+        _fixture.Issues.AfterIssueRead = issue =>
+        {
+            if (issue == parent.Ref && ++parentReads == 1)
+            {
+                _fixture.Issues.Seed(closed ? parent with { State = IssueState.Closed } : parent with { Labels = [] });
+            }
+        };
+
+        SpecScheduleResult result = await _fixture.ScheduleAsync();
+
+        Assert.Empty(result.Activated);
+        Assert.Contains(run.Id, result.Waiting);
+        Assert.Equal(waitingForDependency ? SpecRunStatus.WaitingForDependency : SpecRunStatus.Queued, run.Status);
+        Assert.Null(run.MaxActiveSpecsSlot);
+        Assert.Contains(closed ? "must be open" : "requires the 'webdevloop' label", run.WorkDecisionReason);
+        Assert.DoesNotContain(_fixture.Store.PendingEvents.OfType<SpecRunStatusChanged>(),
+            changed => changed.SpecRunId == run.Id && changed.To == SpecRunStatus.Preparing);
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task restored_eligibility_clears_the_opt_out_reason_even_when_the_run_cannot_start(bool stillBlocked)

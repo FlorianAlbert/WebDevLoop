@@ -18,8 +18,12 @@ public sealed class ParentBlockerReader(Func<IssueRef, CancellationToken, Task<I
         return blockers;
     }
 
+    /// <summary>Reads the decision's issue with the same fail-closed diagnostics as its blockers.</summary>
+    public Task<IssueSnapshot> ReadDecisionIssueAsync(IssueRef issue, CancellationToken cancellationToken) =>
+        ReadIssueAsync(issue, issue, cancellationToken);
+
     public async Task<bool> AreAllSatisfiedAsync(IssueRef issue, CancellationToken cancellationToken) =>
-        await AreAllSatisfiedAsync(await ReadIssueAsync(issue, issue, cancellationToken), cancellationToken);
+        await AreAllSatisfiedAsync(await ReadDecisionIssueAsync(issue, cancellationToken), cancellationToken);
 
     /// <summary>Evaluates the decision's current relationships without re-reading the issue itself.</summary>
     public async Task<bool> AreAllSatisfiedAsync(IssueSnapshot current, CancellationToken cancellationToken)

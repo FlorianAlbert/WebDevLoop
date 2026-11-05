@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using WebDevLoop.Core.Agents;
 using WebDevLoop.Core.Domain;
+using WebDevLoop.Infrastructure.Persistence.Repositories;
 
 namespace WebDevLoop.Web.Tests.Workflow;
 
@@ -36,6 +38,107 @@ public sealed class RepositoryLabelConsentTests
         Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
         await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge), TimeSpan.FromSeconds(15));
         Assert.Single(scenario.Journal.Calls, call => call.TicketIssue == 101 && call.Role == AgentRole.Implementer);
+    }
+
+    [Fact]
+    public async Task label_deletion_that_strips_issue_labels_keeps_the_run_running_until_approval_and_reopt_in()
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Selected ticket", parent: 100);
+        var script = new AgentScript();
+        script.HangingImplementers.Add(101);
+        await using var host = new WorkflowHost(scenario, script);
+        using HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario, Path.Combine(scenario.Sandbox.DataDirectory, "workspaces", "r"));
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await script.HangingImplementerStarted.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        scenario.Labels.Exists = false;
+        scenario.Issues.SetLabels(100);
+        scenario.Issues.SetLabels(101);
+        script.ReleaseHangingImplementer.TrySetResult();
+        await api.WaitForTicketStatusAsync(run, 101, nameof(TicketRunStatus.Integrated));
+        await WaitForOutboxDrainedAsync(host);
+
+        Assert.Equal("Running", (await api.GetAsync($"/api/spec-runs/{run}")).GetProperty("status").GetString());
+        Assert.Null(RunReason(await api.GetAsync($"/api/spec-runs/{run}")));
+        Assert.DoesNotContain(scenario.Journal.Calls, call => call.Kind == StepKind.ParentReview);
+
+        // GitHub cannot show the parent labelled before the label exists, so the user re-opts in once creation has happened.
+        Action releaseLookups = scenario.Labels.HoldLookupsAfterNextCreation();
+        Task<HttpResponseMessage> approving = client.PostAsJsonAsync($"/api/repos/{repositoryId}/opt-in",
+            new { approveLabelCreation = true }, TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => scenario.Labels.Exists);
+        scenario.Issues.SetLabels(100, WebDevLoopOptIn.Label);
+        releaseLookups();
+        using HttpResponseMessage approved = await approving;
+        Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+
+        await api.WaitForStatusAsync(run, nameof(SpecRunStatus.AwaitingMerge), TimeSpan.FromSeconds(15));
+    }
+
+    [Fact]
+    public async Task approval_after_label_deletion_does_not_relabel_issues_so_the_run_stops_as_an_ordinary_parent_opt_out()
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Selected ticket", parent: 100);
+        var script = new AgentScript();
+        script.HangingImplementers.Add(101);
+        await using var host = new WorkflowHost(scenario, script);
+        using HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario, Path.Combine(scenario.Sandbox.DataDirectory, "workspaces", "r"));
+        string run = await api.EnqueueAsync(repositoryId, 100);
+        await script.HangingImplementerStarted.Task.WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        scenario.Labels.Exists = false;
+        scenario.Issues.SetLabels(100);
+        scenario.Issues.SetLabels(101);
+        script.ReleaseHangingImplementer.TrySetResult();
+        await api.WaitForTicketStatusAsync(run, 101, nameof(TicketRunStatus.Integrated));
+        await WaitForOutboxDrainedAsync(host);
+        Assert.Equal("Running", (await api.GetAsync($"/api/spec-runs/{run}")).GetProperty("status").GetString());
+
+        using HttpResponseMessage approved = await client.PostAsJsonAsync($"/api/repos/{repositoryId}/opt-in",
+            new { approveLabelCreation = true }, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+
+        JsonElement stopped = await api.WaitForStatusAsync(run, nameof(SpecRunStatus.Completed), TimeSpan.FromSeconds(15));
+        Assert.Contains("opted out", stopped.GetProperty("workDecisionReason").GetString());
+        Assert.DoesNotContain(scenario.Journal.Calls, call => call.Kind == StepKind.ParentReview);
+    }
+
+    private static string? RunReason(JsonElement run) =>
+        run.TryGetProperty("workDecisionReason", out JsonElement reason) ? reason.GetString() : null;
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token, TestContext.Current.CancellationToken);
+        while (!condition())
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), linked.Token);
+        }
+    }
+
+    private static async Task WaitForOutboxDrainedAsync(WorkflowHost host)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token, TestContext.Current.CancellationToken);
+        while (true)
+        {
+            using IServiceScope scope = host.Services.CreateScope();
+            var messages = scope.ServiceProvider.GetRequiredService<IOutboxMessageRepository>();
+            if ((await messages.ListPendingAsync(1, linked.Token)).Count == 0)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50), linked.Token);
+        }
     }
 
     [Theory]

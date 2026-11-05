@@ -9,8 +9,22 @@ public sealed class InMemoryRepositoryLabels : IGitHubRepositoryLabels
 
     public Dictionary<GitHubRepoRef, RepositoryLabelException> LookupFailures { get; } = [];
 
-    public Task<bool> HasOptInLabelAsync(GitHubRepoRef repository, CancellationToken cancellationToken) =>
-        LookupFailures.TryGetValue(repository, out RepositoryLabelException? failure) ? throw failure : Task.FromResult(Exists);
+    /// <summary>Runs once, right after the next lookup returns, to model GitHub changing while a decision is in flight.</summary>
+    public Action? AfterNextLookup { get; set; }
+
+    public Task<bool> HasOptInLabelAsync(GitHubRepoRef repository, CancellationToken cancellationToken)
+    {
+        if (LookupFailures.TryGetValue(repository, out RepositoryLabelException? failure))
+        {
+            throw failure;
+        }
+
+        bool exists = Exists;
+        Action? change = AfterNextLookup;
+        AfterNextLookup = null;
+        change?.Invoke();
+        return Task.FromResult(exists);
+    }
 
     public Task CreateOptInLabelAsync(GitHubRepoRef repository, CancellationToken cancellationToken)
     {

@@ -85,7 +85,7 @@ public sealed class FrontierService(
             new FrontierResult(FrontierOutcome.RepositoryLabelMissing, [], []),
             error => new FrontierResult(FrontierOutcome.GitHubUnavailable, [], []) { LookupErrors = [error] }) is { } deferred)
         {
-            return deferred;
+            return await ContinueSelectedTicketsAsync(specRun, deferred, cancellationToken);
         }
 
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken);
@@ -125,6 +125,23 @@ public sealed class FrontierService(
             ? FrontierOutcome.ConcurrencyConflict
             : lookupErrors.Count > 0 ? FrontierOutcome.GitHubUnavailable : FrontierOutcome.Reconciled;
         return new FrontierResult(outcome, snapshot.Unblocked, dispatch.Dispatched) { LookupErrors = lookupErrors };
+    }
+
+    /// <summary>
+    /// While the repository label is unconfirmed only already selected tickets (e.g. retries) may be dispatched again;
+    /// unselected tickets stay untouched and no completion or parent review is decided.
+    /// </summary>
+    private async Task<FrontierResult> ContinueSelectedTicketsAsync(SpecRun specRun, FrontierResult deferred, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(specRun.Id, cancellationToken);
+        TicketRun[] retries = tickets
+            .Where(ticket => ticket.IsSelectedAndOutstanding && ticket.Status == TicketRunStatus.Ready)
+            .OrderBy(ticket => ticket.Issue.Number)
+            .ToArray();
+        DispatchResult dispatch = await dispatcher.DispatchAsync(specRun, retries, cancellationToken);
+        return dispatch.ConcurrencyConflict
+            ? deferred with { Outcome = FrontierOutcome.ConcurrencyConflict, Dispatched = dispatch.Dispatched }
+            : deferred with { Dispatched = dispatch.Dispatched };
     }
 
     private void UpdateReadiness(RunId specRunId, IEnumerable<TicketRun> reblocked, IEnumerable<TicketRun> unblocked)

@@ -186,6 +186,49 @@ public sealed class FrontierServiceTests
         Assert.Empty(recovered.LookupErrors);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task a_missing_or_unavailable_label_still_retries_a_selected_ticket_but_withholds_unselected_work_and_review(bool lookupFails)
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []), (2, []));
+        _fixture.Settings.Configure(spec.RepositoryId, settings => settings with { MaxConcurrentImplementersPerRepo = 1 });
+        await _fixture.ReconcileAsync(spec.Id);
+        await _fixture.MoveAsync(spec[1], TicketRunStatus.NeedsAttention, TicketRunStatus.Ready);
+        _fixture.Settings.Configure(spec.RepositoryId, settings => settings with { MaxConcurrentImplementersPerRepo = 2 });
+        var repository = new GitHubRepoRef("octo", "app");
+        if (lookupFails)
+        {
+            _fixture.Labels.LookupFailures[repository] = new RepositoryLabelException("Check Issues permissions and retry.");
+        }
+        else
+        {
+            _fixture.Labels.Exists = false;
+        }
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(lookupFails ? FrontierOutcome.GitHubUnavailable : FrontierOutcome.RepositoryLabelMissing, result.Outcome);
+        Assert.Equal([spec[1]], result.Dispatched);
+        Assert.Equal(TicketRunStatus.Implementing, _fixture.Ticket(spec[1]).Status);
+        Assert.Equal(2, _fixture.Ticket(spec[1]).Attempt);
+        Assert.Equal(TicketRunStatus.Ready, _fixture.Ticket(spec[2]).Status);
+        Assert.DoesNotContain(_fixture.Launcher.Launched, assignment => assignment.TicketRunId == spec[2]);
+
+        await _fixture.IntegrateAsync(spec, spec[1]);
+        await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Equal(TicketRunStatus.Ready, _fixture.Ticket(spec[2]).Status);
+        Assert.DoesNotContain(_fixture.Launcher.Launched, assignment => assignment.TicketRunId == spec[2]);
+
+        _fixture.Labels.Exists = true;
+        _fixture.Labels.LookupFailures.Remove(repository);
+        FrontierResult recovered = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal([spec[2]], recovered.Dispatched);
+    }
+
     [Fact]
     public async Task event_bus_diagnostics_are_reported_after_other_repositories_have_been_reconciled()
     {

@@ -29,6 +29,33 @@ public sealed class UniqueConstraintTests : IDisposable
     }
 
     [Fact]
+    public async Task second_unfinished_run_for_the_same_parent_issue_conflicts_until_the_first_finishes()
+    {
+        (int repositoryId, RunId _) = await TestData.SeedSpecRunAsync(_harness);
+
+        using (PersistenceScope duplicate = _harness.OpenScope())
+        {
+            duplicate.SpecRuns.Add(TestData.NewSpecRun(repositoryId, "run-2", queuePosition: 2));
+            Assert.Equal(SaveOutcome.ConcurrencyConflict, await duplicate.UnitOfWork.SaveChangesAsync(CancellationToken.None));
+        }
+
+        using (PersistenceScope finish = _harness.OpenScope())
+        {
+            SpecRun first = (await finish.SpecRuns.GetAsync(FirstRun, CancellationToken.None))!;
+            foreach (SpecRunStatus next in new[] { SpecRunStatus.Preparing, SpecRunStatus.Running, SpecRunStatus.Completed })
+            {
+                first.TransitionTo(next, TestData.Now);
+            }
+
+            await finish.SaveAsync();
+        }
+
+        using PersistenceScope scope = _harness.OpenScope();
+        scope.SpecRuns.Add(TestData.NewSpecRun(repositoryId, "run-3", queuePosition: 3));
+        await scope.SaveAsync();
+    }
+
+    [Fact]
     public async Task concurrent_activation_of_two_specs_in_one_repository_lets_exactly_one_win()
     {
         (int repositoryId, RunId _) = await TestData.SeedSpecRunAsync(_harness);

@@ -23,6 +23,9 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
 
     public Exception? SubIssueReadFailure { get; set; }
 
+    /// <summary>Makes the first reads overlap; armed only while the racing enqueue requests are the sole readers.</summary>
+    public OverlapGate? SubIssueReadGate { get; set; }
+
     public Dictionary<int, Exception> IssueFailures { get; } = [];
 
     public Func<int, CancellationToken, Task<ParentIssuePage>>? OnListParents { get; set; }
@@ -194,6 +197,11 @@ internal sealed class FakeGitHubIssues : IGitHubIssues
         if (SubIssueReadFailure is { } failure)
         {
             throw failure;
+        }
+
+        if (SubIssueReadGate is { } gate)
+        {
+            await gate.ArriveAsync(cancellationToken);
         }
 
         return (await GetSpecGraphAsync(parent, cancellationToken)).Tickets;

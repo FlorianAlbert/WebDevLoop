@@ -15,7 +15,7 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261028070440_CurrentWorkDecisionReason";
+    public override string LastMigrationId => "20261105152549_UnfinishedParentIssueUniqueness";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -416,6 +416,9 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                     .IsRequired()
                     .HasColumnType("TEXT");
 
+                b.Property<bool>("ClaimsParentIssue")
+                    .HasColumnType("INTEGER");
+
                 b.Property<long?>("CompletedAt")
                     .HasColumnType("INTEGER");
 
@@ -508,6 +511,11 @@ partial class WebDevLoopDbContextModelSnapshot : ModelSnapshot
                     .IsUnique()
                     .HasDatabaseName("UX_SpecRuns_ActiveSlotPerRepository")
                     .HasFilter("\"Status\" IN ('Preparing', 'Running', 'ParentReviewing', 'Testing')");
+
+                b.HasIndex("RepositoryId", "ParentIssue.Number")
+                    .IsUnique()
+                    .HasDatabaseName("UX_SpecRuns_UnfinishedParentIssue")
+                    .HasFilter("\"Status\" NOT IN ('Completed', 'Aborted') AND \"ClaimsParentIssue\" = 1");
 
                 b.HasIndex("RepositoryId", "QueuePosition")
                     .HasDatabaseName("IX_SpecRuns_Repository_QueuePosition");

@@ -24,5 +24,11 @@ internal sealed class SpecRunConfiguration : IEntityTypeConfiguration<SpecRun>
             .IsUnique()
             .HasFilter(FilteredIndexSql.ActiveSpecRun)
             .HasDatabaseName("UX_SpecRuns_ActiveSlotPerRepository");
+
+        // A parent issue has at most one unfinished run per repository, so concurrent enqueues cannot both succeed.
+        builder.HasIndex(run => new { run.RepositoryId, run.ParentIssue.Number })
+            .IsUnique()
+            .HasFilter(FilteredIndexSql.UnfinishedParentIssueClaim)
+            .HasDatabaseName("UX_SpecRuns_UnfinishedParentIssue");
     }
 }

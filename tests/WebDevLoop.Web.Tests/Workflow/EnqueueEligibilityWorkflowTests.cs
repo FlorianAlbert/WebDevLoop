@@ -46,6 +46,38 @@ public sealed class EnqueueEligibilityWorkflowTests
         Assert.NotEqual(runId, nextRun);
     }
 
+    [Fact]
+    public async Task concurrent_submissions_for_the_same_spec_queue_exactly_one_run_and_report_the_rest_as_already_queued()
+    {
+        using var scenario = new WorkflowScenario(101);
+        scenario.Issues.Seed(100, "Spec");
+        scenario.Issues.Seed(101, "Ticket", parent: 100);
+        await using var host = new WorkflowHost(scenario);
+        using HttpClient client = host.CreateClient();
+        var api = new WorkflowApi(client, scenario.Logs);
+        int repositoryId = await api.RegisterRepositoryAsync(scenario);
+        var overlap = new OverlapGate(2);
+        scenario.Issues.SubIssueReadGate = overlap;
+
+        HttpResponseMessage[] responses = await Task.WhenAll(
+            client.PostAsJsonAsync($"/api/repos/{repositoryId}/spec-runs", new { specIssueNumber = 100 }, TestContext.Current.CancellationToken),
+            client.PostAsJsonAsync($"/api/repos/{repositoryId}/spec-runs", new { specIssueNumber = 100 }, TestContext.Current.CancellationToken));
+
+        Assert.True(overlap.Opened, "Both submissions must have passed their duplicate check and be reading GitHub at the same time.");
+        JsonElement[] results = [.. await Task.WhenAll(responses.Select(response => response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)))];
+        string?[] outcomes = [.. results.Select(result => result.GetProperty("outcome").GetString())];
+        Assert.Single(outcomes, "Queued");
+        Assert.Single(outcomes, "AlreadyQueued");
+        Assert.Equal(
+            Assert.Single(results, result => result.GetProperty("outcome").GetString() == "Queued").GetProperty("runId").GetString(),
+            Assert.Single(results, result => result.GetProperty("outcome").GetString() == "AlreadyQueued").GetProperty("runId").GetString());
+        Assert.Single((await api.GetAsync($"/api/repos/{repositoryId}/spec-runs")).EnumerateArray());
+        foreach (HttpResponseMessage response in responses)
+        {
+            response.Dispose();
+        }
+    }
+
     [Theory]
     [InlineData(false, GitHubApiErrorKind.Unauthorized)]
     [InlineData(false, GitHubApiErrorKind.Forbidden)]

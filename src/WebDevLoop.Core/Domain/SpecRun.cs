@@ -64,6 +64,12 @@ public sealed class SpecRun : VersionedEntity
 
     public bool IsTerminal => Status.IsTerminal();
 
+    /// <summary>
+    /// Whether this run is the unfinished run its parent issue is unique by. True for every newly queued run; false only for
+    /// duplicates that already existed before the uniqueness constraint, which stay abortable like any other run.
+    /// </summary>
+    public bool ClaimsParentIssue { get; private set; } = true;
+
     public static SpecRun Queue(
         RunId id,
         int repositoryId,

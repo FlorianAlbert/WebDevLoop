@@ -230,6 +230,23 @@ public sealed class FrontierServiceTests
     }
 
     [Fact]
+    public async Task a_failed_eligibility_reread_after_the_completion_label_check_is_reported_by_the_frontier()
+    {
+        SeededSpec spec = await _fixture.SeedRunningSpecAsync("app", (1, []));
+        await _fixture.ReconcileAsync(spec.Id);
+        await _fixture.IntegrateAsync(spec, spec[1]);
+        IssueRef parent = _fixture.Spec(spec.Id).ParentIssue;
+        // The frontier's own label lookup comes first, the completion decision's lookup second.
+        _fixture.Labels.AfterNextLookup = () => _fixture.Labels.AfterNextLookup = () => _fixture.Issues.RemoveIssue(parent);
+
+        FrontierResult result = await _fixture.ReconcileAsync(spec.Id);
+
+        Assert.Equal(FrontierOutcome.GitHubUnavailable, result.Outcome);
+        Assert.Contains(result.LookupErrors, error => error.Message.Contains($"verify current parent/sub-issue eligibility for {parent}", StringComparison.Ordinal));
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+    }
+
+    [Fact]
     public async Task event_bus_diagnostics_are_reported_after_other_repositories_have_been_reconciled()
     {
         SeededSpec affected = await _fixture.SeedRunningSpecAsync("app", (1, []));

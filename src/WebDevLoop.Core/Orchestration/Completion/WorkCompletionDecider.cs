@@ -25,7 +25,7 @@ public sealed class WorkCompletionDecider(
     public Task<WorkCompletionResult> DecideCompletionAsync(RunId specRunId, CancellationToken cancellationToken) =>
         DecideCompletionAsync(specRunId, null, cancellationToken);
 
-    /// <summary>Uses the frontier pass's eligibility snapshot, with current persisted ticket state after dispatch.</summary>
+    /// <summary>Uses the frontier pass's eligibility snapshot, with current persisted ticket state after dispatch; decisions that change status or reason re-read eligibility after the label check.</summary>
     internal async Task<WorkCompletionResult> DecideCompletionAsync(RunId specRunId, CurrentWork? current, CancellationToken cancellationToken)
     {
         SpecRun? spec = await specRuns.GetAsync(specRunId, cancellationToken);
@@ -37,21 +37,28 @@ public sealed class WorkCompletionDecider(
         IReadOnlyList<TicketRun> tickets = await ticketRuns.ListBySpecRunAsync(specRunId, cancellationToken);
         current ??= await eligibility.ReadAsync(spec, tickets, cancellationToken);
         CompletionDecision decision = Decide(current, tickets);
-        if (decision.Outcome == WorkCompletionOutcome.ReviewStarted)
+        if (ChangesPersistedState(spec, decision))
         {
-            var repository = new GitHubRepoRef(spec.ParentIssue.Owner, spec.ParentIssue.Repo);
-            RepositoryLabelCheck label = await optIn.CheckAsync(repository, cancellationToken);
-            if (label.ToDeferredResult(
-                new WorkCompletionResult(WorkCompletionOutcome.RepositoryLabelMissing),
-                error => new WorkCompletionResult(WorkCompletionOutcome.GitHubUnavailable, error)) is { } deferred)
+            // Deleting the repository label also strips it from issues, so a missing label must not be read as parent opt-out.
+            // The label is verified before the eligibility read that decides (it may have been recreated and issues re-opted in
+            // since an earlier read) and again after it (it may have been deleted in between).
+            if (await DeferWhileLabelUnavailableAsync(spec, current, cancellationToken) is { } labelDeferred)
             {
-                return deferred;
+                return labelDeferred;
+            }
+
+            if (decision.Outcome is not WorkCompletionOutcome.Deferred)
+            {
+                current = await eligibility.ReadAsync(spec, tickets, cancellationToken);
+                decision = Decide(current, tickets);
+                if (ChangesPersistedState(spec, decision) && await DeferWhileLabelUnavailableAsync(spec, current, cancellationToken) is { } deleted)
+                {
+                    return deleted;
+                }
             }
         }
 
-        bool statusChanged = decision.NextStatus is not null;
-        bool reasonChanged = spec.WorkDecisionReason != decision.Reason;
-        if (!statusChanged && !reasonChanged)
+        if (!ChangesPersistedState(spec, decision))
         {
             return new(decision.Outcome, current.Errors.FirstOrDefault());
         }
@@ -68,6 +75,18 @@ public sealed class WorkCompletionDecider(
         return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved
             ? new(decision.Outcome, current.Errors.FirstOrDefault())
             : new(WorkCompletionOutcome.ConcurrencyConflict);
+    }
+
+    private static bool ChangesPersistedState(SpecRun spec, CompletionDecision decision) =>
+        decision.NextStatus is not null || spec.WorkDecisionReason != decision.Reason;
+
+    private async Task<WorkCompletionResult?> DeferWhileLabelUnavailableAsync(SpecRun spec, CurrentWork current, CancellationToken cancellationToken)
+    {
+        var repository = new GitHubRepoRef(spec.ParentIssue.Owner, spec.ParentIssue.Repo);
+        RepositoryLabelCheck label = await optIn.CheckAsync(repository, cancellationToken);
+        return label.ToDeferredResult(
+            new WorkCompletionResult(WorkCompletionOutcome.RepositoryLabelMissing, current.Errors.FirstOrDefault()),
+            error => new WorkCompletionResult(WorkCompletionOutcome.GitHubUnavailable, error));
     }
 
     private static CompletionDecision Decide(CurrentWork current, IReadOnlyList<TicketRun> tickets)

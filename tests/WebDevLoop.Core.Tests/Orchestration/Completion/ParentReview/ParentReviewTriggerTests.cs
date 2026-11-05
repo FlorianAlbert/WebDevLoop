@@ -71,6 +71,112 @@ public sealed class ParentReviewTriggerTests
         Assert.Equal(0, _fixture.Spec(spec.Id).ReviewCycle);
     }
 
+    [Theory]
+    [InlineData(false, false, WorkCompletionOutcome.RepositoryLabelMissing)]
+    [InlineData(false, true, WorkCompletionOutcome.GitHubUnavailable)]
+    public async Task terminal_decisions_wait_for_the_repository_label_and_then_reevaluate_issue_opt_in(bool labelExists, bool lookupFails, WorkCompletionOutcome deferredOutcome)
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        var issues = _fixture.Issues.Snapshots;
+        IssueSnapshot parent = await issues.GetIssueAsync(_fixture.Spec(spec.Id).ParentIssue, ParentReviewFixture.Token);
+        issues.Seed(parent with { Labels = [] });
+        var repository = new GitHubRepoRef("octo", "app");
+        _fixture.Execution.Labels.Exists = labelExists;
+        if (lookupFails)
+        {
+            _fixture.Execution.Labels.LookupFailures[repository] = new RepositoryLabelException("Check Issues permissions and retry.");
+        }
+
+        WorkCompletionResult deferred = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(deferredOutcome, deferred.Outcome);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Null(_fixture.Spec(spec.Id).WorkDecisionReason);
+        _fixture.Execution.Labels.LookupFailures.Clear();
+        _fixture.Execution.Labels.Exists = true;
+        issues.Seed(parent);
+
+        WorkCompletionResult resumed = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.ReviewStarted, resumed.Outcome);
+    }
+
+    [Fact]
+    public async Task a_deleted_repository_label_does_not_complete_a_run_whose_parent_label_was_removed_with_it()
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        var issues = _fixture.Issues.Snapshots;
+        IssueSnapshot parent = await issues.GetIssueAsync(_fixture.Spec(spec.Id).ParentIssue, ParentReviewFixture.Token);
+        issues.Seed(parent with { Labels = [] });
+        _fixture.Execution.Labels.Exists = false;
+
+        WorkCompletionResult deferred = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.RepositoryLabelMissing, deferred.Outcome);
+        _fixture.Execution.Labels.Exists = true;
+
+        WorkCompletionResult stopped = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.Stopped, stopped.Outcome);
+        Assert.Equal(SpecRunStatus.Completed, _fixture.Spec(spec.Id).Status);
+    }
+
+    [Fact]
+    public async Task approval_and_reopt_in_during_a_decision_prevent_a_stale_parent_opt_out_from_completing_the_run()
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        var issues = _fixture.Issues.Snapshots;
+        IssueSnapshot parent = await issues.GetIssueAsync(_fixture.Spec(spec.Id).ParentIssue, ParentReviewFixture.Token);
+        issues.Seed(parent with { Labels = [] });
+        _fixture.Execution.Labels.AfterNextLookup = () => issues.Seed(parent);
+
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.ReviewStarted, result.Outcome);
+        Assert.Equal(SpecRunStatus.ParentReviewing, _fixture.Spec(spec.Id).Status);
+    }
+
+    [Fact]
+    public async Task a_label_deleted_after_the_check_but_before_the_final_eligibility_read_defers_the_decision()
+    {
+        SeededSpec spec = await _fixture.SeedIntegratedSpecAsync();
+        var issues = _fixture.Issues.Snapshots;
+        IssueSnapshot parent = await issues.GetIssueAsync(_fixture.Spec(spec.Id).ParentIssue, ParentReviewFixture.Token);
+        _fixture.Execution.Labels.AfterNextLookup = () =>
+        {
+            _fixture.Execution.Labels.Exists = false;
+            issues.Seed(parent with { Labels = [] });
+        };
+
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.RepositoryLabelMissing, result.Outcome);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
+        Assert.Null(_fixture.Spec(spec.Id).WorkDecisionReason);
+    }
+
+    [Fact]
+    public async Task a_missing_repository_label_does_not_persist_a_parent_opt_out_reason_while_a_selected_ticket_is_outstanding()
+    {
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []));
+        await _fixture.Execution.MoveAsync(spec[2], TicketRunStatus.Ready, TicketRunStatus.Implementing);
+        var issues = _fixture.Issues.Snapshots;
+        IssueSnapshot parent = await issues.GetIssueAsync(_fixture.Spec(spec.Id).ParentIssue, ParentReviewFixture.Token);
+        issues.Seed(parent with { Labels = [] });
+        _fixture.Execution.Labels.Exists = false;
+
+        WorkCompletionResult deferred = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.RepositoryLabelMissing, deferred.Outcome);
+        Assert.Null(_fixture.Spec(spec.Id).WorkDecisionReason);
+        _fixture.Execution.Labels.Exists = true;
+
+        WorkCompletionResult restored = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.TicketsOutstanding, restored.Outcome);
+        Assert.Contains("opted out", _fixture.Spec(spec.Id).WorkDecisionReason);
+    }
+
     [Fact]
     public async Task newly_opted_in_sub_issue_prevents_review_before_local_graph_reconciliation()
     {
@@ -148,6 +254,27 @@ public sealed class ParentReviewTriggerTests
         Assert.Contains("Check Issues permissions and retry.", error.Message);
         Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
         Assert.Empty(_fixture.Launcher.Launched);
+    }
+
+    [Fact]
+    public async Task A_missing_label_still_reports_the_eligibility_error_through_the_event_bus_boundary()
+    {
+        SeededSpec spec = await _fixture.Execution.SeedRunningSpecAsync("app", (2, []));
+        var blocker = new IssueRef("another-owner", "library", 900);
+        _fixture.Issues.Snapshots.Seed(blocker, "External blocker");
+        _fixture.Issues.Snapshots.SetBlockedBy(_fixture.Execution.Ticket(spec[2]).Issue, blocker);
+        _fixture.Issues.Snapshots.RemoveIssue(blocker);
+        _fixture.Execution.Labels.Exists = false;
+
+        WorkCompletionResult result = await _fixture.Completion().DecideCompletionAsync(spec.Id, ParentReviewFixture.Token);
+
+        Assert.Equal(WorkCompletionOutcome.RepositoryLabelMissing, result.Outcome);
+        Assert.Contains("another-owner/library#900", Assert.IsType<GitHubIssuesException>(result.LookupError).Message);
+        GitHubIssuesException reported = await Assert.ThrowsAsync<GitHubIssuesException>(() =>
+            DeliverAsync(new FrontierReconciliationRequested(spec.Id, TicketExecutionFixture.T0)));
+        Assert.Contains("another-owner/library#900", reported.Message);
+        Assert.Null(_fixture.Spec(spec.Id).WorkDecisionReason);
+        Assert.Equal(SpecRunStatus.Running, _fixture.Spec(spec.Id).Status);
     }
 
     [Fact]

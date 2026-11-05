@@ -115,7 +115,7 @@ public sealed class FrontierService(
         {
             WorkCompletionResult decision = await completion.DecideCompletionAsync(specRunId, current, cancellationToken);
             conflict = decision.Outcome == WorkCompletionOutcome.ConcurrencyConflict;
-            if (decision.Outcome == WorkCompletionOutcome.GitHubUnavailable && decision.LookupError is { } error)
+            if (decision.LookupError is { } error && !lookupErrors.Contains(error))
             {
                 lookupErrors = [.. lookupErrors, error];
             }

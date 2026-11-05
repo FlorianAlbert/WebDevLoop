@@ -24,10 +24,10 @@ public enum WorkCompletionOutcome
     /// <summary>Required current GitHub information is unavailable or blockers defer progress; recovery retries.</summary>
     Deferred,
 
-    /// <summary>The repository label is missing; new parent review waits for explicit label provisioning.</summary>
+    /// <summary>The repository label is missing; completion, parking and parent review wait for explicit label provisioning.</summary>
     RepositoryLabelMissing,
 
-    /// <summary>The repository label lookup failed; new parent review waits for recovery.</summary>
+    /// <summary>The repository label lookup failed; completion, parking and parent review wait for recovery.</summary>
     GitHubUnavailable,
 
     /// <summary>Every remaining eligible ticket has an open blocker and no selected ticket remains in flight; the slot was released.</summary>

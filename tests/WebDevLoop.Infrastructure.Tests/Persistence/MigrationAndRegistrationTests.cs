@@ -91,6 +91,46 @@ public sealed class MigrationAndRegistrationTests : IDisposable
     }
 
     [Fact]
+    public async Task upgrading_a_database_with_duplicate_unfinished_runs_keeps_every_run_and_protects_the_issue_against_new_duplicates()
+    {
+        const string BeforeUnfinishedParentIssueUniqueness = "20261028070440_CurrentWorkDecisionReason";
+        using ServiceProvider provider = BuildProvider();
+        int repositoryId;
+        using (IServiceScope seed = provider.CreateScope())
+        {
+            var context = seed.ServiceProvider.GetRequiredService<WebDevLoopDbContext>();
+            await PersistenceDatabase.MigrateAsync(context, CancellationToken.None);
+            RepositoryRecord repository = TestData.NewRepository();
+            context.Add(repository);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            repositoryId = repository.Id;
+            SpecRun waiting = TestData.NewSpecRun(repositoryId, "run-waiting", issueNumber: 10, queuePosition: 1);
+            SpecRun running = TestData.NewSpecRun(repositoryId, "run-running", issueNumber: 11, queuePosition: 2);
+            running.TransitionTo(SpecRunStatus.Preparing, TestData.Now);
+            running.MaxActiveSpecsSlot = 1;
+            context.AddRange(waiting, running);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            // Recreate what the previous version could store: two unfinished runs of one parent issue.
+            IMigrator migrator = context.GetService<IMigrator>();
+            await migrator.MigrateAsync(BeforeUnfinishedParentIssueUniqueness, TestContext.Current.CancellationToken);
+            await context.Database.ExecuteSqlRawAsync("UPDATE \"SpecRuns\" SET \"ParentIssue_Number\" = 10", TestContext.Current.CancellationToken);
+            await migrator.MigrateAsync(cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        using (IServiceScope read = provider.CreateScope())
+        {
+            ISpecRunRepository specRuns = read.ServiceProvider.GetRequiredService<ISpecRunRepository>();
+            Assert.Equal(SpecRunStatus.Queued, (await specRuns.GetAsync(new RunId("run-waiting"), CancellationToken.None))!.Status);
+            Assert.Equal(SpecRunStatus.Preparing, (await specRuns.GetAsync(new RunId("run-running"), CancellationToken.None))!.Status);
+        }
+
+        using IServiceScope duplicate = provider.CreateScope();
+        duplicate.ServiceProvider.GetRequiredService<ISpecRunRepository>().Add(TestData.NewSpecRun(repositoryId, "run-new", issueNumber: 10, queuePosition: 3));
+        Assert.Equal(SaveOutcome.ConcurrencyConflict, await duplicate.ServiceProvider.GetRequiredService<IUnitOfWork>().SaveChangesAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task every_persistence_port_resolves_per_scope_and_shares_one_unit_of_work()
     {
         using ServiceProvider provider = BuildProvider();

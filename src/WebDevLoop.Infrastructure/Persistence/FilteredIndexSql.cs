@@ -7,6 +7,8 @@ internal static class FilteredIndexSql
 {
     public static string ActiveSpecRun { get; } = In("Status", StatusSets.Active<SpecRunStatus>(SpecRunStatusRules.IsActive));
 
+    public static string UnfinishedParentIssueClaim { get; } = $"{NotIn("Status", StatusSets.Terminal<SpecRunStatus>(SpecRunStatusRules.IsTerminal))} AND \"ClaimsParentIssue\" = 1";
+
     public static string ActiveStep { get; } = In("Status", StatusSets.Active<StepStatus>(StepStatusRules.IsActive));
 
     public static string ImplementOrFixStep { get; } = In("Kind", Enum.GetValues<StepKind>().Where(StepKindRules.IsImplementOrFix));
@@ -17,4 +19,7 @@ internal static class FilteredIndexSql
 
     private static string In<T>(string column, IEnumerable<T> values) where T : struct, Enum =>
         $"\"{column}\" IN ({string.Join(", ", values.Select(value => $"'{value}'"))})";
+
+    private static string NotIn<T>(string column, IEnumerable<T> values) where T : struct, Enum =>
+        $"\"{column}\" NOT IN ({string.Join(", ", values.Select(value => $"'{value}'"))})";
 }

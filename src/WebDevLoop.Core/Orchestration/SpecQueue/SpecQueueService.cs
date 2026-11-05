@@ -28,7 +28,7 @@ public sealed class SpecQueueService(
         }
 
         IReadOnlyList<SpecRun> queue = await specRuns.ListByRepositoryAsync(repositoryId, cancellationToken);
-        if (queue.FirstOrDefault(run => !run.IsTerminal && run.ParentIssue.Number == specIssueNumber) is { } unfinished)
+        if (FindUnfinished(queue, specIssueNumber) is { } unfinished)
         {
             return new EnqueueResult(EnqueueOutcome.AlreadyQueued, unfinished.Id);
         }
@@ -53,10 +53,19 @@ public sealed class SpecQueueService(
         SpecRun run = SpecRun.Queue(ids.NewRunId(), repositoryId, spec.Ref, spec.Title, spec.Body, NextQueuePosition(queue), now);
         specRuns.Add(run);
         outbox.Append(new SpecRunQueued(run.Id, repositoryId, now));
-        return await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved
-            ? new EnqueueResult(EnqueueOutcome.Queued, run.Id)
+        if (await unitOfWork.SaveChangesAsync(cancellationToken) == SaveOutcome.Saved)
+        {
+            return new EnqueueResult(EnqueueOutcome.Queued, run.Id);
+        }
+
+        // A lost race on the unfinished-parent unique index means a concurrent request already queued this spec.
+        return FindUnfinished(await specRuns.ListByRepositoryAsync(repositoryId, cancellationToken), specIssueNumber) is { } winner
+            ? new EnqueueResult(EnqueueOutcome.AlreadyQueued, winner.Id)
             : new EnqueueResult(EnqueueOutcome.ConcurrencyConflict);
     }
+
+    private static SpecRun? FindUnfinished(IReadOnlyList<SpecRun> queue, int specIssueNumber) =>
+        queue.FirstOrDefault(run => !run.IsTerminal && run.ParentIssue.Number == specIssueNumber);
 
     private static int NextQueuePosition(IReadOnlyList<SpecRun> queue) =>
         queue.Count == 0 ? 1 : queue.Max(run => run.QueuePosition) + 1;

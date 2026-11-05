@@ -177,6 +177,7 @@ Several rules are enforced by the database, not by code. They are built from the
 | Index | Rule it enforces |
 | --- | --- |
 | `UX_SpecRuns_ActiveSlotPerRepository` | Each active spec of a repository holds its own slot (`MaxActiveSpecsSlot`). With the default limit of 1, a second active spec cannot be claimed. |
+| `UX_SpecRuns_UnfinishedParentIssue` | A parent issue has at most one unfinished spec run per repository, so two concurrent enqueues cannot both succeed. The index covers non-terminal runs whose `ClaimsParentIssue` flag is set. The loser of the race is reported as `AlreadyQueued`. |
 | `UX_StepRuns_ActiveImplementOrFixPerTicket` | At most one active implement or fix step per ticket. |
 | `UX_StepRuns_ActiveAppOwnedKindPerRun` | At most one active app-owned step of a kind (no agent role) per spec run. |
 | `UX_IntegrationSagas_IncompletePerTicket` | One incomplete integration saga per ticket. |
@@ -188,6 +189,8 @@ Several rules are enforced by the database, not by code. They are built from the
 | `IX_OutboxMessages_Pending` | Fast "next pending message" lookup (filter: not dispatched and not dead-lettered). |
 
 If you change a status set (for example, which spec statuses count as active), the index changes. Add a migration.
+
+`ClaimsParentIssue` is `true` for every run queued by the app. Only a database upgraded from a version without the unique index can contain a run with the flag cleared: the migration finds parent issues that already had several unfinished runs, keeps the claim on the most advanced one (a run past the queue, then the lowest queue position) and clears it on the others. It never aborts runs, so their tickets, steps and worktrees are untouched and they stay abortable through the normal control. The flag is not transferred when the claiming run finishes, so a surviving legacy duplicate stays outside the index. The enqueue service still finds it as an unfinished run of the issue and reports `AlreadyQueued`, so no new duplicate can be queued until it finishes too.
 
 ## Optimistic concurrency and the unit of work
 

@@ -10,19 +10,27 @@ public static class SpecEligibility
         IGitHubIssues issues, IssueRef parent, CancellationToken cancellationToken)
     {
         IssueSnapshot spec = await issues.GetIssueAsync(parent, cancellationToken);
-        if (spec.State != IssueState.Open)
+        if (RejectionOf(spec) is { } rejection)
         {
-            return (spec, $"Parent spec #{parent.Number} must be open.");
-        }
-
-        if (!spec.HasOptIn())
-        {
-            return (spec, $"Parent spec #{parent.Number} requires the '{WebDevLoopOptIn.Label}' label (WebDevLoop Opt-in).");
+            return (spec, rejection);
         }
 
         IReadOnlyList<IssueSnapshot> tickets = await issues.GetSubIssuesAsync(spec.Ref, cancellationToken);
         return tickets.Any(ticket => ticket.IsOpenAndOptedIn())
             ? (spec, null)
             : (spec, $"Parent spec #{parent.Number} needs at least one open sub-issue independently labeled '{WebDevLoopOptIn.Label}'.");
+    }
+
+    /// <summary>Why the parent snapshot itself (state and WebDevLoop Opt-in) disqualifies the spec, or null.</summary>
+    public static string? RejectionOf(IssueSnapshot spec)
+    {
+        if (spec.State != IssueState.Open)
+        {
+            return $"Parent spec #{spec.Ref.Number} must be open.";
+        }
+
+        return spec.HasOptIn()
+            ? null
+            : $"Parent spec #{spec.Ref.Number} requires the '{WebDevLoopOptIn.Label}' label (WebDevLoop Opt-in).";
     }
 }

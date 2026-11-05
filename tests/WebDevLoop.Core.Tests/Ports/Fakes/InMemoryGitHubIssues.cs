@@ -46,12 +46,19 @@ public sealed class InMemoryGitHubIssues : IGitHubIssues
         return snapshot;
     }
 
+    /// <summary>Runs after each issue read has captured its snapshot, so a test can change GitHub between two reads.</summary>
+    public Action<IssueRef>? AfterIssueRead { get; set; }
+
     public Task<IssueSnapshot> GetIssueAsync(IssueRef issue, CancellationToken cancellationToken)
     {
         IssueReads.Add(issue);
-        return _issues.TryGetValue(Key(issue), out IssueSnapshot? snapshot)
-            ? Task.FromResult(snapshot)
-            : throw new GitHubIssuesException($"GitHub issue {issue} is unavailable.");
+        if (!_issues.TryGetValue(Key(issue), out IssueSnapshot? snapshot))
+        {
+            throw new GitHubIssuesException($"GitHub issue {issue} is unavailable.");
+        }
+
+        AfterIssueRead?.Invoke(issue);
+        return Task.FromResult(snapshot);
     }
 
     public Task<SpecIssueGraph> GetSpecGraphAsync(IssueRef specIssue, CancellationToken cancellationToken)

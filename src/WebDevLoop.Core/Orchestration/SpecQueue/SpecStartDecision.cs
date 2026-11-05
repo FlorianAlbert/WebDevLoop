@@ -1,3 +1,5 @@
+using WebDevLoop.Core.Ports;
+
 namespace WebDevLoop.Core.Orchestration.SpecQueue;
 
 public enum SpecStartKind
@@ -9,9 +11,5 @@ public enum SpecStartKind
     Wait,
 }
 
-public sealed record SpecStartDecision(SpecStartKind Kind)
-{
-    public static SpecStartDecision FromTrunk { get; } = new(SpecStartKind.FromTrunk);
-
-    public static SpecStartDecision Wait { get; } = new(SpecStartKind.Wait);
-}
+/// <summary>The blocker decision together with the parent snapshot it was evaluated from.</summary>
+public sealed record SpecStartDecision(SpecStartKind Kind, IssueSnapshot Parent);

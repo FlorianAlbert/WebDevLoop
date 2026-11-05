@@ -84,11 +84,14 @@ public sealed class SpecQueueScheduler(
             (_, string? rejection) = await SpecEligibility.ReadAsync(issues, run.ParentIssue, cancellationToken);
             if (rejection is not null)
             {
-                bool saved = await TrySaveReasonAsync(run, $"Start deferred. {rejection} Restore eligibility to let scheduling retry.", cancellationToken);
-                return new SpecScheduleResult([], [run.Id], ConcurrencyConflict: !saved);
+                return await DeferStartAsync(run, rejection, cancellationToken);
             }
 
             decision = await _gate.EvaluateAsync(run, cancellationToken);
+            if (SpecEligibility.RejectionOf(decision.Parent) is { } latestRejection)
+            {
+                return await DeferStartAsync(run, latestRejection, cancellationToken);
+            }
         }
         catch (GitHubIssuesException exception)
         {
@@ -120,6 +123,12 @@ public sealed class SpecQueueScheduler(
 
         run.BaseBranch = baseBranch;
         return await ClaimSlotAsync(run, slot, SpecRunStatus.Preparing, cancellationToken);
+    }
+
+    private async Task<SpecScheduleResult> DeferStartAsync(SpecRun run, string rejection, CancellationToken cancellationToken)
+    {
+        bool saved = await TrySaveReasonAsync(run, $"Start deferred. {rejection} Restore eligibility to let scheduling retry.", cancellationToken);
+        return new SpecScheduleResult([], [run.Id], ConcurrencyConflict: !saved);
     }
 
     private async Task<SpecScheduleResult> ScheduleResumeAsync(

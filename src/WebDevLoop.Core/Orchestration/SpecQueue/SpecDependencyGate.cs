@@ -10,8 +10,9 @@ public sealed class SpecDependencyGate(IGitHubIssues issues)
 
     public async Task<SpecStartDecision> EvaluateAsync(SpecRun run, CancellationToken cancellationToken)
     {
-        return await _blockers.AreAllSatisfiedAsync(run.ParentIssue, cancellationToken)
-            ? SpecStartDecision.FromTrunk
-            : SpecStartDecision.Wait;
+        IssueSnapshot parent = await _blockers.ReadDecisionIssueAsync(run.ParentIssue, cancellationToken);
+        return await _blockers.AreAllSatisfiedAsync(parent, cancellationToken)
+            ? new SpecStartDecision(SpecStartKind.FromTrunk, parent)
+            : new SpecStartDecision(SpecStartKind.Wait, parent);
     }
 }
